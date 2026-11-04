@@ -195,6 +195,12 @@
     soon: ["tag tag-closed", "Entry not open yet"]
   };
 
+  function Y_EXT() {
+    var s = svg('<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>');
+    s.setAttribute("class", "ext-icon");
+    return s;
+  }
+
   // Renders one competition as the existing <article class="event"> markup.
   function competitionCard(c, opts) {
     opts = opts || {};
@@ -224,6 +230,12 @@
         d.className = "event-desc md";
         card.appendChild(d);
       }
+    }
+    if (c.openipf_url && !opts.brief) {
+      card.appendChild(el("p", { style: "margin:var(--space-2) 0 0;" },
+        el("a", { href: c.openipf_url, target: "_blank", rel: "noopener",
+          "aria-label": "View " + c.name + " results on OpenIPF (opens in a new tab)" }, "View results on OpenIPF"),
+        " ", Y_EXT()));
     }
     if (!opts.brief) {
       var line = state === "archived" ? "" : entryLine(c);
@@ -309,7 +321,7 @@
     TZ: TZ, db: db, configured: configured, el: el, svg: svg, ICONS: ICONS,
     markdown: markdown, excerpt: excerpt,
     toLondonInput: toLondonInput, fromLondonInput: fromLondonInput,
-    todayLondon: todayLondon, addDays: addDays, dateRange: dateRange, longDate: longDate,
+    todayLondon: todayLondon, yearOf: function (c) { return c.start_date.slice(0, 4); }, addDays: addDays, dateRange: dateRange, longDate: longDate,
     compState: compState, entryLine: entryLine, mapsUrl: mapsUrl, competitionCard: competitionCard,
     sheetCsvUrl: sheetCsvUrl, parseCsv: parseCsv, loadSheet: loadSheet,
     notice: notice, guard: guard

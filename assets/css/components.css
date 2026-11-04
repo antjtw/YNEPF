@@ -651,3 +651,15 @@ ol.steps li::before {
 .rec-section h2 { scroll-margin-top: var(--space-4); }
 table.records { min-width: 100%; }
 table.records tr[hidden] { display: none; }
+
+/* ---- Calendar years + past picker ---- */
+.btn-sm { padding: var(--space-1) var(--space-3); font-size: 0.95rem; }
+.year-heading { margin: var(--space-6) 0 var(--space-3); padding-bottom: var(--space-2); border-bottom: 2px solid var(--navy-100); }
+.event-head h4 { margin: 0; font-size: 1.2rem; letter-spacing: 0; }
+.event-head h4 a { text-decoration: underline; }
+.year-picker { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-5); }
+.year-picker [aria-pressed="true"] { background: var(--surface-inverse); color: var(--text-on-inverse); border-color: var(--surface-inverse); }
+.year-picker [aria-pressed="true"]:hover { background: var(--navy-700); color: var(--text-on-inverse); }
+.year-picker .btn { font-size: 1rem; }
+[role="region"][hidden] { display: none; }
+.ext-icon { width: 1em; height: 1em; vertical-align: -0.1em; }

@@ -198,8 +198,11 @@ supabase/seed.sql       The existing committee, FAQs and 2026 calendar, ready to
   noon; change either freely. Times are entered as UK time and handled across
   GMT/BST. The entry link is only returned by the database while entry is open
   (after the open time, before the close time, and not closed by hand), so it
-  appears and disappears on schedule without anyone being online. A competition
-  moves to *Past competitions* automatically once its last day has passed. Use
+  appears and disappears on schedule without anyone being online. Upcoming competitions are listed soonest first, under a year
+  subheading when they span more than one year. A competition moves to *Past
+  competitions* automatically once its last day has passed; past ones are browsed
+  one year at a time. Paste the competition's OpenIPF page into *OpenIPF results
+  link* and a "View results on OpenIPF" link appears on it, opening in a new tab. Use
   *Close entry* when it fills up early.
 - **News.** Posts have a title, date, author (the signed-in editor), and a rich
   text body that is saved as Markdown, with links, headings, lists and tables.

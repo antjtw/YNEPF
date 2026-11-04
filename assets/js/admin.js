@@ -248,6 +248,8 @@
         { name: "venue_name", label: "Venue", help: "Shown on the page and linked to Google Maps.", half: true },
         { name: "venue_address", label: "Address or postcode (optional)", help: "Makes the Maps link more accurate.", half: true },
         { name: "map_url", label: "Custom map link (optional)", type: "url", help: "Only needed if the automatic Google Maps link is wrong." },
+        { name: "openipf_url", label: "OpenIPF results link (optional)", type: "url", placeholder: "https://www.openipf.org/…",
+          help: "Add this after the competition, once results are on OpenIPF. It shows as a link on the Calendar that opens in a new tab." },
         { name: "entry_url", label: "Entry link", type: "url", placeholder: "https://…", help: "Goes live on the website at the time entry opens, and is hidden when entry closes." },
         { name: "entry_opens", label: "Entry opens (UK time)", type: "datetime", half: true, help: "Filled in as 8 weeks before, at 9am. Change it if you need to." },
         { name: "entry_closes", label: "Entry closes (UK time)", type: "datetime", half: true, help: "Filled in as 3 weeks before, at noon." },
@@ -259,13 +261,14 @@
         if (v.entry_opens && v.entry_closes && v.entry_closes <= v.entry_opens) return "Entry must close after it opens.";
         if (v.entry_url && !/^https?:\/\//i.test(v.entry_url)) return "The entry link must start with https://";
         if (v.map_url && !/^https?:\/\//i.test(v.map_url)) return "The map link must start with https://";
+        if (v.openipf_url && !/^https:\/\//i.test(v.openipf_url)) return "The OpenIPF link must start with https://";
         return null;
       },
       onSave: function (v) {
         var row = {
           name: v.name, description: v.description, label: v.label,
           start_date: v.start_date, end_date: v.end_date || null,
-          venue_name: v.venue_name, venue_address: v.venue_address, map_url: v.map_url,
+          venue_name: v.venue_name, venue_address: v.venue_address, map_url: v.map_url, openipf_url: v.openipf_url,
           capacity: v.capacity, entry_url: v.entry_url,
           entry_opens: Y.fromLondonInput(v.entry_opens), entry_closes: Y.fromLondonInput(v.entry_closes),
           entry_manually_closed: v.entry_manually_closed, published: v.published

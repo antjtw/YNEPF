@@ -195,10 +195,14 @@ create table if not exists public.competitions (
   entry_opens timestamptz,
   entry_closes timestamptz,
   entry_manually_closed boolean not null default false,
+  openipf_url text not null default '',        -- link to the results page on OpenIPF
   published boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+-- For databases created before this column existed:
+alter table public.competitions add column if not exists openipf_url text not null default '';
+
 create index if not exists competitions_start_idx on public.competitions (start_date);
 
 create or replace function public.touch_updated_at()
@@ -237,7 +241,8 @@ select
      and (entry_closes is null or entry_closes > now())
     then entry_url
     else ''
-  end as entry_url
+  end as entry_url,
+  openipf_url
 from public.competitions
 where published;
 
