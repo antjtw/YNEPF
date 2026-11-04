@@ -237,6 +237,62 @@
     return card;
   }
 
+  // ---- Google Sheets (records) -----------------------------------------------
+  // Accepts a "Publish to web" link, a CSV link, or a normal share link, and
+  // returns the address of the sheet's CSV. Returns "" if it is not usable.
+  function sheetCsvUrl(raw) {
+    var u;
+    try { u = new URL((raw || "").trim()); } catch (e) { return ""; }
+    if (u.protocol !== "https:") return "";
+    var gid = u.searchParams.get("gid") || (u.hash.match(/gid=(\d+)/) || [])[1];
+    var pub = u.pathname.match(/^\/spreadsheets\/d\/e\/([^/]+)\/pub/);
+    if (u.hostname === "docs.google.com" && pub) {
+      return "https://docs.google.com/spreadsheets/d/e/" + pub[1] + "/pub?output=csv" + (gid ? "&gid=" + gid : "");
+    }
+    var share = u.pathname.match(/^\/spreadsheets\/d\/([^/]+)/);
+    if (u.hostname === "docs.google.com" && share) {
+      return "https://docs.google.com/spreadsheets/d/" + share[1] + "/export?format=csv&gid=" + (gid || "0");
+    }
+    return u.toString(); // any other CSV host
+  }
+  // RFC 4180 CSV -> array of rows (handles quotes, commas and newlines in cells)
+  function parseCsv(text) {
+    var rows = [], row = [], cell = "", q = false;
+    text = text.replace(/^\uFEFF/, "");
+    for (var i = 0; i < text.length; i++) {
+      var c = text[i];
+      if (q) {
+        if (c === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; }
+        else cell += c;
+      } else if (c === '"') q = true;
+      else if (c === ",") { row.push(cell); cell = ""; }
+      else if (c === "\n" || c === "\r") {
+        if (c === "\r" && text[i + 1] === "\n") i++;
+        row.push(cell); rows.push(row); row = []; cell = "";
+      } else cell += c;
+    }
+    if (cell !== "" || row.length) { row.push(cell); rows.push(row); }
+    return rows;
+  }
+  // Fetches a sheet and returns {header: [...], rows: [[...]]}, trimmed of blank rows/columns.
+  function loadSheet(url) {
+    var csv = sheetCsvUrl(url);
+    if (!csv) return Promise.reject(new Error("That is not a usable link."));
+    return fetch(csv).then(function (r) {
+      if (!r.ok) throw new Error("The sheet could not be read (is it published to the web?).");
+      return r.text();
+    }).then(function (text) {
+      if (/^\s*<(!doctype|html)/i.test(text)) throw new Error("That link returned a web page, not data. Publish the sheet to the web as CSV.");
+      var rows = parseCsv(text).map(function (r) { return r.map(function (c) { return c.trim(); }); })
+        .filter(function (r) { return r.some(Boolean); });
+      if (!rows.length) return { header: [], rows: [] };
+      var width = 0;
+      rows.forEach(function (r) { r.forEach(function (c, i) { if (c && i + 1 > width) width = i + 1; }); });
+      rows = rows.map(function (r) { var o = r.slice(0, width); while (o.length < width) o.push(""); return o; });
+      return { header: rows[0], rows: rows.slice(1) };
+    });
+  }
+
   // ---- Page status helpers --------------------------------------------------
   function notice(target, message, kind) {
     target.replaceChildren(el("div", { class: "callout", role: kind === "error" ? "alert" : "status" },
@@ -255,6 +311,7 @@
     toLondonInput: toLondonInput, fromLondonInput: fromLondonInput,
     todayLondon: todayLondon, addDays: addDays, dateRange: dateRange, longDate: longDate,
     compState: compState, entryLine: entryLine, mapsUrl: mapsUrl, competitionCard: competitionCard,
+    sheetCsvUrl: sheetCsvUrl, parseCsv: parseCsv, loadSheet: loadSheet,
     notice: notice, guard: guard
   };
 })();

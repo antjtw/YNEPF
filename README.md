@@ -178,6 +178,14 @@ supabase/seed.sql       The existing committee, FAQs and 2026 calendar, ready to
   reorder with the arrow buttons; people can be moved between sections.
 - **FAQs.** Categories containing questions, with Markdown answers. Same
   controls as the organisation page.
+- **Records.** The Records page shows one table per entry under *Records* in
+  the editor, each read live from a Google Sheet (men and women, classic and
+  equipped). In each sheet use File > Share > Publish to web, choose the tab and
+  CSV, and paste the link into the editor. A normal share link also works if the
+  sheet is shared with "anyone with the link". The first row of the sheet is used
+  as the table heading, and blank rows and columns are ignored. To move the
+  records elsewhere, edit the entry and paste the new link; leaving the link
+  blank hides that table. Google refreshes published sheets every few minutes.
 - All user-written Markdown is sanitised before it is shown on the site.
 
 ### Notes

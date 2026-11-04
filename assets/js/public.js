@@ -192,8 +192,66 @@
     }).catch(function (e) { fail(root, e); });
   }
 
+  // ---- Records ----------------------------------------------------------------
+  function slug(t) { return t.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""); }
+  function records(root) {
+    load("record_sources", function (t) { return t.select("*").order("sort_order"); }).then(function (sources) {
+      sources = sources.filter(function (s) { return s.url; });
+      root.replaceChildren();
+      if (!sources.length) { root.appendChild(el("p", null, "Records are not available yet. Check back soon.")); return; }
+
+      var search = el("input", { type: "search", id: "rec-search", autocomplete: "off", placeholder: "Name, weight class, lift..." });
+      var status = el("p", { class: "visually-hidden", role: "status" });
+      root.appendChild(el("div", { class: "rec-tools" },
+        el("label", { for: "rec-search" }, "Search all records"), search, status));
+      root.appendChild(el("ul", { class: "rec-jump" }, sources.map(function (s) {
+        return el("li", null, el("a", { href: "#" + slug(s.title) }, s.title));
+      })));
+
+      var sections = sources.map(function (s) {
+        var body = el("div", null, el("p", null, "Loading…"));
+        var sec = el("section", { class: "rec-section", id: slug(s.title), "aria-labelledby": "h-" + slug(s.title) },
+          el("h2", { id: "h-" + slug(s.title) }, s.title), body);
+        root.appendChild(sec);
+        var state = { rows: [], body: body };
+        Y.loadSheet(s.url).then(function (sheet) {
+          if (!sheet.header.length) { body.replaceChildren(el("p", null, "No records in this sheet yet.")); return; }
+          var tbody = el("tbody", null, sheet.rows.map(function (r) {
+            var tr = el("tr", null, r.map(function (c, i) { return el(i === 0 ? "th" : "td", i === 0 ? { scope: "row" } : null, c); }));
+            state.rows.push({ tr: tr, text: r.join(" ").toLowerCase() });
+            return tr;
+          }));
+          var empty = el("p", { hidden: true }, "No records match your search.");
+          state.empty = empty;
+          body.replaceChildren(
+            el("div", { class: "table-wrap" }, el("table", { class: "data records" },
+              el("caption", { class: "visually-hidden" }, s.title + " records"),
+              el("thead", null, el("tr", null, sheet.header.map(function (h) { return el("th", { scope: "col" }, h); }))),
+              tbody)),
+            empty);
+        }).catch(function (e) {
+          if (window.console) console.error(e);
+          body.replaceChildren(el("p", null, "We could not load these records just now. ",
+            el("a", { href: s.url, target: "_blank", rel: "noopener" }, "Open the sheet directly"), "."));
+        });
+        return { sec: sec, state: state };
+      });
+
+      search.addEventListener("input", function () {
+        var q = search.value.trim().toLowerCase(), shown = 0;
+        sections.forEach(function (x) {
+          var n = 0;
+          x.state.rows.forEach(function (r) { var hit = !q || r.text.indexOf(q) >= 0; r.tr.hidden = !hit; if (hit) n++; });
+          if (x.state.empty) x.state.empty.hidden = n > 0 || !x.state.rows.length;
+          shown += n;
+        });
+        status.textContent = q ? shown + " matching record" + (shown === 1 ? "" : "s") : "";
+      });
+    }).catch(function (e) { fail(root, e); });
+  }
+
   // ---- Boot -----------------------------------------------------------------
-  var routes = { calendar: calendar, committee: committee, news: news, post: post, faqs: faqs };
+  var routes = { calendar: calendar, committee: committee, news: news, post: post, faqs: faqs, records: records };
   function boot() {
     var page = document.body.getAttribute("data-view") || document.body.getAttribute("data-page");
     var root = document.getElementById("live");

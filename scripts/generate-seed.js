@@ -164,7 +164,14 @@ function calendar() {
   return sql + "end if;\nend $seed$;\n";
 }
 
+// ---- records (placeholders: paste the real sheet links in the editor) -------
+function records() {
+  const names = ["Men's classic", "Men's equipped", "Women's classic", "Women's equipped"];
+  return "-- Records\ndo $seed$ begin\nif not exists (select 1 from public.record_sources) then\ninsert into public.record_sources (title, url, sort_order) values\n" +
+    names.map((n, i) => `(${q(n)}, '', ${(i + 1) * 10})`).join(",\n") + ";\nend if;\nend $seed$;\n";
+}
+
 process.stdout.write(
   "-- Seed content, generated from the original hand-written pages.\n-- Safe to run once: each block only inserts if its table is empty.\n\n" +
-  [committee(), faqs(), calendar()].join("\n")
+  [committee(), faqs(), calendar(), records()].join("\n")
 );

@@ -532,6 +532,81 @@
     }
   }
 
+  // ---- records (links to published Google Sheets) -----------------------------------
+  function renderRecords(panel) {
+    panel.replaceChildren(panelHead("Records", btn("Add record sheet", function () { editSource(); }, "btn-primary")),
+      el("div", { class: "panel-intro" },
+        el("p", null, "Each entry below becomes a table on the Records page, read live from a Google Sheet. To get a link: in the sheet choose ",
+          el("strong", null, "File > Share > Publish to web"), ", pick the tab, choose ", el("strong", null, "Comma-separated values (.csv)"),
+          ", press Publish and paste the link here. Changes in the sheet appear on the site within a few minutes."),
+        el("p", null, "To move the records somewhere else later, edit the entry and paste the new link. Entries with no link are hidden from the public page.")),
+      el("p", null, "Loading…"));
+    sb.from("record_sources").select("*").order("sort_order").then(function (res) {
+      var rows = ok(res);
+      panel.lastChild.remove();
+      if (!rows.length) { panel.appendChild(el("p", { class: "empty" }, "No record sheets yet.")); return; }
+      var list = el("ul", { class: "item-list card", style: "padding:0 var(--space-5);" });
+      rows.forEach(function (r, i) {
+        var up = btn("↑", function () { moveSource(rows, i, -1); }, "btn-secondary icon-btn", { "aria-label": "Move " + r.title + " up" });
+        var down = btn("↓", function () { moveSource(rows, i, 1); }, "btn-secondary icon-btn", { "aria-label": "Move " + r.title + " down" });
+        up.disabled = i === 0; down.disabled = i === rows.length - 1;
+        list.appendChild(el("li", { class: "item-row" },
+          el("div", { class: "item-main" }, el("p", { class: "item-title" }, r.title),
+            el("p", { class: "item-sub", style: "overflow-wrap:anywhere;" }, r.url || "No link yet (hidden on the site)")),
+          el("span", { class: "actions" }, up, down,
+            btn("Edit", function () { editSource(r); }),
+            btn("Delete", function () { removeSource(r); }, "btn-danger"))));
+      });
+      panel.appendChild(list);
+    }).catch(function (e) { panel.lastChild.textContent = friendly(e); });
+  }
+
+  function moveSource(rows, index, dir) {
+    var a = rows.slice(), j = index + dir, t = a[index]; a[index] = a[j]; a[j] = t;
+    var jobs = [];
+    a.forEach(function (x, i) {
+      if (x.sort_order !== (i + 1) * 10) jobs.push(sb.from("record_sources").update({ sort_order: (i + 1) * 10 }).eq("id", x.id).then(ok));
+    });
+    Promise.all(jobs).then(route).catch(function (e) { toast(friendly(e), "error"); });
+  }
+  function removeSource(r) {
+    if (!window.confirm("Remove “" + r.title + "” from the Records page? The Google Sheet itself is not touched.")) return;
+    sb.from("record_sources").delete().eq("id", r.id).then(ok)
+      .then(function () { toast("Removed."); route(); })
+      .catch(function (e) { toast(friendly(e), "error"); });
+  }
+  function editSource(r) {
+    var isNew = !r;
+    openForm({
+      title: isNew ? "Add record sheet" : "Edit record sheet",
+      values: r || {},
+      saveLabel: isNew ? "Add" : "Save changes",
+      fields: [
+        { name: "title", label: "Heading on the page", required: true, placeholder: "Men's classic" },
+        { name: "url", label: "Google Sheets link", type: "url", placeholder: "https://docs.google.com/spreadsheets/d/e/…/pub?output=csv",
+          help: "A Publish to web link (CSV) is best. A normal share link also works if the sheet is shared with “anyone with the link”. Leave blank to hide this table." }
+      ],
+      validate: function (v) {
+        if (v.url && !Y.sheetCsvUrl(v.url)) return "That does not look like a usable link. It must start with https://";
+        return null;
+      },
+      onSave: function (v) {
+        var write = isNew
+          ? sb.from("record_sources").select("sort_order").order("sort_order", { ascending: false }).limit(1).then(ok).then(function (x) {
+              return sb.from("record_sources").insert({ title: v.title, url: v.url, sort_order: (x[0] ? x[0].sort_order : 0) + 10 });
+            })
+          : sb.from("record_sources").update({ title: v.title, url: v.url }).eq("id", r.id);
+        return write.then(ok).then(function () {
+          route();
+          if (!v.url) return toast("Saved. With no link, this table stays hidden.");
+          // Check the link really works, and say so straight away.
+          Y.loadSheet(v.url).then(function (s) { toast("Saved. Read the sheet fine: " + s.rows.length + " rows."); })
+            .catch(function (e) { toast("Saved, but the sheet could not be read: " + e.message, "error"); });
+        });
+      }
+    });
+  }
+
   // ---- account --------------------------------------------------------------------
   function renderAccount(panel) {
     var nameErr = el("p", { class: "form-error", role: "alert", hidden: true });
@@ -584,6 +659,7 @@
     competitions: renderCompetitions,
     news: renderNews,
     organisation: function (p) { renderGrouped(p, ORG); },
+    records: renderRecords,
     faqs: function (p) { renderGrouped(p, FAQ); },
     account: renderAccount
   };

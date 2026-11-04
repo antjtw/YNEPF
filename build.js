@@ -30,6 +30,7 @@ const pages = [
   "index.html",
   "calendar.html",
   "committee.html",
+  "records.html",
   "news.html",
   "post.html",
   "faqs.html",

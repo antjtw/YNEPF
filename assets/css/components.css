@@ -641,3 +641,13 @@ ol.steps li::before {
 /* ---- Past competitions ---- */
 .archive summary { cursor: pointer; font-weight: 600; color: var(--link); margin-bottom: var(--space-4); }
 .archive[open] summary { margin-bottom: var(--space-5); }
+
+/* ---- Records ---- */
+.rec-tools { max-width: var(--measure); margin-bottom: var(--space-4); }
+.rec-tools label { display: block; font-weight: 600; margin-bottom: var(--space-1); }
+.rec-tools input { width: 100%; font: inherit; padding: var(--space-2) var(--space-3); border: 2px solid var(--grey-700); border-radius: var(--radius); }
+.rec-jump { list-style: none; display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5); padding: 0; margin: 0 0 var(--space-4); max-width: none; }
+.rec-jump li { margin: 0; }
+.rec-section h2 { scroll-margin-top: var(--space-4); }
+table.records { min-width: 100%; }
+table.records tr[hidden] { display: none; }

@@ -85,6 +85,18 @@ create table if not exists public.faqs (
 create index if not exists faqs_category_idx on public.faqs (category_id, sort_order);
 
 -- ---------------------------------------------------------------------------
+-- Records: each row points at one published Google Sheet (e.g. "Men's classic").
+-- The page fetches the sheet's CSV in the visitor's browser, so changing the
+-- link here repoints the page with no deploy.
+-- ---------------------------------------------------------------------------
+create table if not exists public.record_sources (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  url text not null default '',
+  sort_order integer not null default 0
+);
+
+-- ---------------------------------------------------------------------------
 -- News posts
 -- ---------------------------------------------------------------------------
 create table if not exists public.posts (
@@ -175,6 +187,7 @@ alter table public.org_sections    enable row level security;
 alter table public.people          enable row level security;
 alter table public.faq_categories  enable row level security;
 alter table public.faqs            enable row level security;
+alter table public.record_sources  enable row level security;
 alter table public.posts           enable row level security;
 alter table public.competitions    enable row level security;
 
@@ -190,7 +203,7 @@ create policy "profiles update own" on public.profiles
 do $$
 declare t text;
 begin
-  foreach t in array array['org_sections','people','faq_categories','faqs'] loop
+  foreach t in array array['org_sections','people','faq_categories','faqs','record_sources'] loop
     execute format('drop policy if exists "public read" on public.%I', t);
     execute format('create policy "public read" on public.%I for select to anon, authenticated using (true)', t);
     execute format('drop policy if exists "editors write" on public.%I', t);
@@ -217,12 +230,12 @@ create policy "editors all" on public.competitions
 grant usage on schema public to anon, authenticated;
 
 grant select on public.org_sections, public.people, public.faq_categories,
-                public.faqs, public.posts, public.competitions_public
+                public.faqs, public.posts, public.competitions_public, public.record_sources
   to anon;
 
 grant select, insert, update, delete on
   public.org_sections, public.people, public.faq_categories, public.faqs,
-  public.posts, public.competitions
+  public.posts, public.competitions, public.record_sources
   to authenticated;
 
 grant select on public.competitions_public to authenticated;

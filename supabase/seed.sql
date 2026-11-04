@@ -238,3 +238,14 @@ A competition shirt will be available to buy on the day. One-of-a-kind medals an
 **Entry requirements:** 70 GLP achieved at or after the Nov Open 2025. [Read the qualifying process in our FAQs](faqs.html).$q$, $q$Sponsor TBD$q$, $q$2026-11-07$q$, $q$2026-11-08$q$, $q$Riccall Regen Centre$q$, 96, ($q$2026-09-12 09:00$q$::timestamp at time zone 'Europe/London'), ($q$2026-10-17 12:00$q$::timestamp at time zone 'Europe/London'));
 end if;
 end $seed$;
+
+-- Records
+do $seed$ begin
+if not exists (select 1 from public.record_sources) then
+insert into public.record_sources (title, url, sort_order) values
+($q$Men's classic$q$, '', 10),
+($q$Men's equipped$q$, '', 20),
+($q$Women's classic$q$, '', 30),
+($q$Women's equipped$q$, '', 40);
+end if;
+end $seed$;
