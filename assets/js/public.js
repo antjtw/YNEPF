@@ -164,14 +164,14 @@
   ];
   function loCell(col, l) {
     if (col === "name") {
-      return el("th", { scope: "row" }, l.openIpf ? el("a", { href: l.openIpf, target: "_blank", rel: "noopener",
+      return el("th", { scope: "row", class: "c-name" }, l.openIpf ? el("a", { href: l.openIpf, target: "_blank", rel: "noopener",
         "aria-label": l.name + " on OpenIPF (opens in a new tab)" }, l.name) : l.name);
     }
     if (col === "instagram") {
-      return el("td", null, l.instagram ? el("a", { class: "lo-ig", href: "https://www.instagram.com/" + encodeURIComponent(l.instagram) + "/",
+      return el("td", { class: "c-instagram" }, l.instagram ? el("a", { class: "lo-ig", href: "https://www.instagram.com/" + encodeURIComponent(l.instagram) + "/",
         target: "_blank", rel: "noopener", "aria-label": "@" + l.instagram + " on Instagram, " + l.name + " (opens in a new tab)" }, "@" + l.instagram) : "");
     }
-    return el("td", null, col === "glp" ? fmtGlp(l.glp) : l[col]);
+    return el("td", { class: "c-" + col }, col === "glp" ? fmtGlp(l.glp) : l[col]);
   }
   function renderLiftingOrder(host, c, lifters) {
     var cols = LO_TABLE.filter(function (col) {
@@ -205,7 +205,7 @@
             el("p", { class: "lo-flight-label" }, "Flight " + f),
             el("div", { class: "table-wrap" }, el("table", { class: "data lifters" },
               el("caption", { class: "visually-hidden" }, "Flight " + f + " lifting order"),
-              el("thead", null, el("tr", null, cols.map(function (col) { return el("th", { scope: "col" }, col.label); }))),
+              el("thead", null, el("tr", null, cols.map(function (col) { return el("th", { scope: "col", class: "c-" + col.key }, col.label); }))),
               el("tbody", null, rows.map(function (l) { return el("tr", null, cols.map(function (col) { return loCell(col.key, l); })); }))))));
         });
         sec.appendChild(block);

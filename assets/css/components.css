@@ -547,12 +547,18 @@ table.records tr[hidden] { display: none; }
 .lo-flight { margin-bottom: var(--space-6); max-width: none; }
 .lo-flight-label { display: inline-block; margin: 0 0 var(--space-2); padding: 0.1rem var(--space-3); border-radius: var(--radius-pill); background: var(--navy-800); color: #fff; font-weight: 700; font-size: var(--fs-16); }
 .lo-flight .table-wrap { max-width: none; }
-table.lifters { table-layout: fixed; width: 100%; min-width: 44rem; }
-table.lifters th:first-child { width: 22%; }
+table.lifters { table-layout: fixed; width: 100%; min-width: 52rem; }
+table.lifters .c-name { width: 21%; }
+table.lifters .c-club { width: 17%; }
+table.lifters .c-instagram { width: 22%; }
+table.lifters .c-age { width: 7%; }
+table.lifters .c-cls { width: 9%; }
+table.lifters .c-bestTotal { width: 12%; }
+table.lifters .c-glp { width: 8%; }
 table.lifters td, table.lifters th { overflow-wrap: break-word; padding-inline: var(--space-2); }
 table.lifters th:first-child, table.lifters td:first-child { padding-left: var(--space-4); }
 table.lifters thead th { overflow-wrap: normal; }
-.lo-ig { color: var(--link); text-decoration: none; white-space: nowrap; }
+.lo-ig { color: var(--link); text-decoration: none; overflow-wrap: anywhere; }   /* long handles wrap instead of running into the next column */
 .lo-ig:hover { text-decoration: underline; }
 
 /* ==========================================================================
