@@ -85,3 +85,15 @@ body.admin main { padding-block: var(--space-6) var(--space-8); }
 .toast { position: fixed; left: 50%; bottom: var(--space-5); transform: translateX(-50%); z-index: 1000; display: flex; flex-direction: column; gap: var(--space-2); align-items: center; pointer-events: none; }
 .toast div { background: var(--navy-800); color: #fff; padding: var(--space-3) var(--space-5); border-radius: var(--radius); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25); }
 .toast .toast-error { background: var(--rose-800); }
+
+/* Sign-in extras */
+.social { display: grid; gap: var(--space-3); margin-bottom: var(--space-4); }
+.social[hidden] { display: none; }
+.social .btn { justify-content: center; width: 100%; }
+.divider { display: flex; align-items: center; gap: var(--space-3); color: var(--text-muted); margin: var(--space-4) 0; font-size: 0.95rem; }
+.divider::before, .divider::after { content: ""; flex: 1; border-top: 1px solid var(--border-strong); }
+.form-info { background: var(--sage-50); border-left: 4px solid var(--sage-600); padding: var(--space-3); margin: 0 0 var(--space-4); }
+.form-info[hidden] { display: none; }
+#noaccess[hidden], #signup-form[hidden] { display: none; }
+.tag-you { margin-left: var(--space-2); }
+.admin-tabs a[hidden] { display: none; }

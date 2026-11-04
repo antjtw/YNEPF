@@ -146,17 +146,49 @@ supabase/seed.sql       The existing committee, FAQs and 2026 calendar, ready to
 1. Create a project at supabase.com.
 2. **SQL editor:** run `supabase/schema.sql`, then `supabase/seed.sql`
    (both are safe to re-run; the seed only fills empty tables).
-3. **Authentication > Sign In / Providers:** switch **off** "Allow new users to
-   sign up". Editors are added by you, so a stranger cannot make an account.
-4. **Authentication > Users > Add user:** create an email and password for each
-   editor (tick "Auto confirm user"). Everyone can change their own password
-   and display name under *Account* in the editor.
+3. **Authentication > Sign In / Providers:** leave "Allow new users to sign up"
+   **on**, and "Confirm email" **on**. Access is controlled by the allow-list
+   below, not by sign-up: anyone can create a login, but a login that is not on
+   the list can change nothing (this is enforced in the database).
+4. **Sign in as the first admin.** `schema.sql` adds `ynepfentries@gmail.com` as
+   the admin. Open `/admin` and either continue with Google using that address,
+   or choose "Create your login" with that address and a password (you will be
+   emailed a link to confirm it). After that, add everyone else from the
+   **Users** tab.
 5. **Authentication > URL Configuration:** set the Site URL to your live site, and
-   add `https://YOUR-SITE/admin/` to Redirect URLs (needed for "Forgotten your
-   password?" emails).
+   add `https://YOUR-SITE/admin/` to Redirect URLs. This is needed for password
+   reset emails and for Google/Apple sign-in to return to the editor.
 6. **Project Settings > API:** copy the Project URL and the `anon` public key into
    `assets/js/config.js`. Never use the `service_role` key anywhere in this repo.
 7. Deploy as before (Vercel). Open `/admin` and sign in.
+
+### Who can edit, and how people sign in
+
+- **Users tab (admins only).** Add someone's email address and choose *Editor*
+  (manage competitions, news, records, organisation, FAQs) or *Admin* (also add
+  and remove users). Removing a user takes their access away immediately; their
+  login still exists but can do nothing. The database refuses to remove or
+  demote the last admin.
+- **A new person** goes to `/admin` and either continues with Google (or Apple),
+  or chooses "Create your login" with the email you added. Their email must be
+  confirmed, so nobody can claim someone else's address. Someone signed in but
+  not on the list sees a "No access yet" screen.
+- **Forgotten password.** On the sign-in screen choose "Forgotten your
+  password?" after typing the email. A link is emailed; opening it brings them
+  back to the editor to choose a new password. If they cannot get at that
+  inbox, they can continue with Google instead (same email), or you can send a
+  reset from Supabase: Authentication > Users > the user > Send password
+  recovery.
+- **Google sign-in.** Create an OAuth client in Google Cloud Console (type: Web
+  application) with the redirect URI shown in Supabase under Authentication >
+  Providers > Google, then paste the client ID and secret there. It is free.
+- **Apple sign-in** needs a paid Apple Developer account, a Services ID and a
+  key, and Apple's client secret has to be regenerated about every 6 months. It
+  is worth adding only if people ask. Apple users must share their real email
+  (not "Hide My Email"), or the admin must add the relay address Apple gives
+  them.
+- Switch a provider's button on in `assets/js/config.js` (`authProviders`) only
+  after enabling it in Supabase.
 
 ### How it behaves
 

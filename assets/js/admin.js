@@ -11,12 +11,12 @@
   var el = Y.el;
   var sb = Y.db();
   var $ = function (id) { return document.getElementById(id); };
-  var state = { user: null, name: "", recovering: false };
+  var state = { user: null, name: "", role: null, recovering: false };
 
   // ---- small utilities --------------------------------------------------------
   function ok(res) { if (res.error) throw res.error; return res.data; }
   function friendly(err) {
-    if (err && err.code === "23505") return "That value is already used somewhere else (for example the same web address). Change it and try again.";
+    if (err && err.code === "23505") return "That value is already used somewhere else (for example a web address or an email). Change it and try again.";
     if (err && /row-level security|permission denied/i.test(err.message || "")) return "You do not have permission to do that. Try signing out and in again.";
     return (err && err.message) || "Something went wrong. Please try again.";
   }
@@ -607,6 +607,64 @@
     });
   }
 
+  // ---- users (admin only): the allow-list of people who can edit ----------------------
+  function renderUsers(panel) {
+    panel.replaceChildren(panelHead("Users", btn("Add user", function () { editUser(); }, "btn-primary")),
+      el("div", { class: "panel-intro" },
+        el("p", null, "Only the people listed here can change the website. ",
+          el("strong", null, "Editors"), " can manage competitions, news, records, the organisation page and FAQs. ",
+          el("strong", null, "Admins"), " can also add and remove users."),
+        el("p", null, "To give someone access, add their email address here. They then go to this page and either continue with Google or choose “Create your login”, using that same email. Removing someone takes their access away straight away.")),
+      el("p", null, "Loading…"));
+    sb.from("editors").select("*").order("created_at", { ascending: true }).then(function (res) {
+      var rows = ok(res);
+      panel.lastChild.remove();
+      var me = (state.user.email || "").toLowerCase();
+      panel.appendChild(el("div", { class: "table-scroll" }, el("table", { class: "admin-table" },
+        el("thead", null, el("tr", null, ["Email", "Name", "Role", "Actions"].map(function (h) { return el("th", { scope: "col" }, h); }))),
+        el("tbody", null, rows.map(function (u) {
+          var self = u.email === me;
+          var actions = self ? el("span", { class: "empty" }, "This is you") : el("span", { class: "actions" },
+            btn(u.role === "admin" ? "Make editor" : "Make admin", function () { setRole(u); }),
+            btn("Remove", function () { removeUser(u); }, "btn-danger"));
+          return el("tr", null,
+            el("th", { scope: "row" }, u.email, self ? el("span", { class: "tag tag-open tag-you" }, "You") : null,
+              u.added_by ? el("small", null, "Added by " + u.added_by) : null),
+            el("td", null, u.display_name || "—"),
+            el("td", null, u.role === "admin" ? "Admin" : "Editor"),
+            el("td", null, actions));
+        })))));
+    }).catch(function (e) { panel.lastChild.textContent = friendly(e); });
+  }
+  function setRole(u) {
+    var next = u.role === "admin" ? "editor" : "admin";
+    if (!window.confirm("Make " + u.email + " " + (next === "admin" ? "an admin? They will be able to add and remove users." : "an editor? They will no longer be able to manage users."))) return;
+    sb.from("editors").update({ role: next }).eq("id", u.id).then(ok)
+      .then(function () { toast("Role changed."); route(); })
+      .catch(function (e) { toast(friendly(e), "error"); });
+  }
+  function removeUser(u) {
+    if (!window.confirm("Remove " + u.email + "? They will lose access straight away.")) return;
+    sb.from("editors").delete().eq("id", u.id).then(ok)
+      .then(function () { toast("User removed."); route(); })
+      .catch(function (e) { toast(friendly(e), "error"); });
+  }
+  function editUser() {
+    openForm({
+      title: "Add user", saveLabel: "Add user", values: { role: "editor" },
+      fields: [
+        { name: "email", label: "Email address", type: "email", required: true, help: "Must match the email they sign in with (their Google account, or the one they create a login with)." },
+        { name: "display_name", label: "Name (optional)", help: "Shown as the author on their news posts." },
+        { name: "role", label: "Role", type: "select", options: [{ value: "editor", label: "Editor: can edit the website" }, { value: "admin", label: "Admin: can also add and remove users" }] }
+      ],
+      validate: function (v) { return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.email) ? null : "Enter a valid email address."; },
+      onSave: function (v) {
+        return sb.from("editors").insert({ email: v.email.toLowerCase(), display_name: v.display_name, role: v.role, added_by: state.user.email || "" })
+          .then(ok).then(function () { toast("Added. Ask them to sign in at this page with " + v.email.toLowerCase() + "."); route(); });
+      }
+    });
+  }
+
   // ---- account --------------------------------------------------------------------
   function renderAccount(panel) {
     var nameErr = el("p", { class: "form-error", role: "alert", hidden: true });
@@ -660,42 +718,60 @@
     news: renderNews,
     organisation: function (p) { renderGrouped(p, ORG); },
     records: renderRecords,
+    users: renderUsers,
     faqs: function (p) { renderGrouped(p, FAQ); },
     account: renderAccount
   };
 
   function route() {
     var tab = (location.hash || "").replace("#", "");
-    if (!TABS[tab]) tab = "competitions";
+    if (!TABS[tab] || (tab === "users" && state.role !== "admin")) tab = "competitions";
     Array.prototype.forEach.call(document.querySelectorAll(".admin-tabs a"), function (a) {
       if (a.getAttribute("data-tab") === tab) a.setAttribute("aria-current", "page");
       else a.removeAttribute("aria-current");
     });
     TABS[tab]($("panel"));
   }
-  window.addEventListener("hashchange", function () { if (state.user) route(); });
+  window.addEventListener("hashchange", function () { if (state.user && state.role) route(); });
 
+  var TITLES = { login: "Sign in", signup: "Create your login", reset: "Set a new password" };
   function showAuth(mode) {
     state.recovering = mode === "reset";
+    state.role = null;
     show($("app"), false);
     show($("user-box"), false);
+    show($("noaccess"), false);
     show($("auth"), true);
-    show($("login-form"), mode !== "reset");
+    show($("login-form"), mode === "login");
+    show($("signup-form"), mode === "signup");
     show($("reset-form"), mode === "reset");
-    $("auth-title").textContent = mode === "reset" ? "Set a new password" : "Sign in";
+    show($("social"), mode !== "reset" && $("social").children.length > 0);
+    $("auth-title").textContent = TITLES[mode];
   }
 
   function showApp(user) {
     if (state.recovering) return Promise.resolve();
     state.user = user;
-    return sb.from("profiles").select("display_name").eq("id", user.id).maybeSingle().then(function (res) {
-      var fallback = (user.email || "").split("@")[0];
-      state.name = (res.data && res.data.display_name) || fallback;
-      $("user-name").textContent = state.name;
-      show($("auth"), false);
-      show($("app"), true);
-      show($("user-box"), true);
-      route();
+    return sb.rpc("my_role").then(function (r) {
+      state.role = r.error ? null : r.data;
+      if (!state.role) {
+        show($("auth"), false); show($("app"), false);
+        $("noaccess-email").textContent = user.email || "";
+        show($("noaccess"), true);
+        show($("user-box"), true);
+        $("user-name").textContent = user.email || "";
+        return;
+      }
+      return sb.from("profiles").select("display_name").eq("id", user.id).maybeSingle().then(function (res) {
+        var fallback = (user.email || "").split("@")[0];
+        state.name = (res.data && res.data.display_name) || fallback;
+        $("user-name").textContent = state.name;
+        show($("auth"), false); show($("noaccess"), false);
+        show($("app"), true);
+        show($("user-box"), true);
+        show($("tab-users"), state.role === "admin");
+        route();
+      });
     });
   }
 
@@ -714,6 +790,36 @@
         el("p", { style: "margin:0;" }, "Add your Supabase project URL and anon key to assets/js/config.js, then reload this page.")));
       return;
     }
+
+    var LABELS = { google: "Continue with Google", apple: "Continue with Apple" };
+    ((window.YNEPF_CONFIG || {}).authProviders || []).forEach(function (p) {
+      if (!LABELS[p]) return;
+      $("social").appendChild(el("button", { type: "button", class: "btn btn-secondary", onclick: function () {
+        sb.auth.signInWithOAuth({ provider: p, options: { redirectTo: location.origin + location.pathname } }).then(function (res) {
+          if (res.error) formError("auth-error", friendly(res.error));
+        });
+      } }, LABELS[p]));
+    });
+    if ($("social").children.length) $("social").appendChild(el("div", { class: "divider", "aria-hidden": "true" }, "or use your email"));
+
+    $("to-signup").addEventListener("click", function () { formError("signup-error", ""); showAuth("signup"); $("su-email").value = $("email").value; });
+    $("to-login").addEventListener("click", function () { showAuth("login"); });
+    $("noaccess-out").addEventListener("click", function () { sb.auth.signOut(); });
+    $("signup-form").addEventListener("submit", function (e) {
+      e.preventDefault();
+      formError("signup-error", ""); $("signup-info").hidden = true;
+      var name = $("su-name").value.trim(), email = $("su-email").value.trim(), pass = $("su-pass").value;
+      if (!email) return formError("signup-error", "Enter your email address.");
+      if (pass.length < 8) return formError("signup-error", "Use at least 8 characters for your password.");
+      sb.auth.signUp({ email: email, password: pass, options: { data: { display_name: name }, emailRedirectTo: location.origin + location.pathname } })
+        .then(function (res) {
+          if (res.error) return formError("signup-error", friendly(res.error));
+          if (res.data && res.data.session) return; // confirmed already: the auth listener takes over
+          var info = $("signup-info");
+          info.textContent = "Nearly there. We have emailed you a link: open it to confirm your address, then sign in. If you already had a login, use “Forgotten your password?” instead.";
+          info.hidden = false;
+        });
+    });
 
     $("login-form").addEventListener("submit", function (e) {
       e.preventDefault();

@@ -3,10 +3,14 @@
 --
 -- Model:
 --   * The public (anon) can READ published content and nothing else.
---   * Any signed-in user (an editor) can read and write everything.
---   * Editors are created by you in Supabase: Authentication > Users > Add user.
---     Turn OFF "Allow new users to sign up" (Authentication > Sign In / Providers),
---     otherwise anyone could register and become an editor.
+--   * Writing is limited to people on the `editors` allow-list (below), matched
+--     by their VERIFIED email address. Two roles: `admin` (can also manage the
+--     list) and `editor`.
+--   * Anyone can create a login (email/password, Google, Apple), but a login
+--     that is not on the list can change nothing. Removing someone from the list
+--     takes their access away immediately. So leave "Allow new users to sign up"
+--     ON in Supabase: the allow-list is the gate, not sign-up.
+--   * The first admin is ynepfentries@gmail.com (added at the bottom of this file).
 -- ============================================================================
 
 -- ---------------------------------------------------------------------------
@@ -28,7 +32,9 @@ begin
   insert into public.profiles (id, display_name)
   values (
     new.id,
-    coalesce(nullif(new.raw_user_meta_data ->> 'display_name', ''), split_part(new.email, '@', 1))
+    coalesce(nullif(new.raw_user_meta_data ->> 'display_name', ''),
+             nullif((select e.display_name from public.editors e where e.email = lower(new.email)), ''),
+             split_part(new.email, '@', 1))
   )
   on conflict (id) do nothing;
   return new;
@@ -44,6 +50,62 @@ create trigger on_auth_user_created
 insert into public.profiles (id, display_name)
 select id, split_part(email, '@', 1) from auth.users
 on conflict (id) do nothing;
+
+-- ---------------------------------------------------------------------------
+-- Editors: the allow-list. Email is stored lower-case.
+-- ---------------------------------------------------------------------------
+create table if not exists public.editors (
+  id uuid primary key default gen_random_uuid(),
+  email text not null unique check (email = lower(email) and email like '%_@_%'),
+  display_name text not null default '',
+  role text not null default 'editor' check (role in ('admin', 'editor')),
+  added_by text not null default '',
+  created_at timestamptz not null default now()
+);
+
+-- The caller's role, or null if they are not allowed in. Requires a CONFIRMED
+-- email on the login, so nobody can sign up with someone else's address.
+create or replace function public.my_role()
+returns text
+language sql
+stable
+security definer
+set search_path = public, auth
+as $$
+  select e.role
+  from public.editors e
+  join auth.users u on lower(u.email) = e.email
+  where u.id = auth.uid() and u.email_confirmed_at is not null
+  limit 1
+$$;
+
+create or replace function public.is_editor() returns boolean
+language sql stable security definer set search_path = public, auth
+as $$ select public.my_role() is not null $$;
+
+create or replace function public.is_admin() returns boolean
+language sql stable security definer set search_path = public, auth
+as $$ select coalesce(public.my_role() = 'admin', false) $$;
+
+-- There must always be at least one admin.
+create or replace function public.protect_last_admin()
+returns trigger
+language plpgsql
+as $$
+begin
+  if old.role = 'admin' and (tg_op = 'DELETE' or new.role <> 'admin') then
+    if not exists (select 1 from public.editors where role = 'admin' and id <> old.id) then
+      raise exception 'There must always be at least one admin.';
+    end if;
+  end if;
+  return case when tg_op = 'DELETE' then old else new end;
+end;
+$$;
+
+drop trigger if exists editors_protect_last_admin on public.editors;
+create trigger editors_protect_last_admin
+  before update or delete on public.editors
+  for each row execute function public.protect_last_admin();
 
 -- ---------------------------------------------------------------------------
 -- Organisation (the committee page): sections of people
@@ -183,6 +245,7 @@ where published;
 -- Row level security
 -- ---------------------------------------------------------------------------
 alter table public.profiles        enable row level security;
+alter table public.editors         enable row level security;
 alter table public.org_sections    enable row level security;
 alter table public.people          enable row level security;
 alter table public.faq_categories  enable row level security;
@@ -194,10 +257,15 @@ alter table public.competitions    enable row level security;
 -- Profiles: editors can see everyone's name, and edit only their own.
 drop policy if exists "profiles read" on public.profiles;
 create policy "profiles read" on public.profiles
-  for select to authenticated using (true);
+  for select to authenticated using (id = auth.uid() or public.is_editor());
 drop policy if exists "profiles update own" on public.profiles;
 create policy "profiles update own" on public.profiles
-  for update to authenticated using (id = auth.uid()) with check (id = auth.uid());
+  for update to authenticated using (id = auth.uid() and public.is_editor()) with check (id = auth.uid());
+
+-- The allow-list: only admins can see or change it.
+drop policy if exists "admins manage editors" on public.editors;
+create policy "admins manage editors" on public.editors
+  for all to authenticated using (public.is_admin()) with check (public.is_admin());
 
 -- Public read + editor write for the simple content tables.
 do $$
@@ -207,22 +275,22 @@ begin
     execute format('drop policy if exists "public read" on public.%I', t);
     execute format('create policy "public read" on public.%I for select to anon, authenticated using (true)', t);
     execute format('drop policy if exists "editors write" on public.%I', t);
-    execute format('create policy "editors write" on public.%I for all to authenticated using (true) with check (true)', t);
+    execute format('create policy "editors write" on public.%I for all to authenticated using (public.is_editor()) with check (public.is_editor())', t);
   end loop;
 end $$;
 
 -- Posts: the public sees published posts whose date has arrived. Editors see all.
 drop policy if exists "public read" on public.posts;
 create policy "public read" on public.posts
-  for select to anon using (published and post_date <= now());
+  for select to anon, authenticated using (published and post_date <= now());
 drop policy if exists "editors all" on public.posts;
 create policy "editors all" on public.posts
-  for all to authenticated using (true) with check (true);
+  for all to authenticated using (public.is_editor()) with check (public.is_editor());
 
 -- Competitions: the public reads only through competitions_public. Editors use the table.
 drop policy if exists "editors all" on public.competitions;
 create policy "editors all" on public.competitions
-  for all to authenticated using (true) with check (true);
+  for all to authenticated using (public.is_editor()) with check (public.is_editor());
 
 -- ---------------------------------------------------------------------------
 -- Grants
@@ -235,8 +303,17 @@ grant select on public.org_sections, public.people, public.faq_categories,
 
 grant select, insert, update, delete on
   public.org_sections, public.people, public.faq_categories, public.faqs,
-  public.posts, public.competitions, public.record_sources
+  public.posts, public.competitions, public.record_sources, public.editors
   to authenticated;
 
 grant select on public.competitions_public to authenticated;
 grant select, update on public.profiles to authenticated;
+
+grant execute on function public.my_role(), public.is_editor(), public.is_admin() to anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- First admin. Sign in as this address (Google, or create a password) to get in.
+-- ---------------------------------------------------------------------------
+insert into public.editors (email, display_name, role, added_by)
+values ('ynepfentries@gmail.com', 'YNEPF Entries', 'admin', 'setup')
+on conflict (email) do nothing;

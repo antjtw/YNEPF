@@ -34,12 +34,24 @@
       <!-- Sign in -->
       <section id="auth" class="auth-card" hidden aria-labelledby="auth-title">
         <h1 id="auth-title">Sign in</h1>
+        <div id="social" class="social" hidden></div>
         <form id="login-form" novalidate>
           <div class="field"><label for="email">Email</label><input id="email" type="email" autocomplete="username" required></div>
           <div class="field"><label for="password">Password</label><input id="password" type="password" autocomplete="current-password" required></div>
           <p class="form-error" id="auth-error" role="alert" hidden></p>
           <button class="btn btn-primary" type="submit">Sign in</button>
           <button class="link-btn" id="forgot" type="button">Forgotten your password?</button>
+          <button class="link-btn" id="to-signup" type="button">First time here? Create your login</button>
+        </form>
+        <form id="signup-form" hidden novalidate>
+          <p>Use the same email address an administrator added for you. Or go back and continue with Google instead.</p>
+          <div class="field"><label for="su-name">Your name</label><input id="su-name" type="text" autocomplete="name"></div>
+          <div class="field"><label for="su-email">Email</label><input id="su-email" type="email" autocomplete="username" required></div>
+          <div class="field"><label for="su-pass">Choose a password</label><p class="help">At least 8 characters.</p><input id="su-pass" type="password" autocomplete="new-password" minlength="8" required></div>
+          <p class="form-error" id="signup-error" role="alert" hidden></p>
+          <p class="form-info" id="signup-info" role="status" hidden></p>
+          <button class="btn btn-primary" type="submit">Create login</button>
+          <button class="link-btn" id="to-login" type="button">Back to sign in</button>
         </form>
         <form id="reset-form" hidden novalidate>
           <p>Choose a new password.</p>
@@ -51,6 +63,14 @@
 
       <div id="setup-warning" hidden></div>
 
+      <!-- Signed in, but not on the allow-list -->
+      <section id="noaccess" class="auth-card" hidden aria-labelledby="noaccess-title">
+        <h1 id="noaccess-title">No access yet</h1>
+        <p>You are signed in as <strong id="noaccess-email"></strong>, but this account has not been given access to the editor.</p>
+        <p>Ask an administrator to add that email address, then sign in again. If you meant to use a different account, sign out and try another.</p>
+        <button class="btn btn-secondary" id="noaccess-out" type="button">Sign out</button>
+      </section>
+
       <!-- Editor -->
       <div id="app" hidden>
         <nav class="admin-tabs" aria-label="Sections">
@@ -59,6 +79,7 @@
           <a href="#organisation" data-tab="organisation">Organisation</a>
           <a href="#records" data-tab="records">Records</a>
           <a href="#faqs" data-tab="faqs">FAQs</a>
+          <a href="#users" data-tab="users" id="tab-users" hidden>Users</a>
           <a href="#account" data-tab="account">Account</a>
         </nav>
         <div id="panel" tabindex="-1"></div>
