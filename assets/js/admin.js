@@ -434,6 +434,32 @@
     validate: function () { return null; }
   };
 
+  // Addresses allowed in the footer: https, mailto, "#" (placeholder), or a page on this site.
+  function footerUrlOk(u) {
+    u = (u || "").trim();
+    return u === "#" || /^https:\/\/[^\s]+$/i.test(u) || /^mailto:[^\s@]+@[^\s@]+$/i.test(u) ||
+      (/^[A-Za-z0-9][A-Za-z0-9_\-.\/]*(#[\w-]*)?$/.test(u) && u.indexOf("..") < 0 && u.indexOf("//") < 0);
+  }
+  var PLACEMENTS = { column: "A column of links", bottom: "The bottom row", social: "Social links under the logo" };
+  var FOOTER = {
+    title: "Footer", slug: "footer",
+    intro: "The links at the bottom of every page. Each group is either a column of links, the links in the bottom row (such as the privacy policy), or the social links under the logo. Rename groups, add links and reorder with the arrows. Changes show on the site within a minute.",
+    gTable: "footer_groups", iTable: "footer_links", fk: "group_id", gWord: "group", iWord: "link", iPlural: "links",
+    gFields: [
+      { name: "title", label: "Heading", required: true, help: "Shown above a column of links. For the bottom row and social links it is just a name for you." },
+      { name: "placement", label: "Where it appears", type: "select", options: Object.keys(PLACEMENTS).map(function (k) { return { value: k, label: PLACEMENTS[k] }; }) }
+    ],
+    iFields: [
+      { name: "label", label: "Link text", required: true },
+      { name: "url", label: "Address", required: true, help: "A full address starting https://, a page on this site such as faqs.html, or # as a placeholder until you have the real address." }
+    ],
+    gSub: function (g) { return PLACEMENTS[g.placement] || ""; },
+    iTitle: function (l) { return l.label; },
+    iSub: function (l) { return l.url === "#" ? "# (placeholder: add the real address)" : l.url; },
+    normalise: function (v) { v.url = v.url.trim(); v.label = v.label.trim(); return v; },
+    validate: function (v) { return footerUrlOk(v.url) ? null : "The address must start with https://, or be a page on this site (like faqs.html), or be # for now."; }
+  };
+
   function renderGrouped(panel, cfg) {
     var cap = cfg.gWord.charAt(0).toUpperCase() + cfg.gWord.slice(1);
     var focusKey = renderGrouped.focusKey;
@@ -804,6 +830,7 @@
     records: renderRecords,
     users: renderUsers,
     faqs: function (p) { renderGrouped(p, FAQ); },
+    footer: function (p) { renderGrouped(p, FOOTER); },
     account: renderAccount
   };
 

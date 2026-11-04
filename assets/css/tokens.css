@@ -94,6 +94,8 @@
   --page-margin-tablet: 1.875rem; /* side margin from tablet up (30px) */
   --gutter: 1.875rem;            /* space between grid columns (30px) */
   --header-height: 4.25rem;
+  /* How far a photo may bleed past the 960px column on wide screens (never more than 4rem; 0 when there is no room). */
+  --bleed: max(-4rem, min(0px, calc((100vw - var(--container)) / -2 + var(--page-margin-tablet))));
 
   /* ---- Type families ---- */
   --font-body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;

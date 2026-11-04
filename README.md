@@ -19,7 +19,7 @@ lifting/              A competition's lifting order, at /lifting-order/<address>
 lifting-order.html    The original YNE Worlds 26 page (self-contained, unchanged)
 admin/                The site editor (sign in, then manage content)
 assets/css/           palette (generated), tokens, base, components, fonts, admin
-assets/js/            public.js, site.js, contact.js, nav.js, site-links.js, admin.js, config.js
+assets/js/            public.js, site.js, contact.js, nav.js, footer.js, admin.js, config.js
 assets/partials/      The shared header (with menu drawer) and footer
 assets/vendor/        Pinned third-party libraries, committed so there is no CDN
 assets/fonts, img/    Cutmark, IBM Plex Sans, logos and image slots
@@ -132,10 +132,13 @@ cards, 28px panels).
 
 ### Layout grid
 
-Everything sits in a `.container`: content is at most **960px** wide, centred, with
-side margins of 16px on mobile and 30px from tablet. The header, hero, image tiles and footer
-use `.container-wide` (1200px) and "break out" of the column. Columns go in a
-`.grid-row`:
+Everything sits in a `.container`: content is at most **960px** wide, centred,
+with side margins of 16px on mobile and 30px from tablet. That includes the
+header, hero, image tiles and footer, so every section lines up. The one
+exception is photos: on wide screens the hero photo and the tile row are allowed to
+bleed a little (up to 4rem) into the margins (`--bleed` in `tokens.css`).
+`.container-wide` (1200px) still exists but nothing uses it by default. Columns go
+in a `.grid-row`:
 
 ```html
 <div class="container">
@@ -154,16 +157,22 @@ stacks in source order, so write the markup in reading order for a phone.
 ### Header, menu and footer
 
 `assets/partials/header.html` and `footer.html` are inlined into every page by
-`node build.js`. The header shows the main links inline from 1024px and a
-**Menu** button at every size, which opens a slide-out drawer (a native dialog:
-focus is trapped, Esc closes it, the page behind is inert).
+`node build.js`. The header shows the main links inline from 1024px. Below that
+the links collapse and a **Menu** button appears, which opens a slide-out drawer (a
+native dialog: focus is trapped, Esc closes it, the page behind is inert). The
+menu button is not shown while the inline links fit.
 
-**Document and social links** (privacy policy, franchise documents, Instagram, the
-Facebook group) are addresses you paste into `assets/js/site-links.js`. A link
-with no address stays hidden everywhere (footer, menu, contact page), so there are
-never dead links. The privacy policy and franchise documents are meant to be
-Google Docs: share them as "Anyone with the link: Viewer" and paste the link. A
-starting draft of the privacy policy is in `docs/privacy-policy-draft.md`.
+**Footer links are edited in the site editor** under **Footer**. Each group is
+either a **column of links** (rename it, add links, reorder with the arrows), the
+**bottom row** (privacy policy, franchise agreements...), or the **social links**
+under the logo. The footer draws itself from the database on each page (a single
+small request, cached for a minute), and the links written in `footer.html` are the
+fallback if the database cannot be reached. The privacy policy and franchise
+agreements links start as `#` placeholders: replace them with the Google Doc
+addresses. The contact page links to the privacy policy once it has a real address.
+Links may be a full `https://` address, `mailto:`, a page on this site (like
+`faqs.html`) or `#`; anything else is ignored. A starting draft of the privacy
+policy is in `docs/privacy-policy-draft.md`.
 
 ### Images
 
@@ -174,7 +183,7 @@ the `src` in `index.html` (and give a real `alt` where the picture matters):
 | Slot | File | Suggested size | Notes |
 |------|------|----------------|-------|
 | Hero (right of the headline) | `assets/img/hero.svg` | about 1200 x 1230 | Rounded corners; the "next competition" card sits over the bottom left. |
-| Tiles (three, "Find your place") | `tile-first-meet.svg`, `tile-compete.svg`, `tile-volunteer.svg` | about 960 x 1280, portrait | Text sits on a dark gradient, so busy photos are fine. |
+| Tiles (three, "Find your place") | `tile-first-competition.svg`, `tile-compete.svg`, `tile-volunteer.svg` | about 960 x 1280, portrait | Text sits on a dark gradient, so busy photos are fine. |
 
 Keep photos under about 300KB each (export as JPG or WebP).
 
@@ -332,8 +341,9 @@ supabase/seed.sql       The existing committee, FAQs and 2026 calendar, ready to
 
 ### Contact form
 
-`contact.html` collects name, email, subject and message with GOV.UK-style
-validation (an error summary that takes focus, plus a message on each field), a
+`contact.html` collects name, email, subject and message, plus a tick-box
+("I have looked through the FAQs and my question is not answered there") that must
+be ticked before Send works. Validation is GOV.UK-style (an error summary that takes focus, plus a message on each field), a
 hidden honeypot for bots, and a confirmation panel. Visitors can only **add** a
 message; they cannot read any. Messages land in the `contact_messages` table and
 appear in the editor under **Messages**, with a count of what is waiting, a reply

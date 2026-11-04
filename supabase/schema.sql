@@ -147,6 +147,27 @@ create table if not exists public.faqs (
 create index if not exists faqs_category_idx on public.faqs (category_id, sort_order);
 
 -- ---------------------------------------------------------------------------
+-- Footer: groups of links. A group can be a column of links, the links in the
+-- bottom row (privacy policy and so on), or the social links under the logo.
+-- Edited under Footer in the site editor.
+-- ---------------------------------------------------------------------------
+create table if not exists public.footer_groups (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  placement text not null default 'column' check (placement in ('column', 'bottom', 'social')),
+  sort_order integer not null default 0
+);
+
+create table if not exists public.footer_links (
+  id uuid primary key default gen_random_uuid(),
+  group_id uuid not null references public.footer_groups (id) on delete cascade,
+  label text not null,
+  url text not null,
+  sort_order integer not null default 0
+);
+create index if not exists footer_links_group_idx on public.footer_links (group_id, sort_order);
+
+-- ---------------------------------------------------------------------------
 -- Records: each row points at one published Google Sheet (e.g. "Men's classic").
 -- The page fetches the sheet's CSV in the visitor's browser, so changing the
 -- link here repoints the page with no deploy.
@@ -355,6 +376,8 @@ alter table public.people          enable row level security;
 alter table public.faq_categories  enable row level security;
 alter table public.faqs            enable row level security;
 alter table public.record_sources  enable row level security;
+alter table public.footer_groups   enable row level security;
+alter table public.footer_links    enable row level security;
 alter table public.posts           enable row level security;
 alter table public.competitions    enable row level security;
 
@@ -383,7 +406,7 @@ create policy "admins manage editors" on public.editors
 do $$
 declare t text;
 begin
-  foreach t in array array['org_sections','people','faq_categories','faqs','record_sources'] loop
+  foreach t in array array['org_sections','people','faq_categories','faqs','record_sources','footer_groups','footer_links'] loop
     execute format('drop policy if exists "public read" on public.%I', t);
     execute format('create policy "public read" on public.%I for select to anon, authenticated using (true)', t);
     execute format('drop policy if exists "editors write" on public.%I', t);
@@ -410,12 +433,14 @@ create policy "editors all" on public.competitions
 grant usage on schema public to anon, authenticated;
 
 grant select on public.org_sections, public.people, public.faq_categories,
-                public.faqs, public.posts, public.competitions_public, public.record_sources
+                public.faqs, public.posts, public.competitions_public, public.record_sources,
+                public.footer_groups, public.footer_links
   to anon;
 
 grant select, insert, update, delete on
   public.org_sections, public.people, public.faq_categories, public.faqs,
-  public.posts, public.competitions, public.record_sources, public.editors
+  public.posts, public.competitions, public.record_sources, public.editors,
+  public.footer_groups, public.footer_links
   to authenticated;
 
 grant select on public.competitions_public to authenticated;

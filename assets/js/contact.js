@@ -14,7 +14,7 @@
   var form = document.getElementById("contact-form");
   if (!form) return;
 
-  var FIELDS = ["name", "email", "subject", "message"];
+  var FIELDS = ["name", "email", "subject", "message", "faqcheck"];
   var MAX = { name: 120, email: 254, subject: 200, message: 4000 };
   var summary = document.getElementById("error-summary");
   var list = document.getElementById("error-list");
@@ -30,6 +30,8 @@
     if (!v.subject) e.push(["subject", "Enter a subject"]);
     if (!v.message) e.push(["message", "Enter your message"]);
     else if (v.message.length > MAX.message) e.push(["message", "Your message must be " + MAX.message.toLocaleString("en-GB") + " characters or fewer"]);
+    // You cannot send until you have ticked this: it nudges people to check the FAQs first.
+    if (!v.faqcheck) e.push(["faqcheck", "Tick the box to confirm you have looked through the FAQs"]);
     return e;
   }
 
@@ -88,7 +90,10 @@
   form.addEventListener("submit", function (ev) {
     ev.preventDefault();
     var v = {};
-    FIELDS.forEach(function (id) { v[id] = document.getElementById(id).value.trim(); });
+    FIELDS.forEach(function (id) {
+      var input = document.getElementById(id);
+      v[id] = input.type === "checkbox" ? input.checked : input.value.trim();
+    });
     var errors = validate(v);
     if (errors.length) return showErrors(errors);
 

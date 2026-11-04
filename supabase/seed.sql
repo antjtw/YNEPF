@@ -249,3 +249,30 @@ insert into public.record_sources (title, url, sort_order) values
 ($q$Women's equipped$q$, '', 40);
 end if;
 end $seed$;
+
+-- Footer
+do $seed$ begin
+if not exists (select 1 from public.footer_groups) then
+with g as (insert into public.footer_groups (title, placement, sort_order) values ($q$Explore$q$, $q$column$q$, 10) returning id)
+insert into public.footer_links (group_id, label, url, sort_order) values
+((select id from g), $q$Competition calendar$q$, $q$calendar.html$q$, 10),
+((select id from g), $q$Records$q$, $q$records.html$q$, 20),
+((select id from g), $q$News$q$, $q$news.html$q$, 30),
+((select id from g), $q$Committee$q$, $q$committee.html$q$, 40),
+((select id from g), $q$FAQs$q$, $q$faqs.html$q$, 50),
+((select id from g), $q$Contact us$q$, $q$contact.html$q$, 60);
+with g as (insert into public.footer_groups (title, placement, sort_order) values ($q$Competing$q$, $q$column$q$, 20) returning id)
+insert into public.footer_links (group_id, label, url, sort_order) values
+((select id from g), $q$Buy a membership$q$, $q$https://www.britishpowerlifting.org/membership/$q$, 10),
+((select id from g), $q$Technical rules$q$, $q$https://www.powerlifting.sport/rules/codes/info/technical-rules$q$, 20),
+((select id from g), $q$Approved kit$q$, $q$https://www.powerlifting.sport/rules/codes/info/approved-list$q$, 30),
+((select id from g), $q$Divisional records$q$, $q$https://www.openpowerlifting.org/$q$, 40);
+with g as (insert into public.footer_groups (title, placement, sort_order) values ($q$Legal$q$, $q$bottom$q$, 30) returning id)
+insert into public.footer_links (group_id, label, url, sort_order) values
+((select id from g), $q$Privacy policy$q$, $q$#$q$, 10),
+((select id from g), $q$Franchise agreements$q$, $q$#$q$, 20);
+with g as (insert into public.footer_groups (title, placement, sort_order) values ($q$Social$q$, $q$social$q$, 40) returning id)
+insert into public.footer_links (group_id, label, url, sort_order) values
+((select id from g), $q$Linktree$q$, $q$https://linktr.ee/ynepf$q$, 10);
+end if;
+end $seed$;

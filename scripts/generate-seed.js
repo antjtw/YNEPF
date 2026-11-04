@@ -171,7 +171,30 @@ function records() {
     names.map((n, i) => `(${q(n)}, '', ${(i + 1) * 10})`).join(",\n") + ";\nend if;\nend $seed$;\n";
 }
 
+// ---- footer (what the footer showed before it became editable, plus the new links) ----
+function footer() {
+  const groups = [
+    { title: "Explore", placement: "column", links: [
+      ["Competition calendar", "calendar.html"], ["Records", "records.html"], ["News", "news.html"],
+      ["Committee", "committee.html"], ["FAQs", "faqs.html"], ["Contact us", "contact.html"]] },
+    { title: "Competing", placement: "column", links: [
+      ["Buy a membership", "https://www.britishpowerlifting.org/membership/"],
+      ["Technical rules", "https://www.powerlifting.sport/rules/codes/info/technical-rules"],
+      ["Approved kit", "https://www.powerlifting.sport/rules/codes/info/approved-list"],
+      ["Divisional records", "https://www.openpowerlifting.org/"]] },
+    // Placeholders: replace "#" with the real addresses in the editor.
+    { title: "Legal", placement: "bottom", links: [["Privacy policy", "#"], ["Franchise agreements", "#"]] },
+    { title: "Social", placement: "social", links: [["Linktree", "https://linktr.ee/ynepf"]] },
+  ];
+  let sql = "-- Footer\ndo $seed$ begin\nif not exists (select 1 from public.footer_groups) then\n";
+  groups.forEach((g, i) => {
+    sql += `with g as (insert into public.footer_groups (title, placement, sort_order) values (${q(g.title)}, ${q(g.placement)}, ${(i + 1) * 10}) returning id)\ninsert into public.footer_links (group_id, label, url, sort_order) values\n`;
+    sql += g.links.map((l, j) => `((select id from g), ${q(l[0])}, ${q(l[1])}, ${(j + 1) * 10})`).join(",\n") + ";\n";
+  });
+  return sql + "end if;\nend $seed$;\n";
+}
+
 process.stdout.write(
   "-- Seed content, generated from the original hand-written pages.\n-- Safe to run once: each block only inserts if its table is empty.\n\n" +
-  [committee(), faqs(), calendar(), records()].join("\n")
+  [committee(), faqs(), calendar(), records(), footer()].join("\n")
 );

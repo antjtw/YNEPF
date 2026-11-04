@@ -1,21 +1,22 @@
-<footer class="site-footer on-dark">
-  <div class="container-wide">
-    <div class="grid-row">
-      <div class="grid-column-one-third">
+<footer class="site-footer on-dark" data-root="{{ROOT}}">
+  <div class="container">
+    <!-- The columns, social links and bottom-row links are edited under Footer in the site editor.
+         What is written here is the fallback shown if the database cannot be reached. -->
+    <div class="grid-row" id="footer-main">
+      <div class="grid-column-one-third" id="footer-brand">
         <a class="footer-brand" href="{{ROOT}}index.html">
           <img src="{{ROOT}}assets/img/logo-white.svg" alt="" width="52" height="52">
           <span>Yorkshire &amp; North East<br>Powerlifting Federation</span>
         </a>
         <p>The home of drug tested powerlifting in Yorkshire and the North East.</p>
-        <ul class="footer-social" aria-label="Social media">
-          <li data-link-group="instagram" hidden><a href="#" data-link="instagram"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><circle cx="17.2" cy="6.8" r="1.2" fill="currentColor"/></svg>Instagram</a></li>
-          <li data-link-group="facebook" hidden><a href="#" data-link="facebook"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13.5 21v-7.5h2.6l.4-3h-3V8.6c0-.9.3-1.5 1.5-1.5h1.6V4.4c-.3 0-1.2-.1-2.3-.1-2.3 0-3.8 1.4-3.8 3.9v2.3H7.9v3h2.6V21h3z"/></svg>Facebook group</a></li>
-          <li><a href="https://linktr.ee/ynepf" target="_blank" rel="noopener">Linktree</a></li>
+        <ul class="footer-social" id="footer-social" aria-label="Social media">
+          <li><a href="https://linktr.ee/ynepf" target="_blank" rel="noopener">Linktree<span class="visually-hidden"> (opens in a new tab)</span></a></li>
         </ul>
+        <p class="small">Entries and general enquiries:<br><a href="mailto:ynepfentries@gmail.com">ynepfentries@gmail.com</a></p>
       </div>
-      <div class="grid-column-one-third">
+      <div class="grid-column-one-third" data-footer-col>
         <h2 class="footer-heading">Explore</h2>
-        <nav aria-label="Footer: explore">
+        <nav aria-label="Footer: Explore">
           <ul class="footer-list">
             <li><a href="{{ROOT}}calendar.html">Competition calendar</a></li>
             <li><a href="{{ROOT}}records.html">Records</a></li>
@@ -26,26 +27,25 @@
           </ul>
         </nav>
       </div>
-      <div class="grid-column-one-third">
+      <div class="grid-column-one-third" data-footer-col>
         <h2 class="footer-heading">Competing</h2>
-        <nav aria-label="Footer: competing">
+        <nav aria-label="Footer: Competing">
           <ul class="footer-list">
-            <li><a href="https://www.britishpowerlifting.org/membership/">Buy a membership</a></li>
-            <li><a href="https://www.powerlifting.sport/rules/codes/info/technical-rules">Technical rules</a></li>
-            <li><a href="https://www.powerlifting.sport/rules/codes/info/approved-list">Approved kit</a></li>
-            <li><a href="https://www.openpowerlifting.org/">Divisional records</a></li>
+            <li><a href="https://www.britishpowerlifting.org/membership/" target="_blank" rel="noopener">Buy a membership<span class="visually-hidden"> (opens in a new tab)</span></a></li>
+            <li><a href="https://www.powerlifting.sport/rules/codes/info/technical-rules" target="_blank" rel="noopener">Technical rules<span class="visually-hidden"> (opens in a new tab)</span></a></li>
+            <li><a href="https://www.powerlifting.sport/rules/codes/info/approved-list" target="_blank" rel="noopener">Approved kit<span class="visually-hidden"> (opens in a new tab)</span></a></li>
+            <li><a href="https://www.openpowerlifting.org/" target="_blank" rel="noopener">Divisional records<span class="visually-hidden"> (opens in a new tab)</span></a></li>
           </ul>
         </nav>
-        <p class="small">Entries and general enquiries:<br><a href="mailto:ynepfentries@gmail.com">ynepfentries@gmail.com</a></p>
       </div>
     </div>
     <hr class="footer-rule">
     <div class="grid-row footer-meta">
       <div class="grid-column-two-thirds">
         <nav aria-label="Footer: legal">
-          <ul class="footer-legal">
-            <li data-link-group="privacy" hidden><a href="#" data-link="privacy">Privacy policy</a></li>
-            <li data-link-group="franchise" hidden><a href="#" data-link="franchise">Franchise documents</a></li>
+          <ul class="footer-legal" id="footer-legal">
+            <li><a href="#">Privacy policy</a></li>
+            <li><a href="#">Franchise agreements</a></li>
             <li><a href="{{ROOT}}admin/">Site editor</a></li>
           </ul>
         </nav>
@@ -55,5 +55,6 @@
       </div>
     </div>
   </div>
+  <script src="{{ROOT}}assets/js/config.js"></script>
+  <script src="{{ROOT}}assets/js/footer.js" defer></script>
 </footer>
-<script src="{{ROOT}}assets/js/site-links.js" defer></script>
