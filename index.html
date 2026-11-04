@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Home — Yorkshire &amp; North East Powerlifting Federation</title>
   <meta name="description" content="The home of drug tested powerlifting in Yorkshire and the North East. Find upcoming competitions, membership and resources.">
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="assets/img/favicon-48.png" type="image/png" sizes="48x48">
+  <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
   <link rel="stylesheet" href="assets/css/fonts.css">
   <link rel="stylesheet" href="assets/css/tokens.css">
   <link rel="stylesheet" href="assets/css/base.css">
@@ -25,8 +28,9 @@
     <a class="brand" href="index.html" data-nav="home">
       <img class="brand-mark-img" src="assets/img/logo-colour.svg" alt="" width="44" height="44" aria-hidden="true">
       <span class="brand-name">
-        <span>Yorkshire &amp; North East</span>
-        <span>Powerlifting Federation</span>
+        <span class="brand-full">Yorkshire &amp; North East</span>
+        <span class="brand-full">Powerlifting Federation</span>
+        <span class="brand-short">YNEPF</span>
       </span>
     </a>
     <nav class="site-nav" aria-label="Primary">
@@ -87,9 +91,11 @@
         </div>
       </div>
       <div class="hero-media">
-        <!-- Replace hero.svg with a photo (hero.jpg, about 1200 x 1230) and give it a short alt text describing the picture. -->
         <figure class="hero-photo">
-          <img src="assets/img/hero.svg" alt="" width="800" height="880" fetchpriority="high">
+          <picture>
+            <source type="image/webp" srcset="assets/img/hero-640.webp 640w, assets/img/hero.webp 1000w" sizes="(min-width: 64em) 520px, calc(100vw - 2rem)">
+            <img src="assets/img/hero.jpg" srcset="assets/img/hero-640.jpg 640w, assets/img/hero.jpg 1000w" sizes="(min-width: 64em) 520px, calc(100vw - 2rem)" alt="A lifter benching at a YNEPF competition, with spotters either side of the bar" width="1000" height="1250" fetchpriority="high">
+          </picture>
         </figure>
       </div>
     </div>

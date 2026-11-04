@@ -176,13 +176,12 @@ policy is in `docs/privacy-policy-draft.md`.
 
 ### Images
 
-The homepage hero has one image slot with on-brand placeholder artwork, so it
-looks finished before a real photo arrives. To swap it, replace the file or change
-the `src` in `index.html` (and give a real `alt` where the picture matters):
+The homepage hero shows a competition photo. The untouched original is kept in
+`design/source-photos/`; the site only ever loads the compressed copies below.
 
 | Slot | File | Suggested size | Notes |
 |------|------|----------------|-------|
-| Hero (right of the headline) | `assets/img/hero.svg` | about 1200 x 1230 | Shown with rounded corners; a photo of lifting works best. |
+| Hero (right of the headline) | `assets/img/hero.webp` / `hero.jpg` (1000px) and `hero-640.*` (phones) | 1000 x 1250 | Fills the rounded frame from the centre (`object-fit: cover`). |
 
 **Adding a photo.** Resize and compress it first, so it costs visitors almost no bandwidth:
 
@@ -191,7 +190,7 @@ npm install --no-save sharp                     # once
 node scripts/optimise-image.js ~/Downloads/bench.jpg hero 1000
 ```
 
-That writes `assets/img/hero.webp` (about 60 KB) and `hero.jpg` at 1000px wide (the
+That writes `assets/img/hero.webp` (about 150 KB) and `hero.jpg` at 1000px wide (the
 hero shows at about 520px, so this is sharp on retina screens), never scaling a small
 photo up. The page then fills the frame with it from the centre (`object-fit: cover`),
 so a portrait or landscape photo both work. Point the hero at it in `index.html`:
@@ -207,6 +206,11 @@ Set `width` and `height` to the real size the script reports, and write an `alt`
 describes the photo.
 
 Keep photos under about 300KB each (export as JPG or WebP).
+
+### Favicon
+
+The crest is the favicon: `favicon.svg` (modern browsers), `favicon-48.png` and `apple-touch-icon.png`
+(180px), linked from every page's `<head>`.
 
 ### Logo
 

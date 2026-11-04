@@ -133,7 +133,11 @@
 .brand:hover { color: var(--navy-950); text-decoration: none; }
 .brand-mark-img { width: 2.75rem; height: 2.75rem; flex: none; }
 .brand-name { display: flex; flex-direction: column; font-weight: 700; font-size: var(--fs-16); line-height: 1.15; }
-@media (max-width: 26em) { .brand-name span:first-child { display: none; } .brand-name { font-size: var(--fs-19); } }
+.brand-short { display: none; }
+@media (max-width: 26em) {
+  .brand-full { display: none; }
+  .brand-short { display: block; font-family: var(--font-display); font-size: var(--fs-27); line-height: 1; letter-spacing: 0.01em; }
+}
 
 .site-nav { display: none; }
 .site-nav ul { display: flex; gap: var(--space-1); list-style: none; margin: 0; padding: 0; max-width: none; }
@@ -247,6 +251,7 @@ main:has(> .page-hero:first-child), main:has(> .lo-hero:first-child) { padding-t
 .hero-media { position: relative; }
 @media (min-width: 64em) { .hero-media { margin-right: var(--bleed); } }
 .hero-photo { position: relative; margin: 0; overflow: hidden; aspect-ratio: 4 / 4.1; border-radius: var(--radius-xl); background: var(--navy-700); }
+.hero-photo picture { display: block; height: 100%; }
 .hero-photo img { width: 100%; height: 100%; object-fit: cover; object-position: center; }   /* fills the frame, cropping evenly from the centre */
 /* Three simple cards. The first is inverted (solid navy, white text) to lead the row;
    add "tile--iron" instead of "tile--inverse" for Iron Oxide. */
