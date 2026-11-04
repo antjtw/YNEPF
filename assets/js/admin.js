@@ -263,7 +263,7 @@
         { name: "entries_full", label: "Entries full", type: "checkbox", help: "Tick this when the competition fills up before entry closes. The entry link is replaced by a “Join the waiting list” link (if you add one below)." },
         { name: "waitlist_url", label: "Waiting list link (Google Form)", type: "url", placeholder: "https://forms.gle/…", help: "Only shown on the website while entries are marked full." },
         { name: "lifting_order_url", label: "Lifting order sheet (optional)", type: "url", placeholder: "https://docs.google.com/spreadsheets/d/e/…/pub?output=csv",
-          help: "Add it a few days after entries open: a “View lifting order” button appears next to “Enter now” once it is here, and the page follows the sheet as you edit it. Use a published Google Sheet (File > Share > Publish to web > CSV), one row per lifter. Needs columns Day, Session, Flight and Name. Optional: Club, Instagram, Age, Class, Best total, GLP, Open IPF, and per session Weigh-in, Lift off and Session name. Only columns with something in them are shown." },
+          help: "Add it a few days after entries open: a “View lifting order” button appears next to “Enter now” once it is here, and the page follows the sheet as you edit it. Use a published Google Sheet (File > Share > Publish to web > CSV), one row per lifter. Needs columns Day, Session, Flight and Name. Optional: Club, Instagram, Age class (blank = Open, otherwise J, SJ, M1, M2, M3 or M4), Class (for example M66), GLP, Total, Open IPF (links the name to their profile), and per session Weigh-in, Lift off and Session name. Only columns with something in them are shown." },
         { name: "published", label: "Show on the website", type: "checkbox", help: "Untick to keep it as a draft." }
       ],
       validate: function (v) {
@@ -294,7 +294,9 @@
             // Check the sheet really works, and say so straight away.
             Y.loadSheet(v.lifting_order_url).then(function (s) {
               var r = Y.parseLiftingOrder(s);
-              toast("Lifting order read fine: " + r.lifters.length + " lifters in " + r.flightCount + " flights.");
+              toast("Lifting order read fine: " + r.lifters.length + " lifters in " + r.flightCount + " flights." +
+                (r.warnings.length ? " Check: " + r.warnings.slice(0, 3).join("; ") + (r.warnings.length > 3 ? " (and " + (r.warnings.length - 3) + " more)" : "") + "." : ""),
+                r.warnings.length ? "error" : undefined);
             }).catch(function (e) { toast("Saved, but the lifting order could not be read: " + e.message, "error"); });
           }
         });

@@ -159,23 +159,30 @@
   // Columns appear only if the sheet has something in them, so a worlds-style sheet
   // (best total, GLP) and a simpler one both come out sensibly.
   var LO_TABLE = [
-    { key: "name", label: "Name" }, { key: "club", label: "Club" }, { key: "instagram", label: "Instagram" },
-    { key: "age", label: "Age" }, { key: "cls", label: "Class" }, { key: "bestTotal", label: "Best total" }, { key: "glp", label: "GLP" }
+    { key: "name", label: "Name" }, { key: "ageClass", label: "Age class" }, { key: "cls", label: "Class" },
+    { key: "glp", label: "GLP" }, { key: "total", label: "Total (kg)" }
   ];
+  // The name cell carries everything about the person: the name (a link to their
+  // OpenIPF profile when they have one), an Instagram icon when the handle is valid,
+  // and their club underneath when there is one.
   function loCell(col, l) {
     if (col === "name") {
-      return el("th", { scope: "row", class: "c-name" }, l.openIpf ? el("a", { href: l.openIpf, target: "_blank", rel: "noopener",
-        "aria-label": l.name + " on OpenIPF (opens in a new tab)" }, l.name) : l.name);
-    }
-    if (col === "instagram") {
-      return el("td", { class: "c-instagram" }, l.instagram ? el("a", { class: "lo-ig", href: "https://www.instagram.com/" + encodeURIComponent(l.instagram) + "/",
-        target: "_blank", rel: "noopener", "aria-label": "@" + l.instagram + " on Instagram, " + l.name + " (opens in a new tab)" }, "@" + l.instagram) : "");
+      var top = el("span", { class: "lo-person" },
+        l.openIpf ? el("a", { href: l.openIpf, target: "_blank", rel: "noopener", class: "lo-name",
+          "aria-label": l.name + " on OpenIPF (opens in a new tab)" }, l.name) : el("span", { class: "lo-name" }, l.name));
+      if (l.instagram) {
+        top.appendChild(el("a", { class: "lo-ig", href: "https://www.instagram.com/" + encodeURIComponent(l.instagram) + "/",
+          target: "_blank", rel: "noopener", "aria-label": l.name + " on Instagram (opens in a new tab)" }, Y.svg(Y.ICONS.instagram)));
+      }
+      return el("th", { scope: "row", class: "c-name" }, top, l.club ? el("span", { class: "lo-club" }, l.club) : null);
     }
     return el("td", { class: "c-" + col }, col === "glp" ? fmtGlp(l.glp) : l[col]);
   }
   function renderLiftingOrder(host, c, lifters) {
     var cols = LO_TABLE.filter(function (col) {
-      return col.key === "name" || lifters.some(function (l) { return col.key === "glp" ? l.glp != null : !!l[col.key]; });
+      if (col.key === "name") return true;
+      if (col.key === "ageClass") return lifters.some(function (l) { return l.ageClass !== "Open"; });   // all blank = everyone is Open
+      return lifters.some(function (l) { return col.key === "glp" ? l.glp != null : !!l[col.key]; });
     });
     var days = {};
     lifters.forEach(function (l) {
@@ -186,6 +193,10 @@
     });
     var num = function (a, b) { return a - b; };
     host.replaceChildren();
+    if (cols.some(function (col) { return col.key === "ageClass"; })) {
+      host.appendChild(el("p", { class: "lo-key" }, el("strong", null, "Age class: "),
+        "Open, SJ sub-junior, J junior, M1 to M4 masters 1 to 4."));
+    }
     Object.keys(days).map(Number).sort(num).forEach(function (day) {
       var sec = el("section", { class: "lo-day", "aria-labelledby": "lo-day-" + day },
         el("h2", { id: "lo-day-" + day }, "Day " + day + ": " + Y.longDay(Y.addDays(c.start_date, day - 1))));

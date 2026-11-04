@@ -1,33 +1,33 @@
-Day,Session,Flight,Name,Club,Instagram,Age,Class,Best total,GLP,Open IPF,Weigh-in,Lift off,Session name
-1,1,A,Poppy Hartley,Leeds Barbell,@poppy.lifts,19,F47,265,81.4,https://www.openipf.org/,7:30am,9:30am,Morning
-1,1,A,Maya Okafor,Iron Orchard,@mayaokafor,24,F52,312.5,86.1,,,,
-1,1,A,Chloe Brennan,York Strength,,31,F52,295,81.2,,,,
-1,1,A,Imogen Walsh,Hull Power,@imo_walsh,22,F57,330,84.9,https://www.openipf.org/,,,
-1,1,B,Sarah Ellison,Leeds Barbell,@sarah.e.lifts,38,F57,345,88.8,,,,
-1,1,B,Grace Tanaka,Sheffield Iron,,27,F63,372.5,89.4,,,,
-1,1,B,Holly Pearce,Teesside PL,@hollypearce_pl,29,F63,360,86.5,,,,
-1,1,B,Rachel Dunn,Iron Orchard,@racheldunn,45,F72,385,87.1,,,,
-1,2,A,Tom Gregory,Hull Power,@tomgreg,21,M66,440,92.3,,10:00am,12:00pm,Late morning
-1,2,A,Aiden Foster,Leeds Barbell,@aiden.foster,18,M66,402.5,84.5,,,,
-1,2,A,Luke Mistry,York Strength,,26,M74,520,98.4,https://www.openipf.org/,,,
-1,2,B,Callum Reid,Sheffield Iron,@callumreid,33,M74,495,93.6,,,,
-1,2,B,Jamie Whitcombe,Teesside PL,@jw_strength,28,M83,575,102.3,,,,
-1,2,B,Dev Patel,Leeds Barbell,@devpatel_pl,24,M83,560,99.7,https://www.openipf.org/,,,
-1,3,A,Nathan Cole,Iron Orchard,@nathancole,35,M93,640,105.2,,1:00pm,3:00pm,Afternoon
-1,3,A,Ryan Mercer,Hull Power,,29,M93,615,101.1,,,,
-1,3,A,Ollie Barratt,Sheffield Iron,@ollieb,23,M105,680,104.0,,,,
-1,3,B,Marcus Hale,York Strength,@marcushale,41,M105,655,99.9,,,,
-1,3,B,Stuart Lyons,Teesside PL,@stu_lyons,47,M120,700,101.5,,,,
-1,3,B,Big Dan Pickles,Leeds Barbell,@bigdanpickles,36,M120+,785,108.6,https://www.openipf.org/,,,
-2,1,A,Eleanor Shaw,York Strength,@elshaw,52,F47,245,76.0,,8:00am,10:00am,Masters
-2,1,A,Marion Griffiths,Iron Orchard,,61,F57,285,73.4,,,,
-2,1,A,Janet Booth,Hull Power,@janetbooth,58,F63,300,72.0,,,,
-2,1,B,Keith Marlow,Leeds Barbell,@keithmarlow,55,M74,430,81.4,,,,
-2,1,B,Alan Briggs,Sheffield Iron,,63,M83,455,80.9,,,,
-2,1,B,Roy Kendall,Teesside PL,@roykendall,67,M93,470,77.3,,,,
-2,2,A,Jess Hollis,Leeds Barbell,@jesshollis,25,F57,350,90.1,https://www.openipf.org/,12:00pm,2:00pm,Prime Time
-2,2,A,Amara Njoku,Sheffield Iron,@amaranjoku,23,F63,395,95.0,https://www.openipf.org/,,,
-2,2,A,Zoe Whitaker,Iron Orchard,@zoewhit,30,F72,410,92.6,,,,
-2,2,A,Josh Kiely,Hull Power,@joshkiely,27,M83,610,108.5,https://www.openipf.org/,,,
-2,2,A,Sam Ng,York Strength,@samng_lifts,25,M93,690,113.4,https://www.openipf.org/,,,
-2,2,A,Callan Rhodes,Leeds Barbell,@callanrhodes,26,M105,745,114.2,https://www.openipf.org/,,,
+Day,Session,Flight,Name,Club,Instagram,Age class,Class,GLP,Total,Open IPF,Weigh-in,Lift off,Session name
+1,1,A,Poppy Hartley,Leeds Barbell,@poppy.lifts,J,F47,81.4,265,https://www.openipf.org/,7:30am,9:30am,Morning
+1,1,A,Maya Okafor,Iron Orchard,@mayaokafor,,F52,86.1,312.5,,,,
+1,1,A,Chloe Brennan,York Strength,,,F52,81.2,295,,,,
+1,1,A,Imogen Walsh,Hull Power,@imo_walsh,J,F57,84.9,330,https://www.openipf.org/,,,
+1,1,B,Sarah Ellison,Leeds Barbell,@sarah.e.lifts,,F57,88.8,345,,,,
+1,1,B,Grace Tanaka,Sheffield Iron,,,F63,89.4,372.5,,,,
+1,1,B,Holly Pearce,Teesside PL,@hollypearce_pl,,F63,86.5,360,,,,
+1,1,B,Rachel Dunn,Iron Orchard,@racheldunn,M1,F72,87.1,385,,,,
+1,2,A,Tom Gregory,Hull Power,@tomgreg,J,M66,92.3,440,,10:00am,12:00pm,Late morning
+1,2,A,Aiden Foster,Leeds Barbell,@aiden.foster,SJ,M66,84.5,402.5,,,,
+1,2,A,Luke Mistry,York Strength,,,M74,98.4,520,https://www.openipf.org/,,,
+1,2,B,Callum Reid,Sheffield Iron,@callumreid,,M74,93.6,495,,,,
+1,2,B,Jamie Whitcombe,Teesside PL,@jw_strength,,M83,102.3,575,,,,
+1,2,B,Dev Patel,Leeds Barbell,@devpatel_pl,,M83,99.7,560,https://www.openipf.org/,,,
+1,3,A,Nathan Cole,Iron Orchard,@nathancole,,M93,105.2,640,,1:00pm,3:00pm,Afternoon
+1,3,A,Ryan Mercer,Hull Power,,,M93,101.1,615,,,,
+1,3,A,Ollie Barratt,Sheffield Iron,@ollieb,J,M105,104.0,680,,,,
+1,3,B,Marcus Hale,York Strength,@marcushale,M1,M105,99.9,655,,,,
+1,3,B,Stuart Lyons,Teesside PL,@stu_lyons,M1,M120,101.5,700,,,,
+1,3,B,Big Dan Pickles,Leeds Barbell,@bigdanpickles,,M120+,108.6,785,https://www.openipf.org/,,,
+2,1,A,Eleanor Shaw,York Strength,@elshaw,M2,F47,76.0,245,,8:00am,10:00am,Masters
+2,1,A,Marion Griffiths,Iron Orchard,,M3,F57,73.4,285,,,,
+2,1,A,Janet Booth,Hull Power,@janetbooth,M2,F63,72.0,300,,,,
+2,1,B,Keith Marlow,Leeds Barbell,@keithmarlow,M2,M74,81.4,430,,,,
+2,1,B,Alan Briggs,Sheffield Iron,,M3,M83,80.9,455,,,,
+2,1,B,Roy Kendall,Teesside PL,@roykendall,M3,M93,77.3,470,,,,
+2,2,A,Jess Hollis,Leeds Barbell,@jesshollis,,F57,90.1,350,https://www.openipf.org/,12:00pm,2:00pm,Prime Time
+2,2,A,Amara Njoku,Sheffield Iron,@amaranjoku,J,F63,95.0,395,https://www.openipf.org/,,,
+2,2,A,Zoe Whitaker,Iron Orchard,@zoewhit,,F72,92.6,410,,,,
+2,2,A,Josh Kiely,Hull Power,@joshkiely,,M83,108.5,610,https://www.openipf.org/,,,
+2,2,A,Sam Ng,York Strength,@samng_lifts,,M93,113.4,690,https://www.openipf.org/,,,
+2,2,A,Callan Rhodes,Leeds Barbell,@callanrhodes,,M105,114.2,745,https://www.openipf.org/,,,

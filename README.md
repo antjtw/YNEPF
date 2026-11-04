@@ -347,10 +347,14 @@ news, users and more) is in [`docs/editor-guide.md`](docs/editor-guide.md).
   address ending*); `vercel.json` rewrites it to `lifting/index.html`, and
   `/lifting/?c=<address>` also works anywhere. The page is headed with the
   competition name and lists lifters by day, session and flight. Sheet columns:
-  Day, Session, Flight and Name are required; optional are Club, Instagram, Age,
-  Class, Best total, GLP, Open IPF, and per session Weigh-in, Lift off and
-  Session name. Only columns that have something in them are shown, so use Best
-  total and/or GLP depending on the competition. Within a flight lifters are
+  Day, Session, Flight and Name are required; optional are Club, Instagram, Age
+  class (blank = Open, else J, SJ, M1 to M4), Class (such as M66), GLP, Total (kg),
+  Open IPF (links the name to the profile), and per session Weigh-in, Lift off and
+  Session name. Each lifter's name cell holds the name, an Instagram icon (never
+  the handle) and the club. Only columns that have something in them are shown, so
+  use Total and/or GLP depending on the competition. There is no years-of-age
+  column. Saving a competition warns about unrecognised age classes and invalid
+  handles. `docs/mockups/sample-lifting-order.csv` is an example sheet. Within a flight lifters are
   ordered by class then GLP, except a session named "Prime time", which keeps
   the sheet's order. The page reads the sheet live, so adding, changing or
   deleting rows shows up as soon as Google refreshes the published sheet (a few

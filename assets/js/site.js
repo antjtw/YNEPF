@@ -350,13 +350,32 @@
   // Class, GLP, and per-session Weigh-in, Lift off and Session name.
   var LO_COLS = {
     day: ["day"], session: ["session"], flight: ["flight"], name: ["name"],
-    openIpf: ["open ipf", "openipf"], instagram: ["instagram"], age: ["age"], cls: ["class"], glp: ["glp"],
-    club: ["club", "team", "gym"], bestTotal: ["best total", "best total (kg)", "total"],
+    openIpf: ["open ipf", "openipf"], instagram: ["instagram"], ageClass: ["age class", "age category", "age division", "division"],
+    cls: ["class", "weight class"], glp: ["glp"],
+    club: ["club", "team", "gym"], total: ["total", "total (kg)", "kg", "best total", "best total (kg)"],
     weighIn: ["weigh-in", "weigh in", "weighin"], liftOff: ["lift off", "lift-off", "liftoff"],
     sessionName: ["session name", "session label"]
   };
   function igHandle(s) {
     return (s || "").trim().replace(/^https?:\/\/(www\.)?instagram\.com\//i, "").replace(/^@/, "").split(/[/?#]/)[0];
+  }
+  // Age class: blank means Open. Otherwise J (junior), SJ (sub-junior) or M1 to M4 (masters 1 to 4).
+  var AGE_CLASSES = { OPEN: "Open", SJ: "SJ", J: "J", M1: "M1", M2: "M2", M3: "M3", M4: "M4" };
+  var AGE_NAMES = { Open: "Open", SJ: "Sub-junior", J: "Junior", M1: "Masters 1", M2: "Masters 2", M3: "Masters 3", M4: "Masters 4" };
+  // Returns { value, known }. Accepts J, SJ, M1 to M4 and the spelt-out names, in any case.
+  function ageClass(raw) {
+    var t = (raw || "").trim();
+    if (!t) return { value: "Open", known: true };
+    var k = t.toUpperCase().replace(/[\s\-_.]+/g, "");
+    var named = { OPEN: "OPEN", O: "OPEN", JUNIOR: "J", JUNIORS: "J", SUBJUNIOR: "SJ", SUBJUNIORS: "SJ",
+      MASTERS1: "M1", MASTER1: "M1", MASTERS2: "M2", MASTER2: "M2", MASTERS3: "M3", MASTER3: "M3", MASTERS4: "M4", MASTER4: "M4" };
+    k = named[k] || k;
+    return AGE_CLASSES[k] ? { value: AGE_CLASSES[k], known: true } : { value: t, known: false };
+  }
+  // A usable Instagram handle, or "" (links and @ are stripped first).
+  function igValid(raw) {
+    var h = igHandle(raw);
+    return /^[A-Za-z0-9._]{1,30}$/.test(h) ? h : "";
   }
   function parseLiftingOrder(sheet) {
     var head = sheet.header.map(function (h) { return h.trim().toLowerCase(); });
@@ -370,20 +389,26 @@
       throw new Error("The sheet needs columns called Day, Session, Flight and Name (missing: " + missing.join(", ") + ").");
     }
     var get = function (r, k) { return idx[k] < 0 ? "" : (r[idx[k]] || "").trim(); };
+    var warnings = [];
     var lifters = sheet.rows.map(function (r) {
       var glp = parseFloat(get(r, "glp"));
+      var ac = ageClass(get(r, "ageClass"));
+      var ig = igValid(get(r, "instagram"));
+      var name = get(r, "name");
+      if (name && !ac.known) warnings.push(name + ": age class “" + ac.value + "” is not J, SJ, M1, M2, M3, M4 or blank");
+      if (name && get(r, "instagram") && !ig) warnings.push(name + ": Instagram “" + get(r, "instagram") + "” is not a valid handle, so no icon is shown");
       return {
         day: parseInt(get(r, "day"), 10), session: parseInt(get(r, "session"), 10), flight: get(r, "flight"),
-        name: get(r, "name"), openIpf: /^https?:\/\//i.test(get(r, "openIpf")) ? get(r, "openIpf") : "",
-        instagram: igHandle(get(r, "instagram")), age: get(r, "age"), cls: get(r, "cls"),
-        club: get(r, "club"), bestTotal: get(r, "bestTotal"),
+        name: name, openIpf: /^https:\/\//i.test(get(r, "openIpf")) ? get(r, "openIpf") : "",
+        instagram: ig, ageClass: ac.value, ageClassKnown: ac.known, cls: get(r, "cls"),
+        club: get(r, "club"), total: get(r, "total"),
         glp: isFinite(glp) ? glp : null,
         weighIn: get(r, "weighIn"), liftOff: get(r, "liftOff"), sessionName: get(r, "sessionName")
       };
     }).filter(function (l) { return l.name && isFinite(l.day) && isFinite(l.session) && l.flight; });
     var flights = {};
     lifters.forEach(function (l) { flights[l.day + "-" + l.session + "-" + l.flight] = 1; });
-    return { lifters: lifters, flightCount: Object.keys(flights).length };
+    return { lifters: lifters, flightCount: Object.keys(flights).length, warnings: warnings };
   }
   function longDay(ymd) {
     var p = {};
@@ -410,7 +435,7 @@
     toLondonInput: toLondonInput, fromLondonInput: fromLondonInput,
     todayLondon: todayLondon, yearOf: function (c) { return c.start_date.slice(0, 4); }, addDays: addDays, dateRange: dateRange, longDate: longDate,
     compState: compState, timeRange: timeRange, entryLine: entryLine, mapsUrl: mapsUrl, competitionCard: competitionCard,
-    parseLiftingOrder: parseLiftingOrder, liftingHref: liftingHref, longDay: longDay, igHandle: igHandle,
+    parseLiftingOrder: parseLiftingOrder, AGE_NAMES: AGE_NAMES, liftingHref: liftingHref, longDay: longDay, igHandle: igHandle,
     extIcon: Y_EXT, sheetCsvUrl: sheetCsvUrl, parseCsv: parseCsv, loadSheet: loadSheet,
     notice: notice, guard: guard
   };

@@ -272,13 +272,13 @@ Make a new Google Sheet. Put these headings in **row 1** (spelling and order of 
 
 | Heading | What it does |
 |---|---|
-| **Club** | Also accepted: `Team` or `Gym` |
-| **Instagram** | A handle (`@name` or `name`) or a full profile link. Shown as a link. |
-| **Age** | Shown as typed |
-| **Class** | Weight class, for example `59`, `-66`, `83+` |
-| **Best total** | Also accepted: `Best total (kg)` or `Total` |
-| **GLP** | A number. Shown without trailing zeros. |
-| **Open IPF** | A full `https://` OpenIPF profile link. Makes the lifter's name a link. |
+| **Club** | Also accepted: `Team` or `Gym`. Shown in small text under the lifter's name. |
+| **Instagram** | A handle (`@name` or `name`) or a full profile link. The page shows **only the Instagram icon**, next to the name, never the handle itself. If the handle is not valid (letters, numbers, full stops and underscores, up to 30), no icon is shown and the editor warns you when you save the competition. |
+| **Age class** | **Leave blank for Open.** Otherwise `J` (junior), `SJ` (sub-junior), `M1`, `M2`, `M3` or `M4` (masters 1 to 4). Spelt-out forms such as `Masters 2` are tidied up to `M2`. Anything else is shown as typed and flagged when you save. The column only appears if at least one lifter is not Open. Also accepted as the heading: `Age category`, `Division`. Do **not** put years of age here. |
+| **Class** | Weight class with the sex prefix, for example `M66` or `F57`, `M120+`. Also accepted: `Weight class`. |
+| **GLP** | The lifter's GL (good lift) points score. A number, shown without trailing zeros. |
+| **Total** | Their best total in the last 24 months, in kg. Shown as "Total (kg)". Also accepted as the heading: `KG`, `Total (kg)`, `Best total`. Use GLP, Total or both, whichever the competition uses. |
+| **Open IPF** | A full `https://` OpenIPF profile link. **Clicking the lifter's name then opens their OpenIPF profile.** Leave blank for lifters without one (novices, usually) and the name is plain text. |
 | **Weigh-in** | A time for the session, for example `8:00am`. Also accepted: `Weigh in`, `Weighin` |
 | **Lift off** | A time for the session, for example `10:30am`. Also accepted: `Lift-off`, `Liftoff` |
 | **Session name** | A label for the session, for example `Morning` or `Prime Time`. Also accepted: `Session label` |
@@ -287,12 +287,16 @@ Make a new Google Sheet. Put these headings in **row 1** (spelling and order of 
 
 Example:
 
-| Day | Session | Flight | Name | Club | Instagram | Class | Best total | GLP | Weigh-in | Lift off | Session name |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | 1 | A | Jo Smith | Leeds PL | @josmith | 57 | 345 | 78.2 | 8:00am | 10:30am | Morning |
-| 1 | 1 | A | Pat Jones | York Barbell | @patj | 63 | 410 | 82.5 | | | |
-| 1 | 1 | B | Sam Lee | Hull Strength | | 72 | 520 | 85 | | | |
-| 1 | 2 | A | Alex Kay | Leeds PL | | 83 | 610 | 88.1 | 12:30pm | 2:00pm | Afternoon |
+| Day | Session | Flight | Name | Club | Instagram | Age class | Class | GLP | Total | Open IPF | Weigh-in | Lift off | Session name |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | 1 | A | Jo Smith | Leeds PL | @josmith | J | F57 | 78.2 | 345 | https://www.openipf.org/... | 8:00am | 10:30am | Morning |
+| 1 | 1 | A | Pat Jones | York Barbell | @patj | | M66 | 82.5 | 410 | | | | |
+| 1 | 1 | B | Sam Lee | Hull Strength | | M2 | M74 | 85 | 520 | | | | |
+| 1 | 2 | A | Alex Kay | Leeds PL | | | M83 | 88.1 | 610 | | 12:30pm | 2:00pm | Afternoon |
+
+A ready-made example is in `docs/mockups/sample-lifting-order.csv`. Import it into Google Sheets to use as a template.
+
+On the page each lifter's **name cell** holds everything about the person: the name (a link to OpenIPF if you gave one), the Instagram icon (if valid) and the club underneath. Then come their age class, weight class, GLP and total. Lifters are grouped by day, then session, then flight, with the weigh-in and lift off times above each session.
 
 Things worth knowing:
 
