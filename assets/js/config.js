@@ -11,8 +11,8 @@
    (sb_secret_...) or the service_role key here.
    ========================================================================== */
 window.YNEPF_CONFIG = {
-  supabaseUrl: "",      // e.g. "https://abcdxyzcompany.supabase.co"
-  supabaseAnonKey: "",  // e.g. "eyJhbGciOi..."
+  supabaseUrl: "https://altuwgzzouwhrsdnzadj.supabase.co",      // e.g. "https://abcdxyzcompany.supabase.co"
+  supabaseAnonKey: "sb_publishable_9W2shyj2oqx-J-EK1Ka_rQ_Qu8G2gRl",  // e.g. "eyJhbGciOi..."
 
   // Which "Continue with..." buttons the editor sign-in shows. Only list a
   // provider once it is switched on in Supabase (Authentication > Providers),
