@@ -245,7 +245,6 @@ main:has(> .page-hero:first-child), main:has(> .lo-hero:first-child) { padding-t
 @media (min-width: 64em) { .hero-grid { grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr); } }
 .hero-copy .display { margin-bottom: var(--space-5); color: var(--text-heading); font-size: clamp(2.25rem, 4.6vw, 3.5rem); }
 .hero-copy .display em { font-style: normal; color: var(--accent-ink); }
-.hero-lede { font-size: var(--fs-27); line-height: var(--lh-27); color: var(--text-muted); max-width: 30rem; margin-bottom: var(--space-6); }
 .hero-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); }
 
 .hero-media { position: relative; }
