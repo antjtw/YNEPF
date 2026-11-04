@@ -277,6 +277,17 @@ alter table public.competitions add column if not exists waitlist_url text not n
 alter table public.competitions add column if not exists lifting_order_url text not null default '';
 alter table public.competitions add column if not exists openipf_url text not null default '';
 alter table public.competitions add column if not exists slug text not null default '';
+-- Other calendar events (AGM, EGM, referee courses...) share this table. They
+-- have no entry window, waiting list, lifting order or results link.
+alter table public.competitions add column if not exists kind text not null default 'competition';
+alter table public.competitions add column if not exists start_time time;   -- optional, UK clock time
+alter table public.competitions add column if not exists end_time time;     -- optional, same day as the first day
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'competitions_kind_check') then
+    alter table public.competitions add constraint competitions_kind_check check (kind in ('competition', 'event'));
+  end if;
+end $$;
 
 -- A blank slug becomes "<year>-<name>", made unique with -2, -3... if needed.
 create or replace function public.competition_slug()
@@ -346,7 +357,7 @@ create trigger competitions_touch before update on public.competitions
 drop view if exists public.competitions_public;
 create view public.competitions_public as
 select
-  id, name, description, label, start_date, end_date,
+  id, name, description, label, kind, start_date, end_date, start_time, end_time,
   venue_name, venue_address, map_url, capacity,
   entry_opens, entry_closes, entries_full,
   case

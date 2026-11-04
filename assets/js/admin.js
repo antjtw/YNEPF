@@ -155,7 +155,7 @@
         f.options.map(function (o) { return el("option", { value: o.value }, o.label); }));
       input.value = value || (f.options[0] && f.options[0].value) || "";
     } else {
-      var htmlType = { datetime: "datetime-local", url: "url", email: "email", number: "number", date: "date" }[type] || "text";
+      var htmlType = { datetime: "datetime-local", url: "url", email: "email", number: "number", date: "date", time: "time" }[type] || "text";
       input = el("input", Object.assign({ id: id, type: htmlType, placeholder: f.placeholder, min: f.min }, describedBy));
       input.value = value === null || value === undefined ? "" : value;
     }
@@ -175,8 +175,10 @@
   var STATE_LABEL = { archived: "Past", open: "Entry open", closed: "Entry closed", full: "Entries full", soon: "Entry not open yet", none: "No entry set" };
 
   function renderCompetitions(panel) {
-    panel.replaceChildren(panelHead("Competitions", btn("Add competition", function () { editCompetition(); }, "btn-primary")),
-      el("p", { class: "panel-intro" }, "Entry opens and closes at the UK times you set (GMT in winter, BST in summer). The entry link only appears on the website while entry is open."),
+    panel.replaceChildren(panelHead("Calendar", el("span", { class: "actions" },
+        btn("Add competition", function () { editCompetition(); }, "btn-primary"),
+        btn("Add another event", function () { editCompetition(null, "event"); }, "btn-secondary"))),
+      el("p", { class: "panel-intro" }, "Competitions and other events (AGMs, referee courses and so on) all show on the Calendar. For competitions, entry opens and closes at the UK times you set (GMT in winter, BST in summer), and the entry link only appears on the website while entry is open."),
       el("p", null, "Loading…"));
     sb.from("competitions").select("*").order("start_date", { ascending: true }).then(function (res) {
       var rows = ok(res);
@@ -184,7 +186,7 @@
       var past = rows.filter(function (c) { return Y.compState(c) === "archived"; }).reverse();
       panel.lastChild.remove();
       panel.appendChild(el("h2", null, "Upcoming"));
-      panel.appendChild(current.length ? compTable(current) : el("p", { class: "empty" }, "No upcoming competitions."));
+      panel.appendChild(current.length ? compTable(current) : el("p", { class: "empty" }, "Nothing upcoming."));
       if (past.length) {
         panel.appendChild(el("h2", null, "Past"));
         panel.appendChild(compTable(past));
@@ -194,21 +196,23 @@
 
   function compTable(rows) {
     return el("div", { class: "table-scroll" }, el("table", { class: "admin-table" },
-      el("thead", null, el("tr", null, ["Competition", "Date", "Entry", "Actions"].map(function (h) { return el("th", { scope: "col" }, h); }))),
+      el("thead", null, el("tr", null, ["Name", "Date", "Entry", "Actions"].map(function (h) { return el("th", { scope: "col" }, h); }))),
       el("tbody", null, rows.map(function (c) {
         var st = Y.compState(c);
         var actions = el("span", { class: "actions" }, btn("Edit", function () { editCompetition(c); }));
-        if (st === "open" || st === "soon" || st === "none") {
+        if (c.kind === "event") {
+          // events have no entry window, so no "entries full" switch
+        } else if (st === "open" || st === "soon" || st === "none") {
           actions.appendChild(btn("Mark entries full", function () { setFull(c, true); }));
         } else if (c.entries_full && st !== "archived") {
           actions.appendChild(btn("Entries not full", function () { setFull(c, false); }));
         }
         actions.appendChild(btn("Delete", function () { removeCompetition(c); }, "btn-danger"));
         return el("tr", null,
-          el("th", { scope: "row" }, c.name, !c.published ? [" ", el("span", { class: "tag tag-position" }, "Draft")] : null,
+          el("th", { scope: "row" }, c.name, c.kind === "event" ? [" ", el("span", { class: "tag tag-event" }, "Event")] : null, !c.published ? [" ", el("span", { class: "tag tag-position" }, "Draft")] : null,
             c.venue_name ? el("small", null, c.venue_name) : null),
-          el("td", null, Y.dateRange(c.start_date, c.end_date)),
-          el("td", null, STATE_LABEL[st],
+          el("td", null, Y.dateRange(c.start_date, c.end_date), Y.timeRange(c) ? el("small", null, Y.timeRange(c)) : null),
+          el("td", null, c.kind === "event" ? "—" : STATE_LABEL[st],
             Y.entryLine(c) ? el("small", null, Y.entryLine(c)) : null),
           el("td", null, actions));
       }))));
@@ -222,13 +226,15 @@
   function removeCompetition(c) {
     if (!window.confirm("Delete “" + c.name + "”? This cannot be undone.")) return;
     sb.from("competitions").delete().eq("id", c.id).then(ok)
-      .then(function () { toast("Competition deleted."); route(); })
+      .then(function () { toast(c.kind === "event" ? "Event deleted." : "Competition deleted."); route(); })
       .catch(function (e) { toast(friendly(e), "error"); });
   }
 
-  function editCompetition(c) {
+  function editCompetition(c, kind) {
     var isNew = !c;
     c = c || {};
+    var isEvent = (c.kind || kind) === "event";
+    if (isEvent) return editEvent(c, isNew);
     var values = Object.assign({}, c, {
       entry_opens: Y.toLondonInput(c.entry_opens),
       entry_closes: Y.toLondonInput(c.entry_closes),
@@ -319,6 +325,50 @@
       if (!d) return;
       if (!touched.entry_opens) api.set("entry_opens", Y.addDays(d, -56) + "T09:00");
       if (!touched.entry_closes) api.set("entry_closes", Y.addDays(d, -21) + "T12:00");
+    });
+  }
+
+  // Other calendar events: AGMs, EGMs, referee courses... No entry, waiting list or results.
+  function editEvent(c, isNew) {
+    var values = Object.assign({}, c, {
+      start_time: c.start_time ? String(c.start_time).slice(0, 5) : "",
+      end_time: c.end_time ? String(c.end_time).slice(0, 5) : "",
+      published: isNew ? true : c.published
+    });
+    openForm({
+      title: isNew ? "Add another event" : "Edit event",
+      values: values,
+      saveLabel: isNew ? "Add event" : "Save changes",
+      fields: [
+        { name: "name", label: "Title", required: true, help: "For example “AGM 2027” or “Referee course”." },
+        { name: "label", label: "Tag (optional)", help: "A small label next to the title, for example “Members only”." },
+        { name: "description", label: "Description", type: "textarea", rows: 5, help: "Plain text. Start lines with “- ” for bullet points. Links look like [text](https://…)." },
+        { name: "start_date", label: "Date", type: "date", required: true, half: true },
+        { name: "end_date", label: "Last day (if more than one day)", type: "date", half: true },
+        { name: "start_time", label: "Start time (UK time)", type: "time", half: true },
+        { name: "end_time", label: "End time (optional)", type: "time", half: true, help: "Leave blank if it is open ended or the same as the start." },
+        { name: "venue_name", label: "Location", help: "Shown on the page and linked to Google Maps. Use “Online” for a video call.", half: true },
+        { name: "venue_address", label: "Address or postcode (optional)", help: "Makes the Maps link more accurate.", half: true },
+        { name: "map_url", label: "Custom map link (optional)", type: "url", help: "Only needed if the automatic Google Maps link is wrong." },
+        { name: "published", label: "Show on the website", type: "checkbox", help: "Untick to keep it as a draft." }
+      ],
+      validate: function (v) {
+        if (v.end_date && v.end_date < v.start_date) return "The last day cannot be before the first day.";
+        if (v.end_time && !v.start_time) return "Add a start time as well, or clear the end time.";
+        if (v.end_time && (!v.end_date || v.end_date === v.start_date) && v.end_time <= v.start_time) return "The end time must be after the start time.";
+        if (v.map_url && !/^https?:\/\//i.test(v.map_url)) return "The map link must start with https://";
+        return null;
+      },
+      onSave: function (v) {
+        var row = {
+          kind: "event", name: v.name, description: v.description, label: v.label,
+          start_date: v.start_date, end_date: v.end_date || null,
+          start_time: v.start_time || null, end_time: v.end_time || null,
+          venue_name: v.venue_name, venue_address: v.venue_address, map_url: v.map_url, published: v.published
+        };
+        var q = isNew ? sb.from("competitions").insert(row) : sb.from("competitions").update(row).eq("id", c.id);
+        return q.then(ok).then(function () { toast(isNew ? "Event added." : "Event saved."); route(); });
+      }
     });
   }
 

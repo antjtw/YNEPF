@@ -164,6 +164,7 @@
     now = now || new Date();
     var last = c.end_date || c.start_date;
     if (last < todayLondon()) return "archived";
+    if (c.kind === "event") return "none";
     var opens = c.entry_opens ? new Date(c.entry_opens) : null;
     var closes = c.entry_closes ? new Date(c.entry_closes) : null;
     if (closes && now >= closes) return "closed";
@@ -173,6 +174,7 @@
     return "none";
   }
   function entryLine(c) {
+    if (c.kind === "event") return "";
     var o = c.entry_opens ? new Date(c.entry_opens) : null;
     var cl = c.entry_closes ? new Date(c.entry_closes) : null;
     var yearOf = c.start_date.slice(0, 4);
@@ -184,6 +186,22 @@
     if (o) return "Entry opens " + dayMonth(o, true) + " at " + clock(o);
     if (cl) return "Entry closes " + dayMonth(cl, true) + " at " + clock(cl);
     return "";
+  }
+  // "10:00:00" -> "10am", "13:30" -> "1:30pm"
+  function clockText(t) {
+    if (!t) return "";
+    var m = String(t).match(/^(\d{1,2}):(\d{2})/);
+    if (!m) return "";
+    var h = +m[1], mi = m[2];
+    if (h === 12 && mi === "00") return "noon";
+    if (h === 0 && mi === "00") return "midnight";
+    return (h % 12 || 12) + (mi === "00" ? "" : ":" + mi) + (h >= 12 ? "pm" : "am");
+  }
+  // "10am to 4pm", "10am", or "" when no time is set (only for single-day items).
+  function timeRange(c) {
+    var a = clockText(c.start_time), b = clockText(c.end_time);
+    if (!a) return "";
+    return b && b !== a ? a + " to " + b : a;
   }
   function mapsUrl(c) {
     if (c.map_url) return c.map_url;
@@ -215,11 +233,13 @@
     var H = opts.heading || "h2";
     var title = opts.link ? el("a", { href: opts.link }, c.name) : c.name;
     var tags = [];
+    if (c.kind === "event") tags.push(el("span", { class: "tag tag-event" }, "Event"));
     if (c.label) tags.push(el("span", { class: "tag tag-position" }, c.label));
     if (STATE_TAG[state] && !opts.noStatus) tags.push(el("span", { class: STATE_TAG[state][0] }, STATE_TAG[state][1]));
 
     var meta = el("div", { class: "event-meta" },
-      el("span", null, svg(ICONS.calendar), dateRange(c.start_date, c.end_date)));
+      el("span", null, svg(ICONS.calendar), dateRange(c.start_date, c.end_date) +
+        (timeRange(c) ? ", " + timeRange(c) : "")));
     var map = mapsUrl(c);
     if (c.venue_name) {
       meta.appendChild(el("span", null, svg(ICONS.pin),
@@ -389,7 +409,7 @@
     markdown: markdown, excerpt: excerpt,
     toLondonInput: toLondonInput, fromLondonInput: fromLondonInput,
     todayLondon: todayLondon, yearOf: function (c) { return c.start_date.slice(0, 4); }, addDays: addDays, dateRange: dateRange, longDate: longDate,
-    compState: compState, entryLine: entryLine, mapsUrl: mapsUrl, competitionCard: competitionCard,
+    compState: compState, timeRange: timeRange, entryLine: entryLine, mapsUrl: mapsUrl, competitionCard: competitionCard,
     parseLiftingOrder: parseLiftingOrder, liftingHref: liftingHref, longDay: longDay, igHandle: igHandle,
     extIcon: Y_EXT, sheetCsvUrl: sheetCsvUrl, parseCsv: parseCsv, loadSheet: loadSheet,
     notice: notice, guard: guard

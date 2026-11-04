@@ -313,6 +313,13 @@ supabase/seed.sql       The existing committee, FAQs and 2026 calendar, ready to
   appears and disappears on schedule without anyone being online.
   **Calendar tabs:** the Calendar has two tabs. *Upcoming competitions* lists
   them soonest first, under a year subheading when they span more than one year.
+  **Other events.** The editor's *Calendar* tab has *Add another event* next to
+  *Add competition*, for AGMs, EGMs, referee courses and the like. An event has a
+  title, description, location, date (and last day if it runs over several), a
+  start time and an optional end time (UK time), and shows an "Event" tag. It has
+  no entry window, waiting list, lifting order or results link. Events sit in the
+  same Upcoming and Past lists as competitions and archive themselves the same way.
+  They live in the same `competitions` table with `kind = 'event'`.
   A competition moves to *Past competitions* automatically once its last day has
   passed. That tab shows a row of years (newest first, only years that have past
   competitions) and, within a year, the competitions from January to December.

@@ -52,8 +52,8 @@
   function pastItem(c) {
     return el("li", { class: "past-item" },
       el("div", { class: "past-main" },
-        el("h3", { class: "past-title" }, c.name),
-        el("p", { class: "past-meta" }, Y.dateRange(c.start_date, c.end_date), c.venue_name ? " · " + c.venue_name : "")),
+        el("h3", { class: "past-title" }, c.name, c.kind === "event" ? [" ", el("span", { class: "tag tag-event" }, "Event")] : null),
+        el("p", { class: "past-meta" }, Y.dateRange(c.start_date, c.end_date) + (Y.timeRange(c) ? ", " + Y.timeRange(c) : ""), c.venue_name ? " · " + c.venue_name : "")),
       c.openipf_url ? el("a", { class: "btn btn-ghost btn-sm past-results", href: c.openipf_url, target: "_blank", rel: "noopener",
         "aria-label": "View results on OpenIPF for " + c.name + " (opens in a new tab)" }, "View results on OpenIPF ", Y.extIcon()) : null);
   }
@@ -66,7 +66,7 @@
       var up = el("div", { id: "panel-upcoming", role: "tabpanel", "aria-labelledby": "tab-upcoming", tabindex: "0" },
         el("h2", { class: "visually-hidden" }, "Upcoming competitions"));
       if (!r.upcoming.length) {
-        up.appendChild(el("p", null, "No competitions are scheduled right now. Check back soon."));
+        up.appendChild(el("p", null, "Nothing is scheduled right now. Check back soon."));
       } else {
         var years = group(r.upcoming, Y.yearOf);
         if (years.length === 1) up.appendChild(cardList(years[0].rows, "h3"));

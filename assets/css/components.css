@@ -322,6 +322,7 @@ main:has(> .page-hero:first-child), main:has(> .lo-hero:first-child) { padding-t
 .tag-open { background: var(--tag-open-bg); color: var(--tag-open-text); }
 .tag-closed { background: var(--tag-closed-bg); color: var(--tag-closed-text); }
 .tag-position { background: var(--tag-position-bg); color: var(--tag-position-text); }
+.tag-event { background: var(--tag-alpha-bg); color: var(--tag-alpha-text); }
 .tag-full { background: var(--tag-full-bg); color: var(--tag-full-text); }
 
 /* Resources and link lists */
