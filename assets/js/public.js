@@ -54,7 +54,7 @@
       el("div", { class: "past-main" },
         el("h3", { class: "past-title" }, c.name),
         el("p", { class: "past-meta" }, Y.dateRange(c.start_date, c.end_date), c.venue_name ? " · " + c.venue_name : "")),
-      c.openipf_url ? el("a", { class: "past-results", href: c.openipf_url, target: "_blank", rel: "noopener",
+      c.openipf_url ? el("a", { class: "btn btn-ghost btn-sm past-results", href: c.openipf_url, target: "_blank", rel: "noopener",
         "aria-label": "View results on OpenIPF for " + c.name + " (opens in a new tab)" }, "View results on OpenIPF ", Y.extIcon()) : null);
   }
 
@@ -254,34 +254,11 @@
   }
 
   // ---- Home: next events + latest news ---------------------------------------
-  var NEXT_TAG = { open: ["tag tag-open", "Entry open"], closed: ["tag tag-closed", "Entry closed"], full: ["tag tag-full", "Entries full"], soon: ["tag tag-closed", "Entry not open yet"] };
-  // The "next competition" card floating over the home page hero.
-  function renderNextUp(host, c) {
-    var st = Y.compState(c), tag = NEXT_TAG[st];
-    var map = Y.mapsUrl(c);
-    var actions = [];
-    if (c.entry_url && st === "open") actions.push(el("a", { class: "btn btn-primary btn-sm", href: c.entry_url, target: "_blank", rel: "noopener",
-      "aria-label": "Enter now: " + c.name + " (opens in a new tab)" }, "Enter now"));
-    if (st === "full" && c.waitlist_url) actions.push(el("a", { class: "btn btn-secondary btn-sm", href: c.waitlist_url, target: "_blank", rel: "noopener" }, "Join the waiting list"));
-    if (c.lifting_order_url) actions.push(el("a", { class: "btn btn-secondary btn-sm", href: Y.liftingHref(c) }, "Lifting order"));
-    if (!actions.length) actions.push(el("a", { class: "btn btn-secondary btn-sm", href: "calendar.html" }, "Competition details"));
-    host.replaceChildren(
-      el("p", { class: "eyebrow" }, "Next competition"),
-      el("h2", null, c.name),
-      el("p", null, Y.dateRange(c.start_date, c.end_date), c.venue_name ? " · " + c.venue_name : ""),
-      tag ? el("p", null, el("span", { class: tag[0] }, tag[1])) : null,
-      el("div", { class: "event-actions" }, actions));
-    host.hidden = false;
-  }
-
   function home() {
     var ev = document.getElementById("home-events");
     var nw = document.getElementById("home-news");
-    var nu = document.getElementById("next-up");
-    if (ev || nu) {
+    if (ev) {
       upcomingAndPast().then(function (r) {
-        if (nu && r.upcoming.length) renderNextUp(nu, r.upcoming[0]);
-        if (!ev) return;
         var next = r.upcoming.slice(0, 4);
         ev.replaceChildren();
         if (!next.length) {

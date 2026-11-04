@@ -25,7 +25,6 @@ const W = "#FFFFFF";
 const PAGE = "navy-10";                                               // the off-white page background
 const ghostTint = toHex(over("iron-600", PAGE, 0.12));
 const footerBg = "navy-950";
-const tileBg = toHex(over("navy-950", "navy-500", 0.85));            // photo + gradient behind tile text (worst case)
 const pairs = [
   // [label, fg, bg, min]
   ["Body text on the page", "grey-900", PAGE, 4.5],
@@ -58,7 +57,6 @@ const pairs = [
   ["Focus: link ink on gold highlight", "navy-950", "gold-300", 4.5],
   ["Focus: gold ring vs navy-950 (UI 3:1)", "gold-300", "navy-950", 3],
   ["Hero headline accent (iron-700) on the page", "iron-700", PAGE, 4.5],
-  ["Next-up card muted text on white", "grey-700", W, 4.5],
   ["Tab text on the tray", "navy-700", "navy-50", 4.5],
   ["Selected tab text on white", "navy-950", W, 4.5],
   ["Tag: open", "sage-800", "sage-100", 4.5],
@@ -76,8 +74,11 @@ const pairs = [
   ["Avatar: sage", "sage-800", "sage-100", 4.5],
   ["Avatar: rose", "rose-800", "rose-100", 4.5],
   ["Table head (muted) on navy-10", "grey-700", "navy-10", 4.5],
-  ["Tile text (white) on photo gradient", W, tileBg, 4.5],
-  ["Tile body text on photo gradient", "navy-100", tileBg, 4.5],
+  ["Card (white): title on white", "navy-800", W, 4.5],
+  ["Card (white): text on white", "grey-700", W, 4.5],
+  ["Card (inverted navy): title on navy-800", W, "navy-800", 4.5],
+  ["Card (inverted navy): text on navy-800", "navy-100", "navy-800", 4.5],
+  ["Card (iron option): white on iron-600", W, "iron-600", 4.5],
   ["Call to action: white on navy-800", W, "navy-800", 4.5],
   ["Call to action: body text on navy-800", "navy-100", "navy-800", 4.5],
   ["Lifting hero: white on navy-800", W, "navy-800", 4.5],

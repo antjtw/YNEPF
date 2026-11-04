@@ -6,7 +6,7 @@ clarity, accessibility (WCAG 2.2 AA) and responsiveness.
 ## What's here
 
 ```
-index.html            Homepage: splash hero, upcoming events, image tiles, news
+index.html            Homepage: hero, upcoming events, three cards, news
 calendar.html         Competition calendar (Upcoming / Past tabs)
 records.html          Records, read live from Google Sheets
 news.html, post.html  News list and a single post
@@ -134,9 +134,9 @@ cards, 28px panels).
 
 Everything sits in a `.container`: content is at most **960px** wide, centred,
 with side margins of 16px on mobile and 30px from tablet. That includes the
-header, hero, image tiles and footer, so every section lines up. The one
-exception is photos: on wide screens the hero photo and the tile row are allowed to
-bleed a little (up to 4rem) into the margins (`--bleed` in `tokens.css`).
+header, hero, cards and footer, so every section lines up. The one exception is
+the hero photo: on wide screens it is allowed to bleed a little (up to 4rem) into
+the margin (`--bleed` in `tokens.css`).
 `.container-wide` (1200px) still exists but nothing uses it by default. Columns go
 in a `.grid-row`:
 
@@ -176,14 +176,35 @@ policy is in `docs/privacy-policy-draft.md`.
 
 ### Images
 
-The homepage is built around image slots with on-brand placeholder artwork, so it
-looks finished before real photos arrive. To swap one, replace the file or change
+The homepage hero has one image slot with on-brand placeholder artwork, so it
+looks finished before a real photo arrives. To swap it, replace the file or change
 the `src` in `index.html` (and give a real `alt` where the picture matters):
 
 | Slot | File | Suggested size | Notes |
 |------|------|----------------|-------|
-| Hero (right of the headline) | `assets/img/hero.svg` | about 1200 x 1230 | Rounded corners; the "next competition" card sits over the bottom left. |
-| Tiles (three, "Find your place") | `tile-first-competition.svg`, `tile-compete.svg`, `tile-volunteer.svg` | about 960 x 1280, portrait | Text sits on a dark gradient, so busy photos are fine. |
+| Hero (right of the headline) | `assets/img/hero.svg` | about 1200 x 1230 | Shown with rounded corners; a photo of lifting works best. |
+
+**Adding a photo.** Resize and compress it first, so it costs visitors almost no bandwidth:
+
+```bash
+npm install --no-save sharp                     # once
+node scripts/optimise-image.js ~/Downloads/bench.jpg hero 1000
+```
+
+That writes `assets/img/hero.webp` (about 60 KB) and `hero.jpg` at 1000px wide (the
+hero shows at about 520px, so this is sharp on retina screens), never scaling a small
+photo up. The page then fills the frame with it from the centre (`object-fit: cover`),
+so a portrait or landscape photo both work. Point the hero at it in `index.html`:
+
+```html
+<picture>
+  <source srcset="assets/img/hero.webp" type="image/webp">
+  <img src="assets/img/hero.jpg" alt="A lifter benching at a YNEPF competition" width="1000" height="1250" fetchpriority="high">
+</picture>
+```
+
+Set `width` and `height` to the real size the script reports, and write an `alt` that
+describes the photo.
 
 Keep photos under about 300KB each (export as JPG or WebP).
 

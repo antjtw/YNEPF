@@ -238,12 +238,6 @@
         card.appendChild(d);
       }
     }
-    if (c.openipf_url && !opts.brief) {
-      card.appendChild(el("p", { style: "margin:var(--space-2) 0 0;" },
-        el("a", { href: c.openipf_url, target: "_blank", rel: "noopener",
-          "aria-label": "View results on OpenIPF for " + c.name + " (opens in a new tab)" }, "View results on OpenIPF"),
-        " ", Y_EXT()));
-    }
     if (!opts.brief) {
       var line = state === "archived" ? "" : entryLine(c);
       if (line) card.appendChild(el("ul", { style: "margin-top:var(--space-2);" }, el("li", null, line)));
@@ -264,6 +258,10 @@
       }
       if (c.lifting_order_url) {
         actions.push(el("a", { class: "btn btn-secondary", href: liftingHref(c) }, "View lifting order"));
+      }
+      if (c.openipf_url) {
+        actions.push(el("a", { class: "btn btn-ghost", href: c.openipf_url, target: "_blank", rel: "noopener",
+          "aria-label": "View results on OpenIPF for " + c.name + " (opens in a new tab)" }, "View results on OpenIPF ", Y_EXT()));
       }
       if (actions.length) card.appendChild(el("div", { class: "event-actions" }, actions));
     }

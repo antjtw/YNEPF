@@ -11,7 +11,7 @@
   var el = Y.el;
   var sb = Y.db();
   var $ = function (id) { return document.getElementById(id); };
-  var state = { user: null, name: "", role: null, recovering: false };
+  var state = { user: null, name: "", role: null, recovering: false, shownFor: null };
 
   // ---- small utilities --------------------------------------------------------
   function ok(res) { if (res.error) throw res.error; return res.data; }
@@ -841,7 +841,12 @@
       if (a.getAttribute("data-tab") === tab) a.setAttribute("aria-current", "page");
       else a.removeAttribute("aria-current");
     });
-    TABS[tab]($("panel"));
+    // Each draw works on its own fresh surface that is swapped into the page whole. A slower,
+    // older draw (for example from a second sign-in event) can then only ever write into a
+    // surface that is no longer on the page, so sections can never appear twice.
+    var view = el("div");
+    $("panel").replaceChildren(view);
+    TABS[tab](view);
     if (tab !== "messages") refreshMessageBadge();
   }
   window.addEventListener("hashchange", function () { if (state.user && state.role) route(); });
@@ -850,6 +855,7 @@
   function showAuth(mode) {
     state.recovering = mode === "reset";
     state.role = null;
+    state.shownFor = null;
     show($("app"), false);
     show($("user-box"), false);
     show($("noaccess"), false);
@@ -863,6 +869,10 @@
 
   function showApp(user) {
     if (state.recovering) return Promise.resolve();
+    // The sign-in service can report the same session more than once (on load, when the tab
+    // regains focus). Only the first report does any work.
+    if (state.shownFor === user.id) return Promise.resolve();
+    state.shownFor = user.id;
     state.user = user;
     return sb.rpc("my_role").then(function (r) {
       state.role = r.error ? null : r.data;
