@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Site editor — YNEPF</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="../assets/css/fonts.css">
+  <link rel="stylesheet" href="../assets/css/tokens.css">
+  <link rel="stylesheet" href="../assets/css/base.css">
+  <link rel="stylesheet" href="../assets/css/components.css">
+  <link rel="stylesheet" href="../assets/vendor/toastui-editor.css">
+  <link rel="stylesheet" href="../assets/css/admin.css">
+</head>
+<body class="admin">
+  <a class="skip-link" href="#main">Skip to main content</a>
+
+  <header class="admin-bar">
+    <div class="container">
+      <a class="admin-brand" href="./">YNEPF site editor</a>
+      <div class="admin-user" id="user-box" hidden>
+        <span id="user-name"></span>
+        <a href="../index.html">View site</a>
+        <button class="btn btn-secondary btn-sm" id="signout" type="button">Sign out</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <div class="container">
+      <!-- Sign in -->
+      <section id="auth" class="auth-card" hidden aria-labelledby="auth-title">
+        <h1 id="auth-title">Sign in</h1>
+        <form id="login-form" novalidate>
+          <div class="field"><label for="email">Email</label><input id="email" type="email" autocomplete="username" required></div>
+          <div class="field"><label for="password">Password</label><input id="password" type="password" autocomplete="current-password" required></div>
+          <p class="form-error" id="auth-error" role="alert" hidden></p>
+          <button class="btn btn-primary" type="submit">Sign in</button>
+          <button class="link-btn" id="forgot" type="button">Forgotten your password?</button>
+        </form>
+        <form id="reset-form" hidden novalidate>
+          <p>Choose a new password.</p>
+          <div class="field"><label for="new-pass">New password</label><input id="new-pass" type="password" autocomplete="new-password" minlength="8" required></div>
+          <p class="form-error" id="reset-error" role="alert" hidden></p>
+          <button class="btn btn-primary" type="submit">Save password</button>
+        </form>
+      </section>
+
+      <div id="setup-warning" hidden></div>
+
+      <!-- Editor -->
+      <div id="app" hidden>
+        <nav class="admin-tabs" aria-label="Sections">
+          <a href="#competitions" data-tab="competitions">Competitions</a>
+          <a href="#news" data-tab="news">News</a>
+          <a href="#organisation" data-tab="organisation">Organisation</a>
+          <a href="#faqs" data-tab="faqs">FAQs</a>
+          <a href="#account" data-tab="account">Account</a>
+        </nav>
+        <div id="panel" tabindex="-1"></div>
+      </div>
+    </div>
+  </main>
+
+  <dialog id="dlg" class="admin-dialog" aria-labelledby="dlg-title"></dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="../assets/vendor/supabase.js"></script>
+  <script src="../assets/vendor/marked.min.js"></script>
+  <script src="../assets/vendor/purify.min.js"></script>
+  <script src="../assets/vendor/toastui-editor.js"></script>
+  <script src="../assets/js/config.js"></script>
+  <script src="../assets/js/site.js"></script>
+  <script src="../assets/js/admin.js"></script>
+</body>
+</html>

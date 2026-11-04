@@ -27,6 +27,13 @@ const HDR = ["<!-- @partial:header start -->", "<!-- @partial:header end -->"];
 const FTR = ["<!-- @partial:footer start -->", "<!-- @partial:footer end -->"];
 
 const pages = [
+  "index.html",
+  "calendar.html",
+  "committee.html",
+  "news.html",
+  "post.html",
+  "faqs.html",
+  "chairperson.html",
   "rules/the-lifts.html",
   "rules/categories.html",
   "rules/squat.html",

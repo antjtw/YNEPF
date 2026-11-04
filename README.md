@@ -1,6 +1,6 @@
 # Yorkshire &amp; North East Powerlifting Federation — microsite
 
-A static, multi-page service site in the GOV.UK / NHS content style. Built for
+A multi-page service site in the GOV.UK / NHS content style, with a lightweight Supabase-backed editor. Built for
 clarity, accessibility (WCAG 2.1 AA) and responsiveness.
 
 ## What's here
@@ -124,8 +124,77 @@ change.
 - The data table uses real `<th scope>` headers and a caption
 - Decorative SVG icons are `aria-hidden`; the hero image has a text alternative
 
-## Editing content
+## Content management (Supabase)
 
-Each page is plain HTML — edit the file directly, then run `node build.js`.
-Navigation, the ALPHA banner and the footer are edited once in
-`assets/partials/` and apply everywhere on the next build.
+Competitions, news, the committee page and FAQs are stored in Supabase and
+edited at **`/admin`**. The public pages read from the database when they load,
+so an edit appears on the site straight away: no rebuild, no deploy.
+
+```
+admin/index.html        The editor (sign in, then manage content)
+assets/js/config.js     Your Supabase URL + anon key (the only thing to fill in)
+assets/js/site.js       Shared helpers: data client, UK time, markdown, competition status
+assets/js/public.js     Fills calendar, home, news, committee and FAQs from the database
+assets/js/admin.js      The editor itself
+assets/vendor/          Pinned third-party libraries, committed so there is no CDN
+supabase/schema.sql     Tables, security rules, the public competitions view
+supabase/seed.sql       The existing committee, FAQs and 2026 calendar, ready to load
+```
+
+### One-off setup
+
+1. Create a project at supabase.com.
+2. **SQL editor:** run `supabase/schema.sql`, then `supabase/seed.sql`
+   (both are safe to re-run; the seed only fills empty tables).
+3. **Authentication > Sign In / Providers:** switch **off** "Allow new users to
+   sign up". Editors are added by you, so a stranger cannot make an account.
+4. **Authentication > Users > Add user:** create an email and password for each
+   editor (tick "Auto confirm user"). Everyone can change their own password
+   and display name under *Account* in the editor.
+5. **Authentication > URL Configuration:** set the Site URL to your live site, and
+   add `https://YOUR-SITE/admin/` to Redirect URLs (needed for "Forgotten your
+   password?" emails).
+6. **Project Settings > API:** copy the Project URL and the `anon` public key into
+   `assets/js/config.js`. Never use the `service_role` key anywhere in this repo.
+7. Deploy as before (Vercel). Open `/admin` and sign in.
+
+### How it behaves
+
+- **Competitions.** Each has dates, venue (linked to Google Maps), description,
+  entry link, and entry open/close date and time. Entering the competition date
+  suggests entry opening 8 weeks before at 9am and closing 3 weeks before at
+  noon; change either freely. Times are entered as UK time and handled across
+  GMT/BST. The entry link is only returned by the database while entry is open
+  (after the open time, before the close time, and not closed by hand), so it
+  appears and disappears on schedule without anyone being online. A competition
+  moves to *Past competitions* automatically once its last day has passed. Use
+  *Close entry* when it fills up early.
+- **News.** Posts have a title, date, author (the signed-in editor), and a rich
+  text body that is saved as Markdown, with links, headings, lists and tables.
+  A post dated in the future publishes itself on that date; untick *Published*
+  for a draft.
+- **Organisation.** Sections (Executive team, Referees...) containing people
+  (name, role, optional Instagram handle and blurb). Add, edit, delete and
+  reorder with the arrow buttons; people can be moved between sections.
+- **FAQs.** Categories containing questions, with Markdown answers. Same
+  controls as the organisation page.
+- All user-written Markdown is sanitised before it is shown on the site.
+
+### Notes
+
+- `assets/vendor/toastui-editor.js` is Toast UI Editor 3.2.2 bundled with its
+  ProseMirror dependencies into a single file using esbuild
+  (`import Editor from "@toast-ui/editor"; window.toastui = { Editor }`), because
+  the npm package does not ship a ready-to-use browser bundle. Only the admin
+  loads it.
+- `scripts/generate-seed.js` is how `seed.sql` was produced from the original
+  hand-written pages. It is kept for reference only.
+- The lifting order and volunteer rota still come from the scheduled GitHub
+  Action, unchanged.
+
+## Editing the rest of the site
+
+Pages that are not in the editor (the rules pages, the lifting order) are plain
+HTML: edit the file directly, then run `node build.js`. Navigation, the ALPHA
+banner and the footer are edited once in `assets/partials/` and apply
+everywhere on the next build.
