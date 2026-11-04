@@ -202,6 +202,16 @@ supabase/seed.sql       The existing committee, FAQs and 2026 calendar, ready to
   GMT/BST. The entry link is only returned by the database while entry is open
   (after the open time, before the close time, and not marked full), so it
   appears and disappears on schedule without anyone being online.
+  **Calendar tabs:** the Calendar has two tabs. *Upcoming competitions* lists
+  them soonest first, under a year subheading when they span more than one year.
+  A competition moves to *Past competitions* automatically once its last day has
+  passed. That tab shows a row of years (newest first, only years that have past
+  competitions) and, within a year, the competitions from January to December.
+  Each history entry is just the name, date, venue and a link to the results: it
+  shows no spaces, lifters or entry details. Paste the competition's OpenIPF page
+  into *OpenIPF results link* to get the "View results on OpenIPF" link (it opens
+  in a new tab); with no link the entry simply shows without one. Tabs and years
+  can be linked directly: `calendar#past`, `calendar#past-2025`.
   **Entries full:** tick it (or use *Mark entries full* in the list) when a
   competition fills early. The entry button goes, an "Entries full" tag shows,
   and if you have added a **waiting list link** (a Google Form) a ghost-style
