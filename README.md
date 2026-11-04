@@ -64,6 +64,36 @@ on the host — the top-level files are the finished site. All paths are
 relative, so it works wherever it is served from, and even when a file is
 opened straight from disk.
 
+## Layout grid
+
+Layout follows the GOV.UK / NHS pattern. Everything sits in a `.container`:
+content is at most **960px** wide (`--container`), centred, with side margins of
+16px on mobile and 30px from the tablet breakpoint. Columns go in a `.grid-row`:
+
+```html
+<div class="container">
+  <div class="grid-row">
+    <div class="grid-column-two-thirds">...</div>
+    <div class="grid-column-one-third">...</div>
+  </div>
+</div>
+```
+
+Widths: `grid-column-full`, `-one-half`, `-one-third`, `-two-thirds`,
+`-one-quarter`, `-three-quarters`. A row's widths should add up to a whole
+(2/3 + 1/3, 1/2 + 1/2, four quarters...). Rows can be nested inside a column.
+There is a 30px gutter between columns.
+
+- **Breakpoints:** below **641px** every column is full width and stacks, in the
+  order it appears in the HTML, so write the markup in reading order for a phone.
+  From 641px up the columns sit side by side.
+- **Accessibility:** because stacking follows source order, the reading and tab
+  order is the same on every screen size. Nothing needs horizontal scrolling down
+  to 320px (400% zoom).
+- The shared footer (`assets/partials/footer.html`) is built this way: three
+  one-third columns, then a two-thirds + one-third row. Edit it once and run
+  `node build.js`.
+
 ## Typography
 
 - **Headings:** Cutmark (a variable font), self-hosted from `assets/fonts/`.

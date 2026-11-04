@@ -83,7 +83,10 @@
 
   /* Layout */
   --measure: 38rem;          /* readable text column */
-  --container: 60rem;        /* page max width */
+  --container: 60rem;        /* page content max width: 960px, as GOV.UK and the NHS */
+  --page-margin: 1rem;       /* side margin on mobile (16px) */
+  --page-margin-tablet: 1.875rem; /* side margin from tablet up (30px) */
+  --gutter: 1.875rem;        /* space between grid columns (30px) */
   --radius: 6px;
   --radius-lg: 10px;
 

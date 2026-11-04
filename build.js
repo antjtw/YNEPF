@@ -87,7 +87,7 @@ function setActive(html, block) {
 function reinline(html, root) {
   const hdr = header.replace(/\{\{ROOT\}\}/g, root);
   const hb = HDR[0] + "\n" + setActive(html, hdr) + "\n" + HDR[1];
-  const fb = FTR[0] + "\n" + footer + "\n" + FTR[1];
+  const fb = FTR[0] + "\n" + footer.replace(/\{\{ROOT\}\}/g, root) + "\n" + FTR[1];
   const hRe = new RegExp(HDR[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "[\\s\\S]*?" + HDR[1].replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
   const fRe = new RegExp(FTR[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "[\\s\\S]*?" + FTR[1].replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
   if (html.includes("<!--#include header-->")) html = html.replace("<!--#include header-->", hb);

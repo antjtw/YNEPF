@@ -599,18 +599,48 @@ ol.steps li::before {
   margin-right: 0;
 }
 
+/* ---- Layout grid (GOV.UK / NHS pattern) ----------------------------------
+   Put columns in a .grid-row inside a .container. Below the tablet breakpoint
+   (641px) every column is full width and stacks in source order, so write the
+   markup in the order it should be read on a phone. From 641px up the columns
+   sit side by side, with a 30px gutter between them. Widths: full, one-half,
+   one-third, two-thirds, one-quarter, three-quarters. A row's widths should add
+   up to a whole (for example 2/3 + 1/3, 1/2 + 1/2, 1/4 x 4). Rows can nest.   */
+.grid-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  margin-inline: calc(var(--gutter) / -2);
+}
+[class*="grid-column-"] {
+  box-sizing: border-box;
+  width: 100%;
+  padding-inline: calc(var(--gutter) / 2);
+}
+@media (min-width: 40.0625em) {
+  .grid-column-one-quarter { width: 25%; }
+  .grid-column-one-third { width: 33.3333%; }
+  .grid-column-one-half { width: 50%; }
+  .grid-column-two-thirds { width: 66.6667%; }
+  .grid-column-three-quarters { width: 75%; }
+}
+
 /* ---- Site footer ---- */
 .site-footer {
   background: var(--surface-muted);
-  margin-top: var(--space-8);
-}
-.site-footer .container {
-  padding-block: var(--space-5);
   color: var(--text-on-muted);
-  font-weight: 600;
-  font-size: 0.95rem;
+  margin-top: var(--space-8);
+  border-top: 4px solid var(--navy-700);
 }
+.site-footer .container { padding-block: var(--space-6); }
 .site-footer a { color: var(--text-on-muted); }
+.site-footer a:hover { color: var(--navy-900); }
+.site-footer p { margin: 0 0 var(--space-3); max-width: none; }
+.footer-heading { margin: 0 0 var(--space-3); font-size: 1.1rem; letter-spacing: 0; color: var(--text-on-muted); }
+.footer-list { list-style: none; margin: 0 0 var(--space-5); padding: 0; max-width: none; }
+.footer-list li { margin: 0 0 var(--space-2); }
+.footer-rule { border: 0; border-top: 1px solid var(--navy-100); margin: var(--space-2) 0 var(--space-5); }
+.footer-meta { font-size: 0.95rem; }
 
 /* ---- News ---- */
 .news-list { list-style: none; margin: 0; padding: 0; max-width: var(--measure); }

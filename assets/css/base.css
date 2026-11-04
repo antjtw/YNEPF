@@ -80,11 +80,20 @@ a:focus:not(:focus-visible), button:focus:not(:focus-visible) { outline: none; }
 .skip-link:focus { top: var(--space-4); color: var(--text-on-inverse); }
 
 /* ---- Layout primitives ---- */
+/* The page container. Content is at most 960px wide (--container); the side
+   margins sit outside that, so the box grows by 2 x the margin. Margins are
+   16px on mobile and 30px from the tablet breakpoint (641px) up. */
 .container {
   width: 100%;
-  max-width: var(--container);
+  max-width: calc(var(--container) + 2 * var(--page-margin));
   margin-inline: auto;
-  padding-inline: var(--space-5);
+  padding-inline: var(--page-margin);
+}
+@media (min-width: 40.0625em) {
+  .container {
+    max-width: calc(var(--container) + 2 * var(--page-margin-tablet));
+    padding-inline: var(--page-margin-tablet);
+  }
 }
 
 main {
