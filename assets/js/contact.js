@@ -4,13 +4,14 @@
    Validation follows the GOV.UK pattern: nothing is checked until Send is
    pressed, then an error summary at the top links to each problem, each field
    gets its own message, and focus moves to the summary so a screen reader
-   announces it. Messages are saved to Supabase (visitors can add a message but
-   not read any) and appear in the site editor under Messages. A hidden
-   honeypot field catches simple bots; a rate limit in the database stops floods.
+   announces it. The message is posted to a small Supabase function
+   (supabase/functions/send-contact) that emails it to the entries inbox with the
+   sender as the reply-to. Nothing is stored. A hidden honeypot field catches
+   simple bots; the function limits how often one address can send.
    ========================================================================== */
 (function () {
   "use strict";
-  var Y = window.YNEPF;
+  var CFG = window.YNEPF_CONFIG || {};
   var form = document.getElementById("contact-form");
   if (!form) return;
 
@@ -100,15 +101,16 @@
     // Honeypot: a person never sees this field. Pretend it worked and send nothing.
     if (document.getElementById("website").value) return succeed(v.email);
 
-    var sb = Y && Y.db();
-    if (!sb) return failure("The contact form is not connected yet. Please email us at");
+    if (!CFG.supabaseUrl || /your-project|^$/.test(CFG.supabaseUrl)) return failure("The contact form is not connected yet. Please email us at");
     sendBtn.disabled = true; sendBtn.textContent = "Sending…";
-    sb.from("contact_messages").insert({ name: v.name, email: v.email, subject: v.subject, message: v.message })
+    fetch(CFG.supabaseUrl.replace(/\/$/, "") + "/functions/v1/send-contact", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: CFG.supabaseAnonKey || "" },
+      body: JSON.stringify({ name: v.name, email: v.email, subject: v.subject, message: v.message })
+    })
       .then(function (res) {
-        if (res.error) {
-          if (/rate_limited/.test(res.error.message || "")) return failure("You have sent several messages recently. Please wait a while before trying again, or email us at");
-          throw res.error;
-        }
+        if (res.status === 429) return failure("You have sent several messages recently. Please wait a while before trying again, or email us at");
+        if (!res.ok) throw new Error("send failed: " + res.status);
         form.reset();
         succeed(v.email);
       })

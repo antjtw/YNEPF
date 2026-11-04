@@ -27,16 +27,16 @@ We reply to your message because you asked us to. We run the website, keep it se
 
 ## How long we keep it
 
-We keep contact messages for [12 months] and then delete them. [Confirm the period and who is responsible for deleting older messages.] Editor accounts are removed when someone stops helping with the site.
+Contact messages are emailed to our entries inbox and are not stored on the website. We keep them in that inbox for [12 months] and then delete them. [Confirm the period and who is responsible for deleting older messages.] Editor accounts are removed when someone stops helping with the site.
 
 ## Who else handles it
 
 These services process information on our behalf:
 
-- Supabase: stores contact messages, news, competitions and editor accounts.
+- Supabase: stores news, competitions and editor accounts.
 - Vercel: hosts the website.
 - Google Sheets: published sheets supply the records and lifting orders shown on the site.
-- An email service [name to be confirmed]: delivers a copy of contact messages to our entries inbox.
+- An email service [name to be confirmed]: delivers contact messages to our entries inbox.
 
 We do not sell your information. [Confirm where each service stores data and whether any of it is outside the UK.]
 

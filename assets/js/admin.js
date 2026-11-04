@@ -641,56 +641,6 @@
     }
   }
 
-  // ---- messages (from the website's contact form) -------------------------------------
-  function renderMessages(panel) {
-    panel.replaceChildren(panelHead("Messages"),
-      el("p", { class: "panel-intro" }, "Messages sent through the Contact page. Reply by email, then mark each one as handled so the team can see what is still waiting."),
-      el("p", null, "Loading…"));
-    sb.from("contact_messages").select("*").order("created_at", { ascending: false }).then(function (res) {
-      var rows = ok(res);
-      panel.lastChild.remove();
-      var open = rows.filter(function (m) { return !m.handled; });
-      var done = rows.filter(function (m) { return m.handled; });
-      panel.appendChild(el("h2", null, "Waiting (" + open.length + ")"));
-      panel.appendChild(open.length ? el("div", null, open.map(messageCard)) : el("p", { class: "empty" }, "Nothing waiting. Nice."));
-      if (done.length) {
-        panel.appendChild(el("h2", null, "Handled (" + done.length + ")"));
-        panel.appendChild(el("details", null, el("summary", { style: "cursor:pointer;font-weight:600;margin-bottom:var(--space-3);" }, "Show handled messages"), el("div", null, done.map(messageCard))));
-      }
-      setMessageBadge(open.length);
-    }).catch(function (e) { panel.lastChild.textContent = friendly(e); });
-  }
-  function messageCard(m) {
-    var when = new Date(m.created_at).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: Y.TZ });
-    return el("section", { class: "card", "aria-label": m.subject },
-      el("div", { class: "card-head" },
-        el("div", null, el("h2", null, m.subject),
-          el("p", null, m.name + " · ", el("a", { href: "mailto:" + m.email }, m.email), " · " + when))),
-      el("p", { style: "white-space:pre-wrap;margin:var(--space-3) 0;max-width:none;" }, m.message),
-      el("span", { class: "actions" },
-        el("a", { class: "btn btn-sm btn-primary", href: "mailto:" + m.email + "?subject=" + encodeURIComponent("Re: " + m.subject) }, "Reply by email"),
-        btn(m.handled ? "Mark as waiting" : "Mark as handled", function () { setHandled(m, !m.handled); }),
-        btn("Delete", function () { removeMessage(m); }, "btn-danger")));
-  }
-  function setHandled(m, handled) {
-    sb.from("contact_messages").update({ handled: handled }).eq("id", m.id).then(ok)
-      .then(function () { route(); }).catch(function (e) { toast(friendly(e), "error"); });
-  }
-  function removeMessage(m) {
-    if (!window.confirm("Delete this message from " + m.name + "? This cannot be undone.")) return;
-    sb.from("contact_messages").delete().eq("id", m.id).then(ok)
-      .then(function () { toast("Message deleted."); route(); }).catch(function (e) { toast(friendly(e), "error"); });
-  }
-  function setMessageBadge(n) {
-    var tab = $("tab-messages");
-    if (tab) tab.textContent = n ? "Messages (" + n + ")" : "Messages";
-  }
-  function refreshMessageBadge() {
-    sb.from("contact_messages").select("id").eq("handled", false).then(function (res) {
-      if (!res.error) setMessageBadge((res.data || []).length);
-    });
-  }
-
   // ---- records (links to published Google Sheets) -----------------------------------
   function renderRecords(panel) {
     panel.replaceChildren(panelHead("Records", btn("Add record sheet", function () { editSource(); }, "btn-primary")),
@@ -876,7 +826,6 @@
     competitions: renderCompetitions,
     news: renderNews,
     organisation: function (p) { renderGrouped(p, ORG); },
-    messages: renderMessages,
     records: renderRecords,
     users: renderUsers,
     faqs: function (p) { renderGrouped(p, FAQ); },
@@ -897,7 +846,6 @@
     var view = el("div");
     $("panel").replaceChildren(view);
     TABS[tab](view);
-    if (tab !== "messages") refreshMessageBadge();
   }
   window.addEventListener("hashchange", function () { if (state.user && state.role) route(); });
 

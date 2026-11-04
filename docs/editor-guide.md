@@ -15,7 +15,7 @@ It covers, in order:
 9. [Organisation (the Committee page)](#9-organisation-the-committee-page)
 10. [FAQs](#10-faqs)
 11. [Footer links](#11-footer-links)
-12. [Messages from the Contact page](#12-messages-from-the-contact-page)
+12. [The Contact form](#12-the-contact-form)
 13. [Your account](#13-your-account)
 14. [Users (admins only)](#14-users-admins-only)
 15. [Things that are not edited in the editor](#15-things-that-are-not-edited-in-the-editor)
@@ -57,7 +57,7 @@ The site never writes to your spreadsheets. It only reads them. Editing a sheet 
 
 | Role | Can do |
 |---|---|
-| **Editor** | Everything in this guide except managing users: Calendar, News, Organisation, Records, FAQs, Footer, Messages and their own Account. |
+| **Editor** | Everything in this guide except managing users: Calendar, News, Organisation, Records, FAQs, Footer and their own Account. |
 | **Admin** | Everything an editor can, plus the **Users** tab: add people, change roles, remove people. |
 
 There must always be at least one admin. The system refuses to remove or demote the last one.
@@ -104,7 +104,6 @@ After signing in you see a row of tabs:
 | **Calendar** | Competitions and other events, shown on the Calendar page and the home page |
 | **News** | Posts on the News page |
 | **Organisation** | People on the Committee page |
-| **Messages** | Messages sent from the Contact page (the tab shows a count while any are waiting) |
 | **Records** | The record tables on the Records page |
 | **FAQs** | Questions and answers on the FAQs page |
 | **Footer** | The links at the bottom of every page |
@@ -503,19 +502,15 @@ Footer changes show within about a minute.
 
 ---
 
-## 12. Messages from the Contact page
+## 12. The Contact form
 
-When someone uses the Contact form, their message is saved and shown in the **Messages** tab. The tab label shows how many are waiting, for example **Messages (3)**.
+There is nothing to manage in the editor for the Contact page. When someone uses the form, it is **emailed straight to the federation entries inbox** (ynepfentries@gmail.com unless your technical admin has chosen another address).
 
-The form already asks people to confirm they have checked the FAQs and cannot find their answer.
-
-For each message you can:
-
-- **Reply by email.** Opens your email app with the address and subject filled in.
-- **Mark as handled.** Moves it to the "Handled" list so the team can see what is still waiting. Use **Mark as waiting** to move it back.
-- **Delete.** Removes it for good, after a confirmation.
-
-A recommended habit: reply first, then mark as handled, so two people do not answer the same message. (If your technical admin has set up email notifications, a copy of each new message also goes to the federation inbox. See [section 18](#18-for-whoever-looks-after-the-technical-side).)
+- The email's subject starts with **[Website]**, followed by the subject they wrote.
+- It is sent so that **pressing Reply goes to the person who wrote in**, not to a no-reply address. Whoever looks after the inbox simply replies as normal.
+- Nothing is stored on the website, so the inbox is the only record. Use your email app's labels or stars to track what still needs an answer.
+- The form asks people to confirm they have read the FAQs first. If the same question arrives twice, add it to the [FAQs](#10-faqs).
+- If email is not set up yet, visitors see "Sorry, your message could not be sent" with the inbox address to write to instead. See [section 18](#18-for-whoever-looks-after-the-technical-side).
 
 ---
 
@@ -661,7 +656,7 @@ Editors do not need this section.
 - **Google sign-in:** create a Web OAuth client in Google Cloud Console with the redirect address shown in Supabase under Authentication > Providers > Google, and paste the client ID and secret into Supabase. Free. Apple sign-in is possible but needs a paid Apple Developer account and yearly upkeep, so only add it if people ask. Only list a provider in `authProviders` in `config.js` once it is switched on in Supabase.
 - **Sign-in addresses:** in Supabase, Authentication > URL Configuration, the Site URL and Redirect URLs must include the live site address (and any preview address you use).
 - **First admin:** the first admin address is created by `schema.sql`. After that, admins manage users from the Users tab.
-- **Contact email notifications (optional):** an Edge Function in `supabase/functions/notify-contact` can email each new message to the federation inbox. It needs an email service key stored as a Supabase secret, not in the repository. Messages always appear in the Messages tab either way.
+- **Contact form email:** the Contact page posts to the Edge Function in `supabase/functions/send-contact`, which emails the entries inbox through Resend with the sender as reply-to. Nothing is stored. Deploy it with Verify JWT off and add `RESEND_API_KEY` as a Supabase secret (never in the repository). Steps are in `README.md` under Contact form. Re-running `schema.sql` removes the old `contact_messages` table.
 - **Rest of the site, design system, images, favicon, accessibility checks:** see `README.md`.
 - **Build step:** `node build.js` inlines the shared header and footer into each page. Run it after changing `assets/partials/` and commit the result.
 - **Pushing changes:** work on a branch and merge when ready. Vercel builds a preview for each branch.

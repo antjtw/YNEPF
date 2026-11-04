@@ -180,44 +180,11 @@ create table if not exists public.record_sources (
 );
 
 -- ---------------------------------------------------------------------------
--- Contact form messages. The public can ADD a message and nothing else; only
--- editors can read, mark as handled, or delete them.
+-- Contact form: messages are emailed (see supabase/functions/send-contact), not
+-- stored. Earlier versions kept them in a table; remove it and its rules.
 -- ---------------------------------------------------------------------------
-create table if not exists public.contact_messages (
-  id uuid primary key default gen_random_uuid(),
-  name text not null check (char_length(name) between 1 and 120),
-  email text not null check (char_length(email) <= 254 and email ~* '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$'),
-  subject text not null check (char_length(subject) between 1 and 200),
-  message text not null check (char_length(message) between 1 and 4000),
-  handled boolean not null default false,
-  created_at timestamptz not null default now()
-);
-create index if not exists contact_messages_created_idx on public.contact_messages (created_at desc);
-
--- Simple flood protection: at most 3 messages per email address per hour, and
--- 60 in total per hour. Runs with the owner's rights so it can count rows the
--- visitor is not allowed to see.
-create or replace function public.contact_rate_limit()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  if (select count(*) from public.contact_messages
-      where lower(email) = lower(new.email) and created_at > now() - interval '1 hour') >= 3 then
-    raise exception 'rate_limited' using errcode = 'P0001';
-  end if;
-  if (select count(*) from public.contact_messages where created_at > now() - interval '1 hour') >= 60 then
-    raise exception 'rate_limited' using errcode = 'P0001';
-  end if;
-  return new;
-end;
-$$;
-
-drop trigger if exists contact_messages_limit on public.contact_messages;
-create trigger contact_messages_limit before insert on public.contact_messages
-  for each row execute function public.contact_rate_limit();
+drop table if exists public.contact_messages cascade;
+drop function if exists public.contact_rate_limit();
 
 -- ---------------------------------------------------------------------------
 -- News posts
@@ -381,7 +348,6 @@ where published;
 -- ---------------------------------------------------------------------------
 alter table public.profiles        enable row level security;
 alter table public.editors         enable row level security;
-alter table public.contact_messages enable row level security;
 alter table public.org_sections    enable row level security;
 alter table public.people          enable row level security;
 alter table public.faq_categories  enable row level security;
@@ -399,14 +365,6 @@ create policy "profiles read" on public.profiles
 drop policy if exists "profiles update own" on public.profiles;
 create policy "profiles update own" on public.profiles
   for update to authenticated using (id = auth.uid() and public.is_editor()) with check (id = auth.uid());
-
--- Contact messages: anyone may send one; only editors can read or manage them.
-drop policy if exists "anyone can send" on public.contact_messages;
-create policy "anyone can send" on public.contact_messages
-  for insert to anon, authenticated with check (true);
-drop policy if exists "editors manage" on public.contact_messages;
-create policy "editors manage" on public.contact_messages
-  for all to authenticated using (public.is_editor()) with check (public.is_editor());
 
 -- The allow-list: only admins can see or change it.
 drop policy if exists "admins manage editors" on public.editors;
@@ -456,9 +414,6 @@ grant select, insert, update, delete on
 
 grant select on public.competitions_public to authenticated;
 grant select, update on public.profiles to authenticated;
-
-grant insert on public.contact_messages to anon;
-grant select, insert, update, delete on public.contact_messages to authenticated;
 
 grant execute on function public.my_role(), public.is_editor(), public.is_admin() to anon, authenticated;
 

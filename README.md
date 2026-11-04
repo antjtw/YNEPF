@@ -378,33 +378,38 @@ news, users and more) is in [`docs/editor-guide.md`](docs/editor-guide.md).
 
 `contact.html` collects name, email, subject and message, plus a tick-box
 ("I have looked through the FAQs and my question is not answered there") that must
-be ticked before Send works. Validation is GOV.UK-style (an error summary that takes focus, plus a message on each field), a
-hidden honeypot for bots, and a confirmation panel. Visitors can only **add** a
-message; they cannot read any. Messages land in the `contact_messages` table and
-appear in the editor under **Messages**, with a count of what is waiting, a reply
-button (opens your email app) and mark-as-handled. The database enforces length
-limits and a flood limit (3 per email address and 60 in total per hour).
+be ticked before Send works. Validation is GOV.UK-style (an error summary that
+takes focus, plus a message on each field), a hidden honeypot for bots, and a
+confirmation panel.
 
-**Email notification (optional, recommended).** So the entries inbox hears about a
-message straight away, a small function emails it via Resend. About ten minutes:
+**Messages are emailed, not stored.** The page posts the message to a small
+Supabase Edge Function, `send-contact`, which sends it to the entries inbox
+through Resend. The sender's address is set as the email's reply-to, so whoever
+looks after the inbox just presses Reply and it goes to the person who wrote in.
+There is no Messages tab in the editor and no messages table. The function
+checks every field, caps the lengths, and allows 3 messages per address and 60 in
+total per hour (best effort, per running instance). About ten minutes to set up:
 
 1. Sign up at resend.com with `ynepfentries@gmail.com` and create an API key.
    (Until you verify your own domain there, Resend can only email the account
    owner, which is exactly the entries address.)
 2. In Supabase, **Edge Functions > Deploy a new function**, name it
-   `notify-contact`, and paste in `supabase/functions/notify-contact/index.ts`
-   and `build-email.ts` from this repo.
-3. **Edge Functions > Secrets**: add `RESEND_API_KEY`, and a made-up
-   `WEBHOOK_SECRET` (any long random string).
-4. **Database > Webhooks > Create**: table `contact_messages`, event **Insert**,
-   type **Supabase Edge Functions**, pick `notify-contact`, and add the HTTP header
-   `x-webhook-secret` with the same value as `WEBHOOK_SECRET`.
+   `send-contact`, and paste in `supabase/functions/send-contact/index.ts` and
+   `build-email.ts` from this repo.
+3. In that function's settings switch **Verify JWT** off (visitors are not signed
+   in, and the publishable key is not a JWT).
+4. **Edge Functions > Secrets**: add `RESEND_API_KEY`. Optional: `NOTIFY_TO`
+   (defaults to `ynepfentries@gmail.com`), `MAIL_FROM`, and `ALLOWED_ORIGIN` (the
+   live site address, so other websites cannot use the function).
 5. Send yourself a test from the Contact page.
 
-Without these steps the form still works and messages still appear in the
-editor; you just will not get an email. The email logic (`build-email.ts`) is
-tested, including that line breaks cannot be smuggled into the email headers; the
-function itself has not been run against a live Resend account.
+Until the function is deployed the form shows "Sorry, your message could not be
+sent" with the entries address to email instead. The email logic
+(`build-email.ts`) and the form are tested, including that line breaks cannot be
+smuggled into the email headers; the function itself has not been run against a
+live Resend account. **Re-run `supabase/schema.sql`**: it removes the old
+`contact_messages` table (any messages stored in it are deleted, so copy out
+anything you want to keep first).
 
 ### Notes
 

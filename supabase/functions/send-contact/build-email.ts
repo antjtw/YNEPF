@@ -6,6 +6,19 @@ export interface ContactRecord { name: string; email: string; subject: string; m
 const LINE_BREAKS = new RegExp("[\\r\\n" + String.fromCharCode(0x2028, 0x2029) + "]+", "g");
 const oneLine = (s: string) => String(s ?? "").replace(LINE_BREAKS, " ").trim();
 
+const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+// Returns a short reason if the submission is not acceptable, otherwise null.
+export function validateContact(b: Record<string, unknown>): string | null {
+  const str = (k: string) => (typeof b[k] === "string" ? (b[k] as string).trim() : "");
+  const lim: Record<string, number> = { name: 120, email: 254, subject: 200, message: 4000 };
+  for (const k of Object.keys(lim)) {
+    if (!str(k)) return `${k} is required`;
+    if (str(k).length > lim[k]) return `${k} is too long`;
+  }
+  if (!EMAIL.test(str("email"))) return "email is not valid";
+  return null;
+}
+
 export function buildEmail(m: ContactRecord, opts: { from: string; to: string }) {
   const subject = oneLine(m.subject).slice(0, 180);
   const name = oneLine(m.name).slice(0, 120);
