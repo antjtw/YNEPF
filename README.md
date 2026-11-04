@@ -276,6 +276,9 @@ supabase/seed.sql       The existing committee, FAQs and 2026 calendar, ready to
 
 ### Who can edit, and how people sign in
 
+A full step-by-step guide for editors (calendar, lifting order and records spreadsheets,
+news, users and more) is in [`docs/editor-guide.md`](docs/editor-guide.md).
+
 - **Users tab (admins only).** Add someone's email address and choose *Editor*
   (manage competitions, news, records, organisation, FAQs) or *Admin* (also add
   and remove users). Removing a user takes their access away immediately; their
