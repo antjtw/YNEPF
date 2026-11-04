@@ -31,7 +31,7 @@ const pages = [
   "calendar.html",
   "committee.html",
   "records.html",
-  "competition.html",
+  "lifting/index.html",
   "news.html",
   "post.html",
   "faqs.html",

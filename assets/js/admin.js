@@ -240,8 +240,9 @@
       saveLabel: isNew ? "Add competition" : "Save changes",
       fields: [
         { name: "name", label: "Name", required: true },
+        { name: "slug", label: "Web address ending", help: "Used for the lifting order link: /lifting-order/… Made from the year and name if you leave it blank. Lower case letters, numbers and hyphens only." },
         { name: "label", label: "Tag (optional)", help: "A small label next to the name, for example “Sponsor TBD”.", half: true },
-        { name: "capacity", label: "Number of lifters (optional)", type: "number", min: "0", half: true },
+        { name: "capacity", label: "Number of spaces (optional)", type: "number", min: "0", half: true },
         { name: "description", label: "Description", type: "textarea", rows: 5, help: "Plain text. Start lines with “- ” for bullet points. Links look like [text](https://…)." },
         { name: "start_date", label: "First day", type: "date", required: true, half: true },
         { name: "end_date", label: "Last day (if more than one day)", type: "date", half: true },
@@ -256,10 +257,11 @@
         { name: "entries_full", label: "Entries full", type: "checkbox", help: "Tick this when the competition fills up before entry closes. The entry link is replaced by a “Join the waiting list” link (if you add one below)." },
         { name: "waitlist_url", label: "Waiting list link (Google Form)", type: "url", placeholder: "https://forms.gle/…", help: "Only shown on the website while entries are marked full." },
         { name: "lifting_order_url", label: "Lifting order sheet (optional)", type: "url", placeholder: "https://docs.google.com/spreadsheets/d/e/…/pub?output=csv",
-          help: "A published Google Sheet (File > Share > Publish to web > CSV), one row per lifter, with columns Day, Session, Flight, Name, Open IPF, Instagram, Age, Class, GLP. Add it any time: a “View lifting order” link appears once it is here. Optional extra columns Weigh-in, Lift off and Session name show session times." },
+          help: "Add it a few days after entries open: a “View lifting order” button appears next to “Enter now” once it is here, and the page follows the sheet as you edit it. Use a published Google Sheet (File > Share > Publish to web > CSV), one row per lifter. Needs columns Day, Session, Flight and Name. Optional: Club, Instagram, Age, Class, Best total, GLP, Open IPF, and per session Weigh-in, Lift off and Session name. Only columns with something in them are shown." },
         { name: "published", label: "Show on the website", type: "checkbox", help: "Untick to keep it as a draft." }
       ],
       validate: function (v) {
+        if (v.slug && !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(v.slug)) return "The web address can only use lower case letters, numbers and hyphens.";
         if (v.end_date && v.end_date < v.start_date) return "The last day cannot be before the first day.";
         if (v.entry_opens && v.entry_closes && v.entry_closes <= v.entry_opens) return "Entry must close after it opens.";
         if (v.entry_url && !/^https?:\/\//i.test(v.entry_url)) return "The entry link must start with https://";
@@ -271,7 +273,7 @@
       },
       onSave: function (v) {
         var row = {
-          name: v.name, description: v.description, label: v.label,
+          name: v.name, slug: v.slug, description: v.description, label: v.label,
           start_date: v.start_date, end_date: v.end_date || null,
           venue_name: v.venue_name, venue_address: v.venue_address, map_url: v.map_url, openipf_url: v.openipf_url,
           capacity: v.capacity, entry_url: v.entry_url,
@@ -292,6 +294,19 @@
         });
       }
     });
+
+    // For a new competition, suggest the web address from the year and name.
+    if (isNew) {
+      var slugTouched = false;
+      api.input("slug").addEventListener("input", function () { slugTouched = true; });
+      var suggest = function () {
+        if (slugTouched) return;
+        var d = api.get("start_date"), n = api.get("name");
+        api.set("slug", n ? slugify((d ? d.slice(0, 4) + " " : "") + n) : "");
+      };
+      api.input("name").addEventListener("input", suggest);
+      api.input("start_date").addEventListener("change", suggest);
+    }
 
     // Suggest the standard entry window from the competition date, unless the
     // editor has typed their own times.

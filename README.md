@@ -204,16 +204,25 @@ supabase/seed.sql       The existing committee, FAQs and 2026 calendar, ready to
   and if you have added a **waiting list link** (a Google Form) a ghost-style
   "Join the waiting list" link appears instead. Untick it to reopen. The form's
   responses are managed in Google as usual.
-  **Lifting order:** paste a published Google Sheet (File > Share > Publish to
-  web > CSV) into *Lifting order sheet* at any time, usually a little after entry
-  opens. A "View lifting order" button then appears on the competition, leading
-  to its page with the order by day, session and flight. Columns: Day, Session,
-  Flight, Name, Open IPF, Instagram, Age, Class, GLP (the same sheet as before);
-  optional Weigh-in, Lift off and Session name show session times and a label.
-  Within a flight lifters are ordered by class then GLP, except a session named
-  "Prime time", which keeps the sheet's order. The page reads the sheet live, so
-  it is always as current as the sheet (Google refreshes published sheets every
-  few minutes); nothing is stored or scheduled.
+  **Spaces:** *Number of spaces* shows on the competition next to the date and
+  venue.
+  **Enter now / lifting order:** once entry opens an "Enter now" button appears.
+  A few days later, paste the lifting order sheet (a published Google Sheet:
+  File > Share > Publish to web > CSV) into *Lifting order sheet* and a "View
+  lifting order" button appears beside it, leading to that competition's own
+  page at `/lifting-order/<address>`. The address is made from the year and name
+  (for example `2027-yne-march-open`), suggested for you and editable (*Web
+  address ending*); `vercel.json` rewrites it to `lifting/index.html`, and
+  `/lifting/?c=<address>` also works anywhere. The page is headed with the
+  competition name and lists lifters by day, session and flight. Sheet columns:
+  Day, Session, Flight and Name are required; optional are Club, Instagram, Age,
+  Class, Best total, GLP, Open IPF, and per session Weigh-in, Lift off and
+  Session name. Only columns that have something in them are shown, so use Best
+  total and/or GLP depending on the competition. Within a flight lifters are
+  ordered by class then GLP, except a session named "Prime time", which keeps
+  the sheet's order. The page reads the sheet live, so adding, changing or
+  deleting rows shows up as soon as Google refreshes the published sheet (a few
+  minutes); nothing is stored or scheduled.
 - **News.** Posts have a title, date, author (the signed-in editor), and a rich
   text body that is saved as Markdown, with links, headings, lists and tables.
   A post dated in the future publishes itself on that date; untick *Published*

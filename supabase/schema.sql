@@ -198,6 +198,7 @@ create table if not exists public.competitions (
   waitlist_url text not null default '',       -- Google Form for the waiting list
   lifting_order_url text not null default '',  -- published Google Sheet (CSV) of the lifting order
   openipf_url text not null default '',        -- link to the results page on OpenIPF
+  slug text not null default '',               -- web address, e.g. 2027-yne-march-open (made for you if blank)
   published boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -214,6 +215,46 @@ alter table public.competitions add column if not exists entries_full boolean no
 alter table public.competitions add column if not exists waitlist_url text not null default '';
 alter table public.competitions add column if not exists lifting_order_url text not null default '';
 alter table public.competitions add column if not exists openipf_url text not null default '';
+alter table public.competitions add column if not exists slug text not null default '';
+
+-- A blank slug becomes "<year>-<name>", made unique with -2, -3... if needed.
+create or replace function public.competition_slug()
+returns trigger
+language plpgsql
+as $$
+declare
+  base text;
+  candidate text;
+  n integer := 1;
+begin
+  if coalesce(new.slug, '') <> '' then
+    return new;
+  end if;
+  base := trim(both '-' from regexp_replace(lower(extract(year from new.start_date)::text || ' ' || new.name), '[^a-z0-9]+', '-', 'g'));
+  if base = '' then base := 'competition'; end if;
+  candidate := base;
+  while exists (select 1 from public.competitions where slug = candidate and id <> new.id) loop
+    n := n + 1;
+    candidate := base || '-' || n;
+  end loop;
+  new.slug := candidate;
+  return new;
+end;
+$$;
+
+drop trigger if exists competitions_slug on public.competitions;
+create trigger competitions_slug before insert or update on public.competitions
+  for each row execute function public.competition_slug();
+
+-- Give existing competitions an address (one at a time so each is unique).
+do $$
+declare r record;
+begin
+  for r in select id from public.competitions where slug = '' order by start_date, created_at loop
+    update public.competitions set slug = '' where id = r.id;
+  end loop;
+end $$;
+create unique index if not exists competitions_slug_key on public.competitions (slug);
 
 create index if not exists competitions_start_idx on public.competitions (start_date);
 
@@ -258,7 +299,8 @@ select
   -- The waiting list only appears once the competition is marked full.
   case when entries_full then waitlist_url else '' end as waitlist_url,
   lifting_order_url,
-  openipf_url
+  openipf_url,
+  slug
 from public.competitions
 where published;
 

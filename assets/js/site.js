@@ -196,6 +196,11 @@
     soon: ["tag tag-closed", "Entry not open yet"]
   };
 
+  // Lifting orders live at /lifting-order/<slug> (see vercel.json); the page also
+  // works as /lifting/?c=<slug> where there is no rewrite rule.
+  function liftingHref(c) {
+    return c.slug ? "lifting-order/" + encodeURIComponent(c.slug) : "lifting/?c=" + encodeURIComponent(c.id);
+  }
   function Y_EXT() {
     var s = svg('<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>');
     s.setAttribute("class", "ext-icon");
@@ -219,7 +224,7 @@
       meta.appendChild(el("span", null, svg(ICONS.pin),
         map ? el("a", { href: map, target: "_blank", rel: "noopener", "aria-label": c.venue_name + " on Google Maps (opens in a new tab)" }, c.venue_name) : c.venue_name));
     }
-    if (c.capacity) meta.appendChild(el("span", null, svg(ICONS.people), c.capacity + " lifters"));
+    if (c.capacity) meta.appendChild(el("span", null, svg(ICONS.people), c.capacity + (c.capacity === 1 ? " space" : " spaces")));
 
     var card = el("article", { class: "event" },
       el("div", { class: "event-head" }, el(H, null, title), tags));
@@ -241,23 +246,25 @@
     if (!opts.brief) {
       var line = state === "archived" ? "" : entryLine(c);
       if (line) card.appendChild(el("ul", { style: "margin-top:var(--space-2);" }, el("li", null, line)));
-      if (c.entry_url && state === "open") {
+      if (state === "full") {
         card.appendChild(el("p", { style: "margin:var(--space-3) 0 0;" },
-          el("a", { class: "btn btn-primary", href: c.entry_url, target: "_blank", rel: "noopener" }, "Enter this competition")));
+          c.waitlist_url ? "All places have been taken. You can join the waiting list in case one comes up." : "All places have been taken."));
       }
-    }
-    if (state === "full" && !opts.brief) {
-      card.appendChild(el("p", { style: "margin:var(--space-3) 0 0;" },
-        c.waitlist_url ? "All places have been taken. You can join the waiting list in case one comes up." : "All places have been taken."));
-      if (c.waitlist_url) {
-        card.appendChild(el("p", { style: "margin:var(--space-2) 0 0;" },
-          el("a", { class: "btn btn-ghost", href: c.waitlist_url, target: "_blank", rel: "noopener",
-            "aria-label": "Join the waiting list for " + c.name + " (opens in a new tab)" }, "Join the waiting list ", Y_EXT())));
+      // One row of actions: Enter now (while entry is open), the waiting list (when
+      // full) and the lifting order (once its sheet has been added).
+      var actions = [];
+      if (c.entry_url && state === "open") {
+        actions.push(el("a", { class: "btn btn-primary", href: c.entry_url, target: "_blank", rel: "noopener",
+          "aria-label": "Enter " + c.name + " now (opens in a new tab)" }, "Enter now"));
       }
-    }
-    if (c.lifting_order_url && !opts.brief && !opts.detail) {
-      card.appendChild(el("p", { style: "margin:var(--space-3) 0 0;" },
-        el("a", { class: "btn btn-secondary", href: "competition.html?c=" + encodeURIComponent(c.id) }, "View lifting order")));
+      if (state === "full" && c.waitlist_url) {
+        actions.push(el("a", { class: "btn btn-ghost", href: c.waitlist_url, target: "_blank", rel: "noopener",
+          "aria-label": "Join the waiting list for " + c.name + " (opens in a new tab)" }, "Join the waiting list ", Y_EXT()));
+      }
+      if (c.lifting_order_url) {
+        actions.push(el("a", { class: "btn btn-secondary", href: liftingHref(c) }, "View lifting order"));
+      }
+      if (actions.length) card.appendChild(el("div", { class: "event-actions" }, actions));
     }
     card.appendChild(meta);
     return card;
@@ -325,6 +332,7 @@
   var LO_COLS = {
     day: ["day"], session: ["session"], flight: ["flight"], name: ["name"],
     openIpf: ["open ipf", "openipf"], instagram: ["instagram"], age: ["age"], cls: ["class"], glp: ["glp"],
+    club: ["club", "team", "gym"], bestTotal: ["best total", "best total (kg)", "total"],
     weighIn: ["weigh-in", "weigh in", "weighin"], liftOff: ["lift off", "lift-off", "liftoff"],
     sessionName: ["session name", "session label"]
   };
@@ -349,6 +357,7 @@
         day: parseInt(get(r, "day"), 10), session: parseInt(get(r, "session"), 10), flight: get(r, "flight"),
         name: get(r, "name"), openIpf: /^https?:\/\//i.test(get(r, "openIpf")) ? get(r, "openIpf") : "",
         instagram: igHandle(get(r, "instagram")), age: get(r, "age"), cls: get(r, "cls"),
+        club: get(r, "club"), bestTotal: get(r, "bestTotal"),
         glp: isFinite(glp) ? glp : null,
         weighIn: get(r, "weighIn"), liftOff: get(r, "liftOff"), sessionName: get(r, "sessionName")
       };
@@ -382,7 +391,7 @@
     toLondonInput: toLondonInput, fromLondonInput: fromLondonInput,
     todayLondon: todayLondon, yearOf: function (c) { return c.start_date.slice(0, 4); }, addDays: addDays, dateRange: dateRange, longDate: longDate,
     compState: compState, entryLine: entryLine, mapsUrl: mapsUrl, competitionCard: competitionCard,
-    parseLiftingOrder: parseLiftingOrder, longDay: longDay, igHandle: igHandle,
+    parseLiftingOrder: parseLiftingOrder, liftingHref: liftingHref, longDay: longDay, igHandle: igHandle,
     sheetCsvUrl: sheetCsvUrl, parseCsv: parseCsv, loadSheet: loadSheet,
     notice: notice, guard: guard
   };
