@@ -73,6 +73,7 @@
       t.parentNode.insertBefore(wrap, t);
       wrap.appendChild(t);
     });
+    Array.prototype.forEach.call(tmp.querySelectorAll("img:not([alt])"), function (i) { i.setAttribute("alt", ""); });
     Array.prototype.forEach.call(tmp.querySelectorAll("a[href]"), function (a) {
       if (/^https?:/i.test(a.getAttribute("href")) && a.hostname !== location.hostname) {
         a.setAttribute("target", "_blank");
@@ -240,7 +241,7 @@
     if (c.openipf_url && !opts.brief) {
       card.appendChild(el("p", { style: "margin:var(--space-2) 0 0;" },
         el("a", { href: c.openipf_url, target: "_blank", rel: "noopener",
-          "aria-label": "View " + c.name + " results on OpenIPF (opens in a new tab)" }, "View results on OpenIPF"),
+          "aria-label": "View results on OpenIPF for " + c.name + " (opens in a new tab)" }, "View results on OpenIPF"),
         " ", Y_EXT()));
     }
     if (!opts.brief) {
@@ -255,7 +256,7 @@
       var actions = [];
       if (c.entry_url && state === "open") {
         actions.push(el("a", { class: "btn btn-primary", href: c.entry_url, target: "_blank", rel: "noopener",
-          "aria-label": "Enter " + c.name + " now (opens in a new tab)" }, "Enter now"));
+          "aria-label": "Enter now: " + c.name + " (opens in a new tab)" }, "Enter now"));
       }
       if (state === "full" && c.waitlist_url) {
         actions.push(el("a", { class: "btn btn-ghost", href: c.waitlist_url, target: "_blank", rel: "noopener",

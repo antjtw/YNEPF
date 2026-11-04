@@ -5,9 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Home — Yorkshire &amp; North East Powerlifting Federation</title>
   <meta name="description" content="The home of drug tested powerlifting in Yorkshire and the North East. Find upcoming competitions, membership and resources.">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="assets/css/fonts.css">
   <link rel="stylesheet" href="assets/css/tokens.css">
   <link rel="stylesheet" href="assets/css/base.css">
@@ -17,120 +14,200 @@
   <a class="skip-link" href="#main">Skip to main content</a>
 
   <!-- @partial:header start -->
-<div class="service-banner">
-  <div class="container">
+<section class="service-banner" aria-label="Service notice">
+  <div class="container-wide">
     <span class="tag-alpha">Alpha</span>
     <p>This is a new service. For urgent matters, please visit <a href="https://www.ynepf.co.uk">ynepf.co.uk</a>.</p>
   </div>
-</div>
+</section>
 <header class="site-header">
-  <div class="container">
+  <div class="container-wide header-inner">
     <a class="brand" href="index.html" data-nav="home">
-      <img class="brand-mark-img" src="assets/img/logo-white.svg" alt="" width="48" height="48" aria-hidden="true">
+      <img class="brand-mark-img" src="assets/img/logo-white.svg" alt="" width="44" height="44" aria-hidden="true">
       <span class="brand-name">
         <span>Yorkshire &amp; North East</span>
         <span>Powerlifting Federation</span>
       </span>
     </a>
-    <button class="nav-toggle" aria-expanded="false" aria-controls="primary-nav">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-      Menu
-    </button>
-    <nav class="site-nav" id="primary-nav" aria-label="Primary">
+    <nav class="site-nav" aria-label="Primary">
       <ul>
-        <li><a href="committee.html" data-nav="committee">Committee</a></li>
         <li><a href="calendar.html" data-nav="calendar">Calendar</a></li>
         <li><a href="records.html" data-nav="records">Records</a></li>
         <li><a href="news.html" data-nav="news">News</a></li>
+        <li><a href="committee.html" data-nav="committee">Committee</a></li>
         <li><a href="faqs.html" data-nav="faqs">FAQs</a></li>
       </ul>
     </nav>
+    <div class="header-actions">
+      <a href="contact.html" data-nav="contact" class="btn btn-primary btn-sm header-cta">Contact us</a>
+      <button class="menu-toggle" type="button" aria-haspopup="dialog" aria-controls="site-menu" aria-expanded="false">
+        <span class="burger" aria-hidden="true"><i></i></span>
+        <span>Menu</span>
+      </button>
+    </div>
   </div>
 </header>
+<dialog id="site-menu" class="drawer on-dark" aria-labelledby="site-menu-title">
+  <div class="drawer-panel">
+    <div class="drawer-head">
+      <p class="drawer-title" id="site-menu-title">Menu</p>
+      <button class="btn btn-secondary btn-sm" type="button" data-close-menu>Close <span class="visually-hidden">menu</span></button>
+    </div>
+    <nav aria-label="Menu">
+      <ul class="drawer-links">
+        <li><a href="index.html" data-nav="home" aria-current="page">Home</a></li>
+        <li><a href="calendar.html" data-nav="calendar">Calendar</a></li>
+        <li><a href="records.html" data-nav="records">Records</a></li>
+        <li><a href="news.html" data-nav="news">News</a></li>
+        <li><a href="committee.html" data-nav="committee">Committee</a></li>
+        <li><a href="faqs.html" data-nav="faqs">FAQs</a></li>
+        <li><a href="contact.html" data-nav="contact">Contact us</a></li>
+      </ul>
+    </nav>
+    <div class="drawer-foot">
+      <ul>
+        <li data-link-group="privacy" hidden><a href="#" data-link="privacy">Privacy policy</a></li>
+        <li data-link-group="franchise" hidden><a href="#" data-link="franchise">Franchise documents</a></li>
+        <li><a href="admin/">Site editor</a></li>
+      </ul>
+      <a href="contact.html" class="btn btn-primary">Get in touch</a>
+    </div>
+  </div>
+</dialog>
 <!-- @partial:header end -->
 
-  <section class="hero-dark">
-    <div class="container">
-      <div>
-        <h1>The home of drug tested powerlifting in Yorkshire and the North East</h1>
+  <section class="hero on-dark" aria-labelledby="hero-title">
+    <div class="hero-dots" aria-hidden="true"></div>
+    <div class="hero-rings" aria-hidden="true"></div>
+    <div class="container-wide hero-grid">
+      <div class="hero-copy">
+        <p class="eyebrow">Yorkshire &amp; North East Powerlifting Federation</p>
+        <h1 id="hero-title" class="display">The home of <em>drug tested</em> powerlifting in Yorkshire and the North East</h1>
+        <p class="hero-lede">A full calendar of sanctioned competitions, from your first novice meet to our divisional championships. Everyone is welcome on the platform.</p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="calendar.html">See the competition calendar</a>
+          <a class="btn btn-secondary" href="faqs.html">New to powerlifting?</a>
+        </div>
+        <ul class="hero-points" aria-label="What to expect">
+          <li>Drug tested</li>
+          <li>Novice to championship</li>
+          <li>Everyone welcome</li>
+        </ul>
       </div>
-      <div class="hero-figure" role="img" aria-label="A lifter smiling and waving at a competition."></div>
+      <div class="hero-media">
+        <!-- Replace hero.svg with a photo (hero.jpg, about 1200 x 1320, landscape or portrait both crop well)
+             and give it a short alt text describing the picture. -->
+        <figure class="hero-photo" style="margin:0;">
+          <img src="assets/img/hero.svg" alt="" width="800" height="880" fetchpriority="high">
+        </figure>
+        <aside class="next-up" id="next-up" aria-label="Next competition" aria-live="polite" hidden></aside>
+      </div>
     </div>
   </section>
 
-  <main id="main">
+  <main id="main" style="padding-top:var(--space-9);">
     <div class="container">
-      <p class="lede">We run a full calendar of sanctioned, drug tested competitions across the region, from your first novice meet to our divisional championships. Everyone is welcome on the platform.</p>
-
       <div class="layout-split">
-        <section aria-labelledby="events-heading">
+        <section aria-labelledby="events-heading" class="reveal">
+          <p class="eyebrow">What is coming up</p>
           <h2 id="events-heading" style="margin-top:0;">Upcoming events</h2>
           <ul class="event-list" id="home-events" aria-live="polite"><li><p>Loading…</p></li></ul>
-          <p style="margin-top:var(--space-5);"><a href="calendar.html">See the full competition calendar</a></p>
-
-          <h2 id="news-heading">Latest news</h2>
-          <ul class="news-list" id="home-news" aria-live="polite"><li><p>Loading…</p></li></ul>
-          <p><a href="news.html">Read all news</a></p>
+          <p style="margin-top:var(--space-6);"><a class="btn btn-secondary" href="calendar.html">See the full competition calendar</a></p>
         </section>
 
-        <aside aria-labelledby="resources-heading">
-          <h2 id="resources-heading" style="margin-top:0;">Resources</h2>
+        <aside aria-labelledby="resources-heading" class="reveal">
+          <p class="eyebrow">Before you lift</p>
+          <h2 id="resources-heading" style="margin-top:0; font-size:var(--fs-27);">Resources</h2>
           <ul class="resource-list">
-            <li>
-              <div class="resource">
-                <span class="resource-icon iron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="2"/><circle cx="8.5" cy="11" r="2" stroke="currentColor" stroke-width="2"/><path d="M13 9h5M13 13h5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span>
-                <div>
-                  <h3><a href="https://www.britishpowerlifting.org/membership/">Buy a membership</a></h3>
-                  <p>To lift in the YNEPF you need a valid British Powerlifting membership.</p>
-                </div>
-              </div>
-            </li>
-            <li>
-              <div class="resource">
-                <span class="resource-icon navy" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M4 5a2 2 0 0 1 2-2h5v17H6a2 2 0 0 0-2 2V5Z" stroke="currentColor" stroke-width="2"/><path d="M20 5a2 2 0 0 0-2-2h-5v17h5a2 2 0 0 1 2 2V5Z" stroke="currentColor" stroke-width="2"/></svg></span>
-                <div>
-                  <h3><a href="https://www.powerlifting.sport/rules/codes/info/technical-rules">Technical rules</a></h3>
-                  <p>The rules of powerlifting performance that we follow in the YNEPF.</p>
-                </div>
-              </div>
-            </li>
-            <li>
-              <div class="resource">
-                <span class="resource-icon rose" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M4 7h10M4 12h10M4 17h7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M16 16l2 2 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-                <div>
-                  <h3><a href="https://www.powerlifting.sport/rules/codes/info/approved-list">Approved kit</a></h3>
-                  <p>Only officially registered equipment may be used in the YNEPF.</p>
-                </div>
-              </div>
-            </li>
-            <li>
-              <div class="resource">
-                <span class="resource-icon grey" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="5" rx="1" stroke="currentColor" stroke-width="2"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span>
-                <div>
-                  <h3><a href="https://www.openpowerlifting.org/">Divisional records</a></h3>
-                  <p>Records set by YNEPF lifters at all levels of competition.</p>
-                </div>
-              </div>
-            </li>
+            <li><div class="resource"><span class="resource-icon iron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="2"/><circle cx="8.5" cy="11" r="2" stroke="currentColor" stroke-width="2"/><path d="M13 10h5M13 14h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span><div><h3><a href="https://www.britishpowerlifting.org/membership/">Buy a membership</a></h3><p>To lift in the YNEPF you need a valid British Powerlifting membership.</p></div></div></li>
+            <li><div class="resource"><span class="resource-icon navy" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M4 5a2 2 0 0 1 2-2h5v17H6a2 2 0 0 0-2 2V5Z" stroke="currentColor" stroke-width="2"/><path d="M20 5a2 2 0 0 0-2-2h-5v17h5a2 2 0 0 1 2 2V5Z" stroke="currentColor" stroke-width="2"/></svg></span><div><h3><a href="https://www.powerlifting.sport/rules/codes/info/technical-rules">Technical rules</a></h3><p>The rules of powerlifting performance that we follow in the YNEPF.</p></div></div></li>
+            <li><div class="resource"><span class="resource-icon rose" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M4 7h10M4 12h10M4 17h7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M16 16l2 2 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><h3><a href="https://www.powerlifting.sport/rules/codes/info/approved-list">Approved kit</a></h3><p>Only officially registered equipment may be used in the YNEPF.</p></div></div></li>
+            <li><div class="resource"><span class="resource-icon grey" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="5" rx="1" stroke="currentColor" stroke-width="2"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span><div><h3><a href="records.html">Divisional records</a></h3><p>Records set by YNEPF lifters at all levels of competition.</p></div></div></li>
           </ul>
         </aside>
       </div>
     </div>
   </main>
 
+  <section class="band band--deep on-dark" aria-labelledby="tiles-heading" style="margin-top:var(--space-9);">
+    <div class="hero-dots" aria-hidden="true" style="opacity:.5;"></div>
+    <div class="container-wide">
+      <div class="section-head reveal">
+        <div>
+          <p class="eyebrow">Lift with us</p>
+          <h2 id="tiles-heading" style="color:#fff;">Find your place on the platform</h2>
+        </div>
+      </div>
+      <!-- Swap each tile-*.svg for a photo (about 960 x 1280, portrait). The text sits on a dark gradient,
+           so busy photos are fine. Keep alt="" because the heading in the tile already names it. -->
+      <div class="tiles">
+        <article class="tile reveal">
+          <img src="assets/img/tile-first-meet.svg" alt="" width="480" height="640" loading="lazy">
+          <div class="tile-body"><h3>Your first meet</h3><p>No experience needed. Everything you need to know before you enter.</p><a class="more" href="faqs.html">Read the FAQs</a></div>
+        </article>
+        <article class="tile reveal">
+          <img src="assets/img/tile-compete.svg" alt="" width="480" height="640" loading="lazy">
+          <div class="tile-body"><h3>Compete</h3><p>From novice days to the divisional championships, all drug tested.</p><a class="more" href="calendar.html">View the calendar</a></div>
+        </article>
+        <article class="tile reveal">
+          <img src="assets/img/tile-volunteer.svg" alt="" width="480" height="640" loading="lazy">
+          <div class="tile-body"><h3>Give something back</h3><p>Volunteer at a competition and earn points towards entries and memberships.</p><a class="more" href="faqs.html">How points work</a></div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--tint" aria-labelledby="news-heading" style="margin-top:0;">
+    <div class="container">
+      <div class="section-head reveal">
+        <div>
+          <p class="eyebrow">From the division</p>
+          <h2 id="news-heading" style="margin-top:0;">Latest news</h2>
+        </div>
+        <a class="btn btn-secondary btn-sm" href="news.html">Read all news</a>
+      </div>
+      <ul class="news-list" id="home-news" aria-live="polite"><li><p>Loading…</p></li></ul>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="cta-heading" style="padding-bottom:0;">
+    <div class="container">
+      <div class="cta on-dark reveal">
+        <div>
+          <h2 id="cta-heading" style="margin-top:0;">Got a question?</h2>
+          <p>Entries, kit, volunteering or anything else. Send us a message and we will reply by email.</p>
+        </div>
+        <a class="btn btn-primary" href="contact.html">Contact us</a>
+      </div>
+    </div>
+  </section>
+
   <!-- @partial:footer start -->
-<footer class="site-footer">
-  <div class="container">
+<footer class="site-footer on-dark">
+  <div class="container-wide">
     <div class="grid-row">
+      <div class="grid-column-one-third">
+        <a class="footer-brand" href="index.html">
+          <img src="assets/img/logo-white.svg" alt="" width="52" height="52">
+          <span>Yorkshire &amp; North East<br>Powerlifting Federation</span>
+        </a>
+        <p>The home of drug tested powerlifting in Yorkshire and the North East.</p>
+        <ul class="footer-social" aria-label="Social media">
+          <li data-link-group="instagram" hidden><a href="#" data-link="instagram"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><circle cx="17.2" cy="6.8" r="1.2" fill="currentColor"/></svg>Instagram</a></li>
+          <li data-link-group="facebook" hidden><a href="#" data-link="facebook"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13.5 21v-7.5h2.6l.4-3h-3V8.6c0-.9.3-1.5 1.5-1.5h1.6V4.4c-.3 0-1.2-.1-2.3-.1-2.3 0-3.8 1.4-3.8 3.9v2.3H7.9v3h2.6V21h3z"/></svg>Facebook group</a></li>
+          <li><a href="https://linktr.ee/ynepf" target="_blank" rel="noopener">Linktree</a></li>
+        </ul>
+      </div>
       <div class="grid-column-one-third">
         <h2 class="footer-heading">Explore</h2>
         <nav aria-label="Footer: explore">
           <ul class="footer-list">
-            <li><a href="committee.html">Committee</a></li>
-            <li><a href="calendar.html">Calendar</a></li>
+            <li><a href="calendar.html">Competition calendar</a></li>
             <li><a href="records.html">Records</a></li>
             <li><a href="news.html">News</a></li>
+            <li><a href="committee.html">Committee</a></li>
             <li><a href="faqs.html">FAQs</a></li>
+            <li><a href="contact.html">Contact us</a></li>
           </ul>
         </nav>
       </div>
@@ -144,24 +221,27 @@
             <li><a href="https://www.openpowerlifting.org/">Divisional records</a></li>
           </ul>
         </nav>
-      </div>
-      <div class="grid-column-one-third">
-        <h2 class="footer-heading">Get in touch</h2>
-        <p>Entries and general enquiries:<br><a href="mailto:ynepfentries@gmail.com">ynepfentries@gmail.com</a></p>
-        <p><a href="https://linktr.ee/ynepf" target="_blank" rel="noopener">Find us on Linktree</a></p>
+        <p class="small">Entries and general enquiries:<br><a href="mailto:ynepfentries@gmail.com">ynepfentries@gmail.com</a></p>
       </div>
     </div>
     <hr class="footer-rule">
     <div class="grid-row footer-meta">
       <div class="grid-column-two-thirds">
-        <p>&copy; Yorkshire &amp; North East Powerlifting Federation 2026</p>
+        <nav aria-label="Footer: legal">
+          <ul class="footer-legal">
+            <li data-link-group="privacy" hidden><a href="#" data-link="privacy">Privacy policy</a></li>
+            <li data-link-group="franchise" hidden><a href="#" data-link="franchise">Franchise documents</a></li>
+            <li><a href="admin/">Site editor</a></li>
+          </ul>
+        </nav>
       </div>
       <div class="grid-column-one-third">
-        <p><a href="admin/">Site editor</a></p>
+        <p>&copy; Yorkshire &amp; North East Powerlifting Federation 2026</p>
       </div>
     </div>
   </div>
 </footer>
+<script src="assets/js/site-links.js" defer></script>
 <!-- @partial:footer end -->
   <script src="assets/vendor/supabase.js"></script>
   <script src="assets/vendor/marked.min.js"></script>

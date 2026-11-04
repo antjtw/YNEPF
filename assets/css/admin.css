@@ -31,10 +31,6 @@ body.admin main { padding-block: var(--space-6) var(--space-8); }
 .actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2); }
 
 /* Buttons */
-.btn-sm { padding: var(--space-1) var(--space-3); font-size: 0.95rem; }
-.btn-danger { background: #fff; color: var(--rose-800); border-color: var(--rose-500); }
-.btn-danger:hover { background: var(--rose-50); color: var(--rose-800); }
-.btn[disabled] { opacity: 0.5; cursor: not-allowed; }
 .link-btn { background: none; border: 0; padding: var(--space-2) 0; font: inherit; color: var(--link); text-decoration: underline; cursor: pointer; display: block; margin-top: var(--space-3); }
 .icon-btn { min-width: 2.2rem; }
 
@@ -55,22 +51,7 @@ body.admin main { padding-block: var(--space-6) var(--space-8); }
 .empty { color: var(--text-muted); margin: var(--space-3) 0 0; }
 
 /* Forms */
-.field { margin-bottom: var(--space-4); }
-.field label, .field .label { display: block; font-weight: 600; margin-bottom: var(--space-1); }
-.field .help { color: var(--text-muted); font-size: 0.92rem; margin: 0 0 var(--space-2); }
-.field input[type="text"], .field input[type="url"], .field input[type="email"], .field input[type="password"],
-.field input[type="date"], .field input[type="datetime-local"], .field input[type="number"], .field select, .field textarea {
-  width: 100%; font: inherit; padding: var(--space-2) var(--space-3); border: 2px solid var(--grey-700); border-radius: var(--radius); background: #fff; color: var(--text-default);
-}
-.field textarea { min-height: 7rem; resize: vertical; }
-.field-check { display: flex; align-items: flex-start; gap: var(--space-3); }
-.field-check input { width: 1.4rem; height: 1.4rem; margin-top: 0.2rem; flex: none; }
-.field-check label { margin: 0; font-weight: 600; }
-.field-check .help { margin: 0; }
-.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 var(--space-5); }
 @media (max-width: 40rem) { .form-grid { grid-template-columns: 1fr; } }
-.form-error { color: var(--rose-800); background: var(--rose-50); border-left: 4px solid var(--rose-600); padding: var(--space-3); margin: 0 0 var(--space-4); }
-.form-error[hidden] { display: none; }
 
 /* Dialog */
 .admin-dialog { width: min(52rem, calc(100vw - 2rem)); max-height: calc(100vh - 2rem); border: 0; border-radius: var(--radius-lg); padding: 0; box-shadow: 0 20px 60px rgba(7, 18, 26, 0.35); }
@@ -92,8 +73,6 @@ body.admin main { padding-block: var(--space-6) var(--space-8); }
 .social .btn { justify-content: center; width: 100%; }
 .divider { display: flex; align-items: center; gap: var(--space-3); color: var(--text-muted); margin: var(--space-4) 0; font-size: 0.95rem; }
 .divider::before, .divider::after { content: ""; flex: 1; border-top: 1px solid var(--border-strong); }
-.form-info { background: var(--sage-50); border-left: 4px solid var(--sage-600); padding: var(--space-3); margin: 0 0 var(--space-4); }
-.form-info[hidden] { display: none; }
 #noaccess[hidden], #signup-form[hidden] { display: none; }
 .tag-you { margin-left: var(--space-2); }
 .admin-tabs a[hidden] { display: none; }

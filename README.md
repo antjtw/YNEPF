@@ -1,33 +1,33 @@
 # Yorkshire &amp; North East Powerlifting Federation — microsite
 
 A multi-page service site in the GOV.UK / NHS content style, with a lightweight Supabase-backed editor. Built for
-clarity, accessibility (WCAG 2.1 AA) and responsiveness.
+clarity, accessibility (WCAG 2.2 AA) and responsiveness.
 
 ## What's here
 
 ```
-ynepf/
-├── index.html              Homepage: hero, events, resources
-├── committee.html          Committee (Executive / Supporting tabs)
-├── calendar.html           Competition calendar 2026
-├── volunteering.html       Volunteer points (Earning / Spending tabs)
-├── initiatives.html        2026 initiatives hub
-├── faqs.html               FAQs (accordion)
-├── initiatives/
-│   ├── entry-fees.html     Entry fee changes (data table)
-│   └── yne-worlds.html     YNE Worlds 26
-├── assets/
-│   ├── css/
-│   │   ├── tokens.css      Source palette + accessible role mapping
-│   │   ├── base.css        Reset, typography, layout primitives, a11y
-│   │   └── components.css  Header, footer, banners, cards, tabs, tags, table
-│   ├── js/
-│   │   ├── nav.js          Mobile nav toggle (ships on every page)
-│   │   └── tabs.js         Accessible WAI-ARIA tabs
-│   └── partials/
-│       ├── header.html     Single source of truth for the header
-│       └── footer.html     Single source of truth for the footer
-├── build.js                Inlines the shared header/footer into every page
+index.html            Homepage: splash hero, upcoming events, image tiles, news
+calendar.html         Competition calendar (Upcoming / Past tabs)
+records.html          Records, read live from Google Sheets
+news.html, post.html  News list and a single post
+committee.html        The committee and referees
+faqs.html             FAQs
+contact.html          Contact form
+rules.html, rules/    Plain-English rules pages
+chairperson.html      A message from the chairperson
+lifting/              A competition's lifting order, at /lifting-order/<address>
+lifting-order.html    The original YNE Worlds 26 page (self-contained, unchanged)
+admin/                The site editor (sign in, then manage content)
+assets/css/           palette (generated), tokens, base, components, fonts, admin
+assets/js/            public.js, site.js, contact.js, nav.js, site-links.js, admin.js, config.js
+assets/partials/      The shared header (with menu drawer) and footer
+assets/vendor/        Pinned third-party libraries, committed so there is no CDN
+assets/fonts, img/    Cutmark, IBM Plex Sans, logos and image slots
+design/               The colour tokens export: the single source of truth
+supabase/             schema.sql, seed.sql and the email-notification function
+scripts/              build helpers: palette, contrast check, seed generator
+docs/                 Draft documents (privacy policy) to paste into Google Docs
+build.js              Inlines the shared header/footer into every page
 ```
 
 ## How the shared header and footer work
@@ -64,11 +64,68 @@ on the host — the top-level files are the finished site. All paths are
 relative, so it works wherever it is served from, and even when a file is
 opened straight from disk.
 
-## Layout grid
+## Design system
 
-Layout follows the GOV.UK / NHS pattern. Everything sits in a `.container`:
-content is at most **960px** wide (`--container`), centred, with side margins of
-16px on mobile and 30px from the tablet breakpoint. Columns go in a `.grid-row`:
+The look is built from a small set of rules, all in `assets/css/`:
+
+| File | What it holds |
+|------|---------------|
+| `palette.css` | Every colour step. **Generated**, never edited by hand. |
+| `tokens.css` | Colour roles, radii, shadows, motion, the type and spacing scales. |
+| `base.css` | Reset, typography, links, focus, the container and the column grid. |
+| `components.css` | Buttons, header, menu drawer, hero, cards, forms, tables, footer... |
+| `fonts.css` | Cutmark and IBM Plex Sans, both self-hosted (no Google Fonts). |
+
+### Colour: one source of truth
+
+Colours come from the design export in `design/Light theme.tokens.json`. To change
+one, update that file and run `node scripts/generate-palette.js`, which rewrites
+`palette.css`. Components never use raw ramp colours; they use roles from
+`tokens.css`:
+
+- **Iron Oxide** is for actions only: every button, plus the active tab underline.
+- **Slate Navy** is everything else: text, headings, links, surfaces.
+- **Sage Green** is success, **Soft Rose** is errors and failures.
+- **Gold** is used for keyboard focus and nothing else.
+- Neutral Grey is for borders and quiet text.
+
+(In the source file Iron Oxide 300 equals 400 and Slate Navy 800 equals 900, so
+those pairs look identical.)
+
+### Type and spacing (GOV.UK scales)
+
+- **h1 and h2 are Cutmark; h3 and below, and all body text, are IBM Plex Sans.**
+  The hero line (`.display`) is the largest Cutmark, at the GOV.UK 80px step.
+- Sizes follow the GOV.UK scale and step up at the tablet breakpoint (641px):
+  body 16px on mobile and 19px from tablet, h3 18/24, h2 27/36, h1 32/48.
+- Spacing tokens `--space-1` to `--space-9` are the GOV.UK scale: 5, 10, 15, then
+  15/20, 15/25, 20/30, 25/40, 30/50 and 40/60px (mobile/tablet).
+
+### Buttons, links and focus
+
+- **Primary** (filled iron), **secondary** (outline that fills on hover) and
+  **ghost** (text that gets a soft tint on hover). Hover sweeps the fill in, press
+  nudges down, and all of it switches off for `prefers-reduced-motion`. Buttons on
+  dark sections flip to white automatically (add `on-dark` to the section).
+- **Links** are navy, **visited** links are iron, hover thickens the underline.
+- **Focus** is always visible: links get a gold highlight with a dark underline
+  (the GOV.UK pattern); buttons and form fields get a gold ring with a dark inner
+  ring, so it reads on both light and dark backgrounds.
+
+### Shape and motion
+
+Soft, nested shapes: pill buttons, 20px cards, 28px panels, with one deliberate
+"cut" corner on the hero photo as a nod to Cutmark. Modern CSS does the rest and
+degrades quietly: scroll-reveal animations, cross-document view transitions (the
+header stays put between pages), `color-mix()` tints, container-style card layouts
+and a native `<dialog>` for the menu. None of it is needed to read the site.
+
+### Layout grid
+
+Everything sits in a `.container`: content is at most **960px** wide, centred, with
+side margins of 16px on mobile and 30px from tablet. The header, hero and footer
+use `.container-wide` (1200px) and "break out" of the column. Columns go in a
+`.grid-row`:
 
 ```html
 <div class="container">
@@ -80,79 +137,57 @@ content is at most **960px** wide (`--container`), centred, with side margins of
 ```
 
 Widths: `grid-column-full`, `-one-half`, `-one-third`, `-two-thirds`,
-`-one-quarter`, `-three-quarters`. A row's widths should add up to a whole
-(2/3 + 1/3, 1/2 + 1/2, four quarters...). Rows can be nested inside a column.
-There is a 30px gutter between columns.
+`-one-quarter`, `-three-quarters`. A row's widths should add up to a whole. Rows
+nest. There is a 30px gutter. Below **641px** every column is full width and
+stacks in source order, so write the markup in reading order for a phone.
 
-- **Breakpoints:** below **641px** every column is full width and stacks, in the
-  order it appears in the HTML, so write the markup in reading order for a phone.
-  From 641px up the columns sit side by side.
-- **Accessibility:** because stacking follows source order, the reading and tab
-  order is the same on every screen size. Nothing needs horizontal scrolling down
-  to 320px (400% zoom).
-- The shared footer (`assets/partials/footer.html`) is built this way: three
-  one-third columns, then a two-thirds + one-third row. Edit it once and run
-  `node build.js`.
+### Header, menu and footer
 
-## Typography
+`assets/partials/header.html` and `footer.html` are inlined into every page by
+`node build.js`. The header shows the main links inline from 1024px and a
+**Menu** button at every size, which opens a slide-out drawer (a native dialog:
+focus is trapped, Esc closes it, the page behind is inert).
 
-- **Headings:** Cutmark (a variable font), self-hosted from `assets/fonts/`.
-  Declared in `assets/css/fonts.css`. Used at display weights with a slightly
-  condensed width (`font-variation-settings`) for a distinctive, industrial feel.
-- **Body:** IBM Plex Sans, loaded from Google Fonts via the `<link>` in each
-  page `<head>`. To self-host it instead (recommended for production, removes the
-  external request), download the IBM Plex Sans woff2 files, drop them in
-  `assets/fonts/`, add an `@font-face` block to `fonts.css`, and remove the
-  Google Fonts `<link>` from each page.
+**Document and social links** (privacy policy, franchise documents, Instagram, the
+Facebook group) are addresses you paste into `assets/js/site-links.js`. A link
+with no address stays hidden everywhere (footer, menu, contact page), so there are
+never dead links. The privacy policy and franchise documents are meant to be
+Google Docs: share them as "Anyone with the link: Viewer" and paste the link. A
+starting draft of the privacy policy is in `docs/privacy-policy-draft.md`.
 
-## Logo
+### Images
 
-The federation crest is in `assets/img/` as two SVGs:
-`logo-colour.svg` (navy ring, coral centre) and `logo-white.svg` (used in the
-navy header). The white version can be recoloured by changing its `fill`
-values if you need it on a different background.
+The homepage is built around image slots with on-brand placeholder artwork, so it
+looks finished before real photos arrive. To swap one, replace the file or change
+the `src` in `index.html` (and give a real `alt` where the picture matters):
 
-## Colour palette
+| Slot | File | Suggested size | Notes |
+|------|------|----------------|-------|
+| Hero (right of the headline) | `assets/img/hero.svg` | about 1200 x 1320 | Cropped with a cut corner; a dark gradient sits over the bottom. |
+| Tiles (three, "Find your place") | `tile-first-meet.svg`, `tile-compete.svg`, `tile-volunteer.svg` | about 960 x 1280, portrait | Text sits on a dark gradient, so busy photos are fine. |
 
-The palette is derived from the supplied Figma "Light theme" tokens (Iron Oxide,
-Slate Navy, Golden Sandstone, Neutral Grey, Sage Green, Soft Rose). The raw
-ramps are kept in `tokens.css` for reference, but components consume the
-**semantic role tokens** below it. Every text/background pairing was checked to
-meet WCAG 2.1 AA:
+Keep photos under about 300KB each (export as JPG or WebP).
 
-| Role | Token | Contrast |
-|------|-------|----------|
-| Body text | grey-900 on white | 15.4:1 |
-| Muted text | grey-700 on white | 6.9:1 |
-| Links | navy-700 on white | 10.9:1 |
-| Primary button | white on iron-600 | 5.7:1 |
-| Header bar | white on navy-800 | 14.3:1 |
-| Breadcrumb / footer | navy-800 on navy-50 | 12.1:1 |
-| Tag: entry open | sage-800 on sage-100 | 7.2:1 |
-| Tag: entry closed | grey-800 on grey-100 | 7.7:1 |
-| Tag: open position | rose-800 on rose-100 | 6.4:1 |
+### Logo
 
-The natural button colour (iron-500) only reaches 4.48:1 against white, just
-under the 4.5:1 threshold, so the primary button uses iron-600 instead. The
-focus ring uses Golden Sandstone (gold-500), GOV.UK style.
+The federation crest is in `assets/img/` as `logo-colour.svg` (navy ring, coral
+centre) and `logo-white.svg` (used on dark backgrounds).
 
-Only a light theme was supplied, so only a light theme is implemented. Dark mode
-can be added later by defining a second set of role tokens under a
-`@media (prefers-color-scheme: dark)` block or a `[data-theme="dark"]` selector;
-the components already read from the role tokens, so no component CSS would
-change.
+### Accessibility
 
-## Accessibility notes
+The site is built to WCAG 2.2 AA and checked three ways:
 
-- Semantic landmarks (`header`, `nav`, `main`, `footer`) on every page
-- One `h1` per page and a correct heading order (audited)
-- Skip-to-content link
-- Visible keyboard focus everywhere; `prefers-reduced-motion` respected
-- Tabs follow the WAI-ARIA Tabs pattern (arrow / Home / End keys, deep-linkable
-  by `#panel-id`)
-- FAQs use native `<details>`/`<summary>` so they work without JavaScript
-- The data table uses real `<th scope>` headers and a caption
-- Decorative SVG icons are `aria-hidden`; the hero image has a text alternative
+- `node scripts/check-contrast.js` checks 58 text/background pairings straight
+  from the palette, including the worst-case spots behind the hero glow.
+- Every page type (including the open menu, form errors and every editor tab) was
+  run through the axe-core checker at desktop and phone widths: no violations.
+- Text was also checked against the real rendered pixels behind it (1,353 text
+  items), which catches gradients and overlapping decoration.
+
+Other points: semantic landmarks on every page (`header`, `nav`, `main`, `footer`),
+one `h1` per page with a sensible heading order, a skip link, visible keyboard
+focus everywhere, links and controls whose accessible name contains their visible
+text, and `prefers-reduced-motion` respected.
 
 ## Content management (Supabase)
 
@@ -284,6 +319,37 @@ supabase/seed.sql       The existing committee, FAQs and 2026 calendar, ready to
   records elsewhere, edit the entry and paste the new link; leaving the link
   blank hides that table. Google refreshes published sheets every few minutes.
 - All user-written Markdown is sanitised before it is shown on the site.
+
+### Contact form
+
+`contact.html` collects name, email, subject and message with GOV.UK-style
+validation (an error summary that takes focus, plus a message on each field), a
+hidden honeypot for bots, and a confirmation panel. Visitors can only **add** a
+message; they cannot read any. Messages land in the `contact_messages` table and
+appear in the editor under **Messages**, with a count of what is waiting, a reply
+button (opens your email app) and mark-as-handled. The database enforces length
+limits and a flood limit (3 per email address and 60 in total per hour).
+
+**Email notification (optional, recommended).** So the entries inbox hears about a
+message straight away, a small function emails it via Resend. About ten minutes:
+
+1. Sign up at resend.com with `ynepfentries@gmail.com` and create an API key.
+   (Until you verify your own domain there, Resend can only email the account
+   owner, which is exactly the entries address.)
+2. In Supabase, **Edge Functions > Deploy a new function**, name it
+   `notify-contact`, and paste in `supabase/functions/notify-contact/index.ts`
+   and `build-email.ts` from this repo.
+3. **Edge Functions > Secrets**: add `RESEND_API_KEY`, and a made-up
+   `WEBHOOK_SECRET` (any long random string).
+4. **Database > Webhooks > Create**: table `contact_messages`, event **Insert**,
+   type **Supabase Edge Functions**, pick `notify-contact`, and add the HTTP header
+   `x-webhook-secret` with the same value as `WEBHOOK_SECRET`.
+5. Send yourself a test from the Contact page.
+
+Without these steps the form still works and messages still appear in the
+editor; you just will not get an email. The email logic (`build-email.ts`) is
+tested, including that line breaks cannot be smuggled into the email headers; the
+function itself has not been run against a live Resend account.
 
 ### Notes
 

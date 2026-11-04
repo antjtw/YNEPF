@@ -36,6 +36,8 @@ const pages = [
   "post.html",
   "faqs.html",
   "chairperson.html",
+  "rules.html",
+  "contact.html",
   "rules/the-lifts.html",
   "rules/categories.html",
   "rules/squat.html",

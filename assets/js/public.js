@@ -55,7 +55,7 @@
         el("h3", { class: "past-title" }, c.name),
         el("p", { class: "past-meta" }, Y.dateRange(c.start_date, c.end_date), c.venue_name ? " · " + c.venue_name : "")),
       c.openipf_url ? el("a", { class: "past-results", href: c.openipf_url, target: "_blank", rel: "noopener",
-        "aria-label": "View " + c.name + " results on OpenIPF (opens in a new tab)" }, "View results on OpenIPF ", Y.extIcon()) : null);
+        "aria-label": "View results on OpenIPF for " + c.name + " (opens in a new tab)" }, "View results on OpenIPF ", Y.extIcon()) : null);
   }
 
   function calendar(root) {
@@ -169,7 +169,7 @@
     }
     if (col === "instagram") {
       return el("td", null, l.instagram ? el("a", { class: "lo-ig", href: "https://www.instagram.com/" + encodeURIComponent(l.instagram) + "/",
-        target: "_blank", rel: "noopener", "aria-label": l.name + " on Instagram (opens in a new tab)" }, "@" + l.instagram) : "");
+        target: "_blank", rel: "noopener", "aria-label": "@" + l.instagram + " on Instagram, " + l.name + " (opens in a new tab)" }, "@" + l.instagram) : "");
     }
     return el("td", null, col === "glp" ? fmtGlp(l.glp) : l[col]);
   }
@@ -254,11 +254,34 @@
   }
 
   // ---- Home: next events + latest news ---------------------------------------
+  var NEXT_TAG = { open: ["tag tag-open", "Entry open"], closed: ["tag tag-closed", "Entry closed"], full: ["tag tag-full", "Entries full"], soon: ["tag tag-closed", "Entry not open yet"] };
+  // The "next competition" card floating over the home page hero.
+  function renderNextUp(host, c) {
+    var st = Y.compState(c), tag = NEXT_TAG[st];
+    var map = Y.mapsUrl(c);
+    var actions = [];
+    if (c.entry_url && st === "open") actions.push(el("a", { class: "btn btn-primary btn-sm", href: c.entry_url, target: "_blank", rel: "noopener",
+      "aria-label": "Enter now: " + c.name + " (opens in a new tab)" }, "Enter now"));
+    if (st === "full" && c.waitlist_url) actions.push(el("a", { class: "btn btn-secondary btn-sm", href: c.waitlist_url, target: "_blank", rel: "noopener" }, "Join the waiting list"));
+    if (c.lifting_order_url) actions.push(el("a", { class: "btn btn-secondary btn-sm", href: Y.liftingHref(c) }, "Lifting order"));
+    if (!actions.length) actions.push(el("a", { class: "btn btn-secondary btn-sm", href: "calendar.html" }, "Competition details"));
+    host.replaceChildren(
+      el("p", { class: "eyebrow" }, "Next competition"),
+      el("h2", null, c.name),
+      el("p", null, Y.dateRange(c.start_date, c.end_date), c.venue_name ? " · " + c.venue_name : ""),
+      tag ? el("p", null, el("span", { class: tag[0] }, tag[1])) : null,
+      el("div", { class: "event-actions" }, actions));
+    host.hidden = false;
+  }
+
   function home() {
     var ev = document.getElementById("home-events");
     var nw = document.getElementById("home-news");
-    if (ev) {
+    var nu = document.getElementById("next-up");
+    if (ev || nu) {
       upcomingAndPast().then(function (r) {
+        if (nu && r.upcoming.length) renderNextUp(nu, r.upcoming[0]);
+        if (!ev) return;
         var next = r.upcoming.slice(0, 4);
         ev.replaceChildren();
         if (!next.length) {
@@ -349,6 +372,12 @@
     return el("a", { class: "p-social", href: "https://www.instagram.com/" + encodeURIComponent(handle) + "/",
       "aria-label": name + " on Instagram", target: "_blank", rel: "noopener" }, Y.svg(Y.ICONS.instagram));
   }
+  function initials(name) {
+    var w = (name || "").replace(/\(.*?\)/g, "").trim().split(/\s+/).filter(Boolean);
+    return ((w[0] || "?").charAt(0) + (w.length > 1 ? w[w.length - 1].charAt(0) : "")).toUpperCase();
+  }
+  function hash(str) { var h = 0; for (var i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0; return h; }
+
   function committee(root) {
     Promise.all([
       load("org_sections", function (t) { return t.select("*").order("sort_order"); }),
@@ -358,12 +387,13 @@
       res[0].forEach(function (s, i) {
         var people = res[1].filter(function (p) { return p.section_id === s.id; });
         root.appendChild(el("h2", i === 0 ? { style: "margin-top:0;" } : null, s.title));
-        if (s.description) root.appendChild(el("p", { class: "lede" }, s.description));
-        root.appendChild(el("ul", { class: "carousel carousel-bleed", role: "list" },
+        if (s.description) root.appendChild(el("p", { class: "section-note" }, s.description));
+        root.appendChild(el("ul", { class: "people-grid", role: "list" },
           people.map(function (p) {
-            return el("li", { class: "person-card" },
-              el("img", { class: "photo", src: "assets/img/person-placeholder.png", alt: "", width: "240", height: "296" }),
-              el("div", { class: "p-head" }, el("p", { class: "p-name" }, p.name), p.role ? el("p", { class: "p-role" }, p.role) : null),
+            return el("li", { class: "person-card reveal" },
+              el("span", { class: "avatar a" + (hash(p.name) % 5 + 1), "aria-hidden": "true" }, initials(p.name)),
+              el("p", { class: "p-name" }, p.name),
+              p.role ? el("p", { class: "p-role" }, p.role) : null,
               p.blurb ? el("p", { class: "p-blurb" }, p.blurb) : null,
               p.instagram ? igLink(p.instagram, p.name) : null);
           })));
