@@ -158,8 +158,11 @@ supabase/seed.sql       The existing committee, FAQs and 2026 calendar, ready to
 5. **Authentication > URL Configuration:** set the Site URL to your live site, and
    add `https://YOUR-SITE/admin/` to Redirect URLs. This is needed for password
    reset emails and for Google/Apple sign-in to return to the editor.
-6. **Project Settings > API:** copy the Project URL and the `anon` public key into
-   `assets/js/config.js`. Never use the `service_role` key anywhere in this repo.
+6. **Project URL and key:** copy the Project URL (`https://<project-ref>.supabase.co`,
+   shown under the Connect button, or Project Settings > Data API) and the
+   **publishable** key (Project Settings > API Keys; a legacy `anon` key also works)
+   into `assets/js/config.js`. Never use a secret key or the `service_role` key
+   anywhere in this repo.
 7. Deploy as before (Vercel). Open `/admin` and sign in.
 
 ### Who can edit, and how people sign in
