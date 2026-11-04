@@ -23,7 +23,7 @@
 <header class="site-header">
   <div class="container-wide header-inner">
     <a class="brand" href="index.html" data-nav="home">
-      <img class="brand-mark-img" src="assets/img/logo-white.svg" alt="" width="44" height="44" aria-hidden="true">
+      <img class="brand-mark-img" src="assets/img/logo-colour.svg" alt="" width="44" height="44" aria-hidden="true">
       <span class="brand-name">
         <span>Yorkshire &amp; North East</span>
         <span>Powerlifting Federation</span>
@@ -47,7 +47,7 @@
     </div>
   </div>
 </header>
-<dialog id="site-menu" class="drawer on-dark" aria-labelledby="site-menu-title">
+<dialog id="site-menu" class="drawer" aria-labelledby="site-menu-title">
   <div class="drawer-panel">
     <div class="drawer-head">
       <p class="drawer-title" id="site-menu-title">Menu</p>
@@ -76,28 +76,19 @@
 </dialog>
 <!-- @partial:header end -->
 
-  <section class="hero on-dark" aria-labelledby="hero-title">
-    <div class="hero-dots" aria-hidden="true"></div>
-    <div class="hero-rings" aria-hidden="true"></div>
+  <section class="hero" aria-labelledby="hero-title">
     <div class="container-wide hero-grid">
       <div class="hero-copy">
-        <p class="eyebrow">Yorkshire &amp; North East Powerlifting Federation</p>
         <h1 id="hero-title" class="display">The home of <em>drug tested</em> powerlifting in Yorkshire and the North East</h1>
         <p class="hero-lede">A full calendar of sanctioned competitions, from your first novice meet to our divisional championships. Everyone is welcome on the platform.</p>
         <div class="hero-actions">
           <a class="btn btn-primary" href="calendar.html">See the competition calendar</a>
           <a class="btn btn-secondary" href="faqs.html">New to powerlifting?</a>
         </div>
-        <ul class="hero-points" aria-label="What to expect">
-          <li>Drug tested</li>
-          <li>Novice to championship</li>
-          <li>Everyone welcome</li>
-        </ul>
       </div>
       <div class="hero-media">
-        <!-- Replace hero.svg with a photo (hero.jpg, about 1200 x 1320, landscape or portrait both crop well)
-             and give it a short alt text describing the picture. -->
-        <figure class="hero-photo" style="margin:0;">
+        <!-- Replace hero.svg with a photo (hero.jpg, about 1200 x 1230) and give it a short alt text describing the picture. -->
+        <figure class="hero-photo">
           <img src="assets/img/hero.svg" alt="" width="800" height="880" fetchpriority="high">
         </figure>
         <aside class="next-up" id="next-up" aria-label="Next competition" aria-live="polite" hidden></aside>
@@ -105,18 +96,16 @@
     </div>
   </section>
 
-  <main id="main" style="padding-top:var(--space-9);">
+  <main id="main">
     <div class="container">
       <div class="layout-split">
         <section aria-labelledby="events-heading" class="reveal">
-          <p class="eyebrow">What is coming up</p>
           <h2 id="events-heading" style="margin-top:0;">Upcoming events</h2>
           <ul class="event-list" id="home-events" aria-live="polite"><li><p>Loading…</p></li></ul>
           <p style="margin-top:var(--space-6);"><a class="btn btn-secondary" href="calendar.html">See the full competition calendar</a></p>
         </section>
 
         <aside aria-labelledby="resources-heading" class="reveal">
-          <p class="eyebrow">Before you lift</p>
           <h2 id="resources-heading" style="margin-top:0; font-size:var(--fs-27);">Resources</h2>
           <ul class="resource-list">
             <li><div class="resource"><span class="resource-icon iron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="2"/><circle cx="8.5" cy="11" r="2" stroke="currentColor" stroke-width="2"/><path d="M13 10h5M13 14h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span><div><h3><a href="https://www.britishpowerlifting.org/membership/">Buy a membership</a></h3><p>To lift in the YNEPF you need a valid British Powerlifting membership.</p></div></div></li>
@@ -129,13 +118,11 @@
     </div>
   </main>
 
-  <section class="band band--deep on-dark" aria-labelledby="tiles-heading" style="margin-top:var(--space-9);">
-    <div class="hero-dots" aria-hidden="true" style="opacity:.5;"></div>
+  <section class="section" aria-labelledby="tiles-heading">
     <div class="container-wide">
       <div class="section-head reveal">
         <div>
-          <p class="eyebrow">Lift with us</p>
-          <h2 id="tiles-heading" style="color:#fff;">Find your place on the platform</h2>
+          <h2 id="tiles-heading" style="margin-top:0;">Find your place on the platform</h2>
         </div>
       </div>
       <!-- Swap each tile-*.svg for a photo (about 960 x 1280, portrait). The text sits on a dark gradient,
@@ -157,11 +144,10 @@
     </div>
   </section>
 
-  <section class="section section--tint" aria-labelledby="news-heading" style="margin-top:0;">
+  <section class="section" aria-labelledby="news-heading" style="padding-top:0;">
     <div class="container">
       <div class="section-head reveal">
         <div>
-          <p class="eyebrow">From the division</p>
           <h2 id="news-heading" style="margin-top:0;">Latest news</h2>
         </div>
         <a class="btn btn-secondary btn-sm" href="news.html">Read all news</a>
@@ -170,7 +156,7 @@
     </div>
   </section>
 
-  <section class="section" aria-labelledby="cta-heading" style="padding-bottom:0;">
+  <section class="section" aria-labelledby="cta-heading" style="padding-top:0; padding-bottom:0;">
     <div class="container">
       <div class="cta on-dark reveal">
         <div>

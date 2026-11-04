@@ -96,7 +96,7 @@
       } else {
         var picker = el("div", { class: "year-picker", role: "group", "aria-label": "Choose a year" });
         pastYears.forEach(function (g) {
-          pastButtons[g.key] = el("button", { type: "button", class: "btn btn-secondary btn-sm", "aria-pressed": "false",
+          pastButtons[g.key] = el("button", { type: "button", "aria-pressed": "false",
             onclick: function () { pickYear(g.key, true); } }, g.key);
           pastPanels[g.key] = el("div", { id: "past-" + g.key, role: "region", "aria-label": "Competitions in " + g.key, hidden: true },
             el("ul", { class: "past-list" }, g.rows.map(pastItem)));

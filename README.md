@@ -104,7 +104,8 @@ those pairs look identical.)
 ### Buttons, links and focus
 
 - **Primary** (filled iron), **secondary** (outline that fills on hover) and
-  **ghost** (text that gets a soft tint on hover). Hover sweeps the fill in, press
+  **ghost** (plain text that gets a soft tint on hover; used for row actions in
+  the editor). Hover sweeps the fill in, press
   nudges down, and all of it switches off for `prefers-reduced-motion`. Buttons on
   dark sections flip to white automatically (add `on-dark` to the section).
 - **Links** are navy, **visited** links are iron, hover thickens the underline.
@@ -112,18 +113,27 @@ those pairs look identical.)
   (the GOV.UK pattern); buttons and form fields get a gold ring with a dark inner
   ring, so it reads on both light and dark backgrounds.
 
-### Shape and motion
+### Clean by design
 
-Soft, nested shapes: pill buttons, 20px cards, 28px panels, with one deliberate
-"cut" corner on the hero photo as a nod to Cutmark. Modern CSS does the rest and
-degrades quietly: scroll-reveal animations, cross-document view transitions (the
-header stays put between pages), `color-mix()` tints, container-style card layouts
-and a native `<dialog>` for the menu. None of it is needed to read the site.
+The look is deliberately quiet: an **off-white page** with plain **white cards**
+that are separated by a soft shadow, not outlines. There is no decorative
+pattern, glow or ring anywhere; the only imagery is the photos themselves. Space,
+type and one accent colour do the work. Shapes are soft (pill buttons, 20px
+cards, 28px panels).
+
+- **Tabs and pickers** (the calendar tabs, the year picker, the editor's tabs) are
+  one segmented control: a light rounded tray, with the chosen item as a white
+  box. No underlines.
+- **Header and menu** are light, with the colour crest. The footer is the one dark
+  block, to anchor the page.
+- **Motion** is small and switches off for `prefers-reduced-motion`: the button
+  fill sweep, a soft header shadow as you scroll, scroll-reveal, fades between
+  pages and the sliding menu. None of it is needed to read the site.
 
 ### Layout grid
 
 Everything sits in a `.container`: content is at most **960px** wide, centred, with
-side margins of 16px on mobile and 30px from tablet. The header, hero and footer
+side margins of 16px on mobile and 30px from tablet. The header, hero, image tiles and footer
 use `.container-wide` (1200px) and "break out" of the column. Columns go in a
 `.grid-row`:
 
@@ -163,7 +173,7 @@ the `src` in `index.html` (and give a real `alt` where the picture matters):
 
 | Slot | File | Suggested size | Notes |
 |------|------|----------------|-------|
-| Hero (right of the headline) | `assets/img/hero.svg` | about 1200 x 1320 | Cropped with a cut corner; a dark gradient sits over the bottom. |
+| Hero (right of the headline) | `assets/img/hero.svg` | about 1200 x 1230 | Rounded corners; the "next competition" card sits over the bottom left. |
 | Tiles (three, "Find your place") | `tile-first-meet.svg`, `tile-compete.svg`, `tile-volunteer.svg` | about 960 x 1280, portrait | Text sits on a dark gradient, so busy photos are fine. |
 
 Keep photos under about 300KB each (export as JPG or WebP).
@@ -177,12 +187,12 @@ centre) and `logo-white.svg` (used on dark backgrounds).
 
 The site is built to WCAG 2.2 AA and checked three ways:
 
-- `node scripts/check-contrast.js` checks 58 text/background pairings straight
-  from the palette, including the worst-case spots behind the hero glow.
+- `node scripts/check-contrast.js` checks 60 text/background pairings straight
+  from the palette.
 - Every page type (including the open menu, form errors and every editor tab) was
   run through the axe-core checker at desktop and phone widths: no violations.
-- Text was also checked against the real rendered pixels behind it (1,353 text
-  items), which catches gradients and overlapping decoration.
+- Text was also checked against the real rendered pixels behind it (about 1,300
+  text items), which catches photos, gradients and overlapping elements.
 
 Other points: semantic landmarks on every page (`header`, `nav`, `main`, `footer`),
 one `h1` per page with a sensible heading order, a skip link, visible keyboard

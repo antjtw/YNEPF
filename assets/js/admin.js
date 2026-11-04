@@ -30,7 +30,7 @@
       .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
   }
   function btn(label, onclick, cls, extra) {
-    return el("button", Object.assign({ type: "button", class: "btn btn-sm " + (cls || "btn-secondary"), onclick: onclick }, extra || {}), label);
+    return el("button", Object.assign({ type: "button", class: "btn btn-sm " + (cls || "btn-ghost"), onclick: onclick }, extra || {}), label);
   }
   function show(node, visible) { node.hidden = !visible; }
   function nowLocalInput() { return Y.toLondonInput(new Date().toISOString()); }
@@ -342,7 +342,7 @@
             el("td", null, status),
             el("td", null, el("span", { class: "actions" },
               btn("Edit", function () { editPost(p); }),
-              el("a", { class: "btn btn-sm btn-secondary", href: "../post.html?p=" + encodeURIComponent(p.slug), target: "_blank", rel: "noopener" }, "View"),
+              el("a", { class: "btn btn-sm btn-ghost", href: "../post.html?p=" + encodeURIComponent(p.slug), target: "_blank", rel: "noopener" }, "View"),
               btn("Delete", function () { removePost(p); }, "btn-danger"))));
         })))));
     }).catch(function (e) { panel.lastChild.textContent = friendly(e); });
@@ -483,8 +483,8 @@
     }).catch(function (e) { panel.lastChild.textContent = friendly(e); });
 
     function moveBtns(list, index, table, key, label) {
-      var up = btn("↑", function () { move(list, index, -1, table, key + "u"); }, "btn-secondary icon-btn", { "aria-label": "Move " + label + " up", "data-key": key + "u" });
-      var down = btn("↓", function () { move(list, index, 1, table, key + "d"); }, "btn-secondary icon-btn", { "aria-label": "Move " + label + " down", "data-key": key + "d" });
+      var up = btn("↑", function () { move(list, index, -1, table, key + "u"); }, "btn-ghost icon-btn", { "aria-label": "Move " + label + " up", "data-key": key + "u" });
+      var down = btn("↓", function () { move(list, index, 1, table, key + "d"); }, "btn-ghost icon-btn", { "aria-label": "Move " + label + " down", "data-key": key + "d" });
       up.disabled = index === 0;
       down.disabled = index === list.length - 1;
       return [up, down];
@@ -630,8 +630,8 @@
       if (!rows.length) { panel.appendChild(el("p", { class: "empty" }, "No record sheets yet.")); return; }
       var list = el("ul", { class: "item-list card", style: "padding:0 var(--space-5);" });
       rows.forEach(function (r, i) {
-        var up = btn("↑", function () { moveSource(rows, i, -1); }, "btn-secondary icon-btn", { "aria-label": "Move " + r.title + " up" });
-        var down = btn("↓", function () { moveSource(rows, i, 1); }, "btn-secondary icon-btn", { "aria-label": "Move " + r.title + " down" });
+        var up = btn("↑", function () { moveSource(rows, i, -1); }, "btn-ghost icon-btn", { "aria-label": "Move " + r.title + " up" });
+        var down = btn("↓", function () { moveSource(rows, i, 1); }, "btn-ghost icon-btn", { "aria-label": "Move " + r.title + " down" });
         up.disabled = i === 0; down.disabled = i === rows.length - 1;
         list.appendChild(el("li", { class: "item-row" },
           el("div", { class: "item-main" }, el("p", { class: "item-title" }, r.title),

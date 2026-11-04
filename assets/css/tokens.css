@@ -22,9 +22,9 @@
 
 :root {
   /* ---- Surfaces ---- */
-  --surface-page: #FFFFFF;
-  --surface-canvas: var(--navy-10);       /* soft tinted section background */
-  --surface-raised: #FFFFFF;              /* cards */
+  --surface-page: var(--navy-10);         /* off-white page background */
+  --surface-canvas: var(--navy-10);
+  --surface-raised: #FFFFFF;              /* cards: white on the off-white page */
   --surface-muted: var(--navy-50);
   --surface-inverse: var(--navy-800);     /* header bar, dark bands */
   --surface-deep: var(--navy-950);        /* hero, drawer, footer */
@@ -59,8 +59,8 @@
   --info-bg: var(--navy-50);      --info-border: var(--navy-600);     --info-text: var(--navy-800);
 
   /* ---- Borders ---- */
-  --border: var(--navy-100);
-  --border-strong: var(--grey-700);       /* form fields: 3:1+ against white */
+  --border: var(--navy-50);               /* quiet hairlines, used sparingly */
+  --border-strong: var(--grey-500);       /* form fields: 3.9:1 against white */
 
   /* ---- Focus (gold, never used for anything else) ---- */
   --focus: var(--gold-300);               /* highlight / ring */
@@ -76,14 +76,15 @@
   /* ---- Radii: soft, nested shapes ---- */
   --radius-sm: 0.5rem;     /* 8px   chips, inputs inside cards */
   --radius: 0.75rem;       /* 12px  buttons, inputs */
+  --radius-md: 1rem;       /* 16px  segmented controls */
   --radius-lg: 1.25rem;    /* 20px  cards */
   --radius-xl: 1.75rem;    /* 28px  panels, hero media */
   --radius-pill: 999px;
 
-  /* ---- Elevation (navy-950 tinted) ---- */
-  --shadow-sm: 0 1px 2px rgb(7 18 26 / 0.06), 0 1px 3px rgb(7 18 26 / 0.05);
-  --shadow-md: 0 10px 28px -12px rgb(7 18 26 / 0.22), 0 2px 6px rgb(7 18 26 / 0.05);
-  --shadow-lg: 0 28px 60px -24px rgb(7 18 26 / 0.45);
+  /* ---- Elevation: soft, tinted from the palette. Cards use shadow, not outlines. ---- */
+  --shadow-sm: 0 1px 2px color-mix(in srgb, var(--navy-950) 5%, transparent);
+  --shadow-md: 0 14px 32px -18px color-mix(in srgb, var(--navy-950) 22%, transparent), 0 1px 2px color-mix(in srgb, var(--navy-950) 5%, transparent);
+  --shadow-lg: 0 28px 60px -28px color-mix(in srgb, var(--navy-950) 40%, transparent);
 
   /* ---- Layout ---- */
   --measure: 38rem;              /* readable text column (~66 characters) */
