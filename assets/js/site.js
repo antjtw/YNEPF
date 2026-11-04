@@ -392,7 +392,7 @@
     todayLondon: todayLondon, yearOf: function (c) { return c.start_date.slice(0, 4); }, addDays: addDays, dateRange: dateRange, longDate: longDate,
     compState: compState, entryLine: entryLine, mapsUrl: mapsUrl, competitionCard: competitionCard,
     parseLiftingOrder: parseLiftingOrder, liftingHref: liftingHref, longDay: longDay, igHandle: igHandle,
-    sheetCsvUrl: sheetCsvUrl, parseCsv: parseCsv, loadSheet: loadSheet,
+    extIcon: Y_EXT, sheetCsvUrl: sheetCsvUrl, parseCsv: parseCsv, loadSheet: loadSheet,
     notice: notice, guard: guard
   };
 })();

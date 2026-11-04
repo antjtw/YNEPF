@@ -48,52 +48,102 @@
     }));
   }
 
+  // A past competition is deliberately plain: name, date, venue and a results link.
+  function pastItem(c) {
+    return el("li", { class: "past-item" },
+      el("div", { class: "past-main" },
+        el("h3", { class: "past-title" }, c.name),
+        el("p", { class: "past-meta" }, Y.dateRange(c.start_date, c.end_date), c.venue_name ? " · " + c.venue_name : "")),
+      c.openipf_url ? el("a", { class: "past-results", href: c.openipf_url, target: "_blank", rel: "noopener",
+        "aria-label": "View " + c.name + " results on OpenIPF (opens in a new tab)" }, "View results on OpenIPF ", Y.extIcon()) : null);
+  }
+
   function calendar(root) {
     upcomingAndPast().then(function (r) {
       root.replaceChildren();
 
-      // Upcoming: soonest first, under a year subheading when it spans years.
-      root.appendChild(el("h2", { id: "upcoming-heading", style: "margin-top:0;" }, "Upcoming competitions"));
+      // ---- Upcoming: soonest first, under a year subheading when it spans years.
+      var up = el("div", { id: "panel-upcoming", role: "tabpanel", "aria-labelledby": "tab-upcoming", tabindex: "0" },
+        el("h2", { class: "visually-hidden" }, "Upcoming competitions"));
       if (!r.upcoming.length) {
-        root.appendChild(el("p", null, "No competitions are scheduled right now. Check back soon."));
+        up.appendChild(el("p", null, "No competitions are scheduled right now. Check back soon."));
       } else {
         var years = group(r.upcoming, Y.yearOf);
-        if (years.length === 1) root.appendChild(cardList(years[0].rows, "h3"));
+        if (years.length === 1) up.appendChild(cardList(years[0].rows, "h3"));
         else years.forEach(function (g) {
-          root.appendChild(el("h3", { class: "year-heading" }, g.key));
-          root.appendChild(cardList(g.rows, "h4"));
+          up.appendChild(el("h3", { class: "year-heading" }, g.key));
+          up.appendChild(cardList(g.rows, "h4"));
         });
       }
 
-      // Past: one year at a time, most recent year first.
-      if (!r.past.length) return;
-      var pastYears = group(r.past, Y.yearOf); // r.past is already newest first
-      root.appendChild(el("h2", { id: "past" }, "Past competitions"));
-      root.appendChild(el("p", null, "Choose a year. Where results are on OpenIPF, each competition links to them."));
-      var buttons = {}, panels = {};
-      var picker = el("div", { class: "year-picker", role: "group", "aria-labelledby": "past" });
-      var wrap = el("div", { id: "past-panels" });
-      function pick(year, fromUser) {
+      // ---- Past: a row of years (newest first); inside a year, January to December.
+      var past = el("div", { id: "panel-past", role: "tabpanel", "aria-labelledby": "tab-past", tabindex: "0", hidden: true },
+        el("h2", { class: "visually-hidden" }, "Past competitions"));
+      var pastPanels = {}, pastButtons = {};
+      var pastYears = group(r.past.slice().sort(function (a, b) {
+        return a.start_date < b.start_date ? -1 : a.start_date > b.start_date ? 1 : 0;
+      }), Y.yearOf).sort(function (a, b) { return b.key.localeCompare(a.key); });
+      function pickYear(year, fromUser) {
         pastYears.forEach(function (g) {
           var on = g.key === year;
-          buttons[g.key].setAttribute("aria-pressed", String(on));
-          panels[g.key].hidden = !on;
+          pastButtons[g.key].setAttribute("aria-pressed", String(on));
+          pastPanels[g.key].hidden = !on;
         });
         if (fromUser) { try { history.replaceState(null, "", "#past-" + year); } catch (e) { /* file:// */ } }
       }
-      pastYears.forEach(function (g) {
-        buttons[g.key] = el("button", { type: "button", class: "btn btn-secondary btn-sm", "aria-pressed": "false",
-          onclick: function () { pick(g.key, true); } }, g.key + " (" + g.rows.length + ")");
-        panels[g.key] = el("div", { id: "past-" + g.key, role: "region", "aria-label": "Competitions in " + g.key, hidden: true },
-          cardList(g.rows, "h3", { noStatus: true }));
-        picker.appendChild(buttons[g.key]);
-        wrap.appendChild(panels[g.key]);
+      if (!pastYears.length) {
+        past.appendChild(el("p", null, "No past competitions yet."));
+      } else {
+        var picker = el("div", { class: "year-picker", role: "group", "aria-label": "Choose a year" });
+        pastYears.forEach(function (g) {
+          pastButtons[g.key] = el("button", { type: "button", class: "btn btn-secondary btn-sm", "aria-pressed": "false",
+            onclick: function () { pickYear(g.key, true); } }, g.key);
+          pastPanels[g.key] = el("div", { id: "past-" + g.key, role: "region", "aria-label": "Competitions in " + g.key, hidden: true },
+            el("ul", { class: "past-list" }, g.rows.map(pastItem)));
+          picker.appendChild(pastButtons[g.key]);
+        });
+        past.appendChild(picker);
+        pastYears.forEach(function (g) { past.appendChild(pastPanels[g.key]); });
+        pickYear(pastYears[0].key, false);
+      }
+
+      // ---- Tabs (WAI-ARIA tabs pattern: arrows, Home and End; deep links #upcoming, #past, #past-2025)
+      var defs = [{ id: "upcoming", label: "Upcoming competitions", panel: up }, { id: "past", label: "Past competitions", panel: past }];
+      var tabEls = {};
+      var tablist = el("div", { class: "tablist", role: "tablist", "aria-label": "Competitions" });
+      function select(id, opts) {
+        opts = opts || {};
+        defs.forEach(function (d) {
+          var on = d.id === id;
+          tabEls[d.id].setAttribute("aria-selected", String(on));
+          tabEls[d.id].tabIndex = on ? 0 : -1;
+          d.panel.hidden = !on;
+        });
+        if (opts.focus) tabEls[id].focus();
+        if (opts.fromUser) { try { history.replaceState(null, "", "#" + id); } catch (e) { /* file:// */ } }
+      }
+      defs.forEach(function (d, i) {
+        var t = el("button", { type: "button", role: "tab", id: "tab-" + d.id, "aria-controls": "panel-" + d.id,
+          "aria-selected": "false", tabindex: "-1", onclick: function () { select(d.id, { fromUser: true }); },
+          onkeydown: function (e) {
+            var n = e.key === "ArrowRight" ? (i + 1) % defs.length : e.key === "ArrowLeft" ? (i + defs.length - 1) % defs.length
+              : e.key === "Home" ? 0 : e.key === "End" ? defs.length - 1 : -1;
+            if (n < 0) return;
+            e.preventDefault();
+            select(defs[n].id, { focus: true, fromUser: true });
+          } }, d.label);
+        tabEls[d.id] = t;
+        tablist.appendChild(t);
       });
-      root.appendChild(picker);
-      root.appendChild(wrap);
-      var hash = (location.hash.match(/^#past-(\d{4})$/) || [])[1];
-      pick(hash && panels[hash] ? hash : pastYears[0].key, false);
-      if (hash && panels[hash]) document.getElementById("past").scrollIntoView();
+      root.appendChild(el("div", { class: "tabs", style: "margin-top:0;" }, tablist, up, past));
+
+      function fromHash() {
+        var m = location.hash.match(/^#(upcoming|past)(?:-(\d{4}))?$/);
+        select(m ? m[1] : "upcoming");
+        if (m && m[1] === "past" && m[2] && pastPanels[m[2]]) pickYear(m[2], false);
+      }
+      fromHash();
+      window.addEventListener("hashchange", fromHash);
     }).catch(function (e) { fail(root, e); });
   }
 

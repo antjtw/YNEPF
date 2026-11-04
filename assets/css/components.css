@@ -696,3 +696,12 @@ table.lifters th, table.lifters td { padding-inline: var(--space-2); }
 table.lifters th:first-child, table.lifters td:first-child { padding-left: var(--space-3); }
 table.lifters thead th { overflow-wrap: normal; }
 table.lifters th:first-child { width: 22%; }
+
+/* ---- Past competitions (history) ---- */
+.tablist { flex-wrap: wrap; }
+.past-list { list-style: none; margin: 0; padding: 0; max-width: none; }
+.past-item { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: var(--space-2) var(--space-5); padding-block: var(--space-4); border-bottom: 1px solid var(--border); margin: 0; }
+.past-item:first-child { padding-top: 0; }
+.past-title { margin: 0; font-size: 1.15rem; letter-spacing: 0; }
+.past-meta { margin: var(--space-1) 0 0; color: var(--text-muted); }
+.past-results { white-space: nowrap; }
