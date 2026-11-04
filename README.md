@@ -197,13 +197,23 @@ supabase/seed.sql       The existing committee, FAQs and 2026 calendar, ready to
   suggests entry opening 8 weeks before at 9am and closing 3 weeks before at
   noon; change either freely. Times are entered as UK time and handled across
   GMT/BST. The entry link is only returned by the database while entry is open
-  (after the open time, before the close time, and not closed by hand), so it
-  appears and disappears on schedule without anyone being online. Upcoming competitions are listed soonest first, under a year
-  subheading when they span more than one year. A competition moves to *Past
-  competitions* automatically once its last day has passed; past ones are browsed
-  one year at a time. Paste the competition's OpenIPF page into *OpenIPF results
-  link* and a "View results on OpenIPF" link appears on it, opening in a new tab. Use
-  *Close entry* when it fills up early.
+  (after the open time, before the close time, and not marked full), so it
+  appears and disappears on schedule without anyone being online.
+  **Entries full:** tick it (or use *Mark entries full* in the list) when a
+  competition fills early. The entry button goes, an "Entries full" tag shows,
+  and if you have added a **waiting list link** (a Google Form) a ghost-style
+  "Join the waiting list" link appears instead. Untick it to reopen. The form's
+  responses are managed in Google as usual.
+  **Lifting order:** paste a published Google Sheet (File > Share > Publish to
+  web > CSV) into *Lifting order sheet* at any time, usually a little after entry
+  opens. A "View lifting order" button then appears on the competition, leading
+  to its page with the order by day, session and flight. Columns: Day, Session,
+  Flight, Name, Open IPF, Instagram, Age, Class, GLP (the same sheet as before);
+  optional Weigh-in, Lift off and Session name show session times and a label.
+  Within a flight lifters are ordered by class then GLP, except a session named
+  "Prime time", which keeps the sheet's order. The page reads the sheet live, so
+  it is always as current as the sheet (Google refreshes published sheets every
+  few minutes); nothing is stored or scheduled.
 - **News.** Posts have a title, date, author (the signed-in editor), and a rich
   text body that is saved as Markdown, with links, headings, lists and tables.
   A post dated in the future publishes itself on that date; untick *Published*
@@ -232,8 +242,9 @@ supabase/seed.sql       The existing committee, FAQs and 2026 calendar, ready to
   loads it.
 - `scripts/generate-seed.js` is how `seed.sql` was produced from the original
   hand-written pages. It is kept for reference only.
-- The lifting order and volunteer rota still come from the scheduled GitHub
-  Action, unchanged.
+- The original `lifting-order.html` (YNE Worlds 26 lifting order and volunteer
+  rota) is unchanged and still updated by the scheduled GitHub Action. New
+  competitions use the per-competition lifting order above instead.
 
 ## Editing the rest of the site
 

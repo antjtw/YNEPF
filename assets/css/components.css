@@ -663,3 +663,22 @@ table.records tr[hidden] { display: none; }
 .year-picker .btn { font-size: 1rem; }
 [role="region"][hidden] { display: none; }
 .ext-icon { width: 1em; height: 1em; vertical-align: -0.1em; }
+
+/* ---- Waiting list (ghost) button, full tag, lifting order ---- */
+.btn-ghost { background: transparent; color: var(--link); border-color: transparent; text-decoration: underline; padding-inline: var(--space-2); }
+.btn-ghost:hover, .btn-ghost:visited { background: var(--grey-50); color: var(--link-hover); }
+.tag-full { background: var(--gold-100); color: var(--gold-800); }
+.lo-day h3 { margin-top: var(--space-6); font-size: 1.4rem; padding-bottom: var(--space-2); border-bottom: 2px solid var(--navy-100); }
+.lo-session h4 { margin: var(--space-5) 0 var(--space-1); font-size: 1.15rem; }
+.lo-times { color: var(--text-muted); margin-bottom: var(--space-3); }
+.lo-flight { margin-bottom: var(--space-5); max-width: 40rem; }
+.lo-flight-label { display: inline-block; margin: 0 0 var(--space-2); padding: 0.1rem var(--space-3); border-radius: var(--radius); background: var(--surface-inverse); color: var(--text-on-inverse); font-weight: 700; }
+table.lifters th[scope="row"] { font-weight: 600; }
+.lo-name { display: inline-flex; align-items: center; gap: var(--space-2); }
+.lo-ig { display: inline-flex; color: var(--grey-600); }
+.lo-ig svg { width: 18px; height: 18px; }
+.lo-ig:hover { color: var(--accent); }
+table.lifters { table-layout: fixed; }
+table.lifters th:nth-child(1) { width: 52%; }
+table.lifters th:nth-child(2), table.lifters th:nth-child(3), table.lifters th:nth-child(4) { width: 16%; }
+table.lifters td, table.lifters th { overflow-wrap: anywhere; }

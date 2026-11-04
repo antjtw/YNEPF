@@ -194,13 +194,25 @@ create table if not exists public.competitions (
   entry_url text not null default '',
   entry_opens timestamptz,
   entry_closes timestamptz,
-  entry_manually_closed boolean not null default false,
+  entries_full boolean not null default false,  -- full before entry closes: shows the waiting list instead
+  waitlist_url text not null default '',       -- Google Form for the waiting list
+  lifting_order_url text not null default '',  -- published Google Sheet (CSV) of the lifting order
   openipf_url text not null default '',        -- link to the results page on OpenIPF
   published boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
--- For databases created before this column existed:
+-- Upgrades for databases created by an earlier version of this file.
+do $$
+begin
+  if exists (select 1 from information_schema.columns
+             where table_schema = 'public' and table_name = 'competitions' and column_name = 'entry_manually_closed') then
+    alter table public.competitions rename column entry_manually_closed to entries_full;
+  end if;
+end $$;
+alter table public.competitions add column if not exists entries_full boolean not null default false;
+alter table public.competitions add column if not exists waitlist_url text not null default '';
+alter table public.competitions add column if not exists lifting_order_url text not null default '';
 alter table public.competitions add column if not exists openipf_url text not null default '';
 
 create index if not exists competitions_start_idx on public.competitions (start_date);
@@ -229,19 +241,23 @@ create trigger competitions_touch before update on public.competitions
 --   This view deliberately runs with its owner's rights so anon can use it
 --   without having any access to the underlying table.
 -- ---------------------------------------------------------------------------
-create or replace view public.competitions_public as
+drop view if exists public.competitions_public;
+create view public.competitions_public as
 select
   id, name, description, label, start_date, end_date,
   venue_name, venue_address, map_url, capacity,
-  entry_opens, entry_closes, entry_manually_closed,
+  entry_opens, entry_closes, entries_full,
   case
     when entry_url <> ''
-     and not entry_manually_closed
+     and not entries_full
      and (entry_opens is null or entry_opens <= now())
      and (entry_closes is null or entry_closes > now())
     then entry_url
     else ''
   end as entry_url,
+  -- The waiting list only appears once the competition is marked full.
+  case when entries_full then waitlist_url else '' end as waitlist_url,
+  lifting_order_url,
   openipf_url
 from public.competitions
 where published;

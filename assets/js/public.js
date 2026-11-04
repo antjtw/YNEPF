@@ -97,6 +97,91 @@
     }).catch(function (e) { fail(root, e); });
   }
 
+  // ---- Competition page with its lifting order ----------------------------------
+  function classWeight(cls) {
+    var m = /(\d+(?:\.\d+)?)(\+)?\s*$/.exec(cls || "");
+    if (!m) return Infinity;
+    return parseFloat(m[1]) + (m[2] ? 0.5 : 0);
+  }
+  function fmtGlp(v) {
+    return v == null ? "" : Number(v).toFixed(2).replace(/\.00$/, "").replace(/(\.\d)0$/, "$1");
+  }
+  function renderLiftingOrder(host, c, lifters) {
+    var days = {};
+    lifters.forEach(function (l) {
+      var d = days[l.day] = days[l.day] || {};
+      var s = d[l.session] = d[l.session] || { name: "", weighIn: "", liftOff: "", flights: {} };
+      s.name = s.name || l.sessionName; s.weighIn = s.weighIn || l.weighIn; s.liftOff = s.liftOff || l.liftOff;
+      (s.flights[l.flight] = s.flights[l.flight] || []).push(l);
+    });
+    var num = function (a, b) { return a - b; };
+    host.replaceChildren();
+    Object.keys(days).map(Number).sort(num).forEach(function (day) {
+      var sec = el("section", { class: "lo-day", "aria-labelledby": "lo-day-" + day },
+        el("h3", { id: "lo-day-" + day }, "Day " + day + ": " + Y.longDay(Y.addDays(c.start_date, day - 1))));
+      Object.keys(days[day]).map(Number).sort(num).forEach(function (sn) {
+        var s = days[day][sn];
+        var prime = /^prime time$/i.test(s.name);
+        var times = [s.weighIn && ["Weigh-in ", el("strong", null, s.weighIn)], s.liftOff && ["Lift off ", el("strong", null, s.liftOff)]].filter(Boolean);
+        var block = el("div", { class: "lo-session" },
+          el("h4", null, s.name || "Session " + sn),
+          times.length ? el("p", { class: "lo-times" }, times[0], times[1] ? [" · ", times[1]] : null) : null);
+        Object.keys(s.flights).sort().forEach(function (f) {
+          var rows = s.flights[f].slice();
+          if (!prime) rows.sort(function (a, b) {
+            return (classWeight(a.cls) - classWeight(b.cls)) || ((b.glp == null ? -Infinity : b.glp) - (a.glp == null ? -Infinity : a.glp));
+          });
+          block.appendChild(el("div", { class: "lo-flight" },
+            el("p", { class: "lo-flight-label" }, "Flight " + f),
+            el("div", { class: "table-wrap" }, el("table", { class: "data lifters" },
+              el("caption", { class: "visually-hidden" }, "Flight " + f + " lifting order"),
+              el("thead", null, el("tr", null, ["Name", "Age", "Class", "GLP"].map(function (h) { return el("th", { scope: "col" }, h); }))),
+              el("tbody", null, rows.map(function (l) {
+                return el("tr", null,
+                  el("th", { scope: "row" }, el("span", { class: "lo-name" },
+                    l.openIpf ? el("a", { href: l.openIpf, target: "_blank", rel: "noopener" }, l.name) : l.name,
+                    l.instagram ? el("a", { class: "lo-ig", href: "https://www.instagram.com/" + encodeURIComponent(l.instagram) + "/", target: "_blank",
+                      rel: "noopener", "aria-label": l.name + " on Instagram" }, Y.svg(Y.ICONS.instagram)) : null)),
+                  el("td", null, l.age), el("td", null, l.cls), el("td", null, fmtGlp(l.glp)));
+              }))))));
+        });
+        sec.appendChild(block);
+      });
+      host.appendChild(sec);
+    });
+  }
+
+  function competition(root) {
+    var id = new URLSearchParams(location.search).get("c");
+    var missing = function () {
+      document.title = "Competition not found — YNEPF";
+      root.replaceChildren(el("h1", null, "Competition not found"),
+        el("p", null, el("a", { href: "calendar.html" }, "Back to the competition calendar")));
+    };
+    if (!id) return missing();
+    load("competitions_public", function (t) { return t.select("*").eq("id", id).limit(1); }).then(function (rows) {
+      if (!rows.length) return missing();
+      var c = rows[0];
+      document.title = c.name + " — YNEPF";
+      var card = Y.competitionCard(c, { heading: "h1", detail: true });
+      var lo = el("div", { id: "lifting-order" }, el("p", null, "Loading the lifting order…"));
+      root.replaceChildren(el("p", { class: "back" }, el("a", { href: "calendar.html" }, "Competition calendar")),
+        card, el("h2", null, "Lifting order"), lo);
+      if (!c.lifting_order_url) {
+        lo.replaceChildren(el("p", null, "The lifting order will appear here once it has been published. We usually share it a little after entries open."));
+        return;
+      }
+      Y.loadSheet(c.lifting_order_url).then(function (sheet) {
+        var parsed = Y.parseLiftingOrder(sheet);
+        if (!parsed.lifters.length) { lo.replaceChildren(el("p", null, "The lifting order is not ready yet. Check back soon.")); return; }
+        renderLiftingOrder(lo, c, parsed.lifters);
+      }).catch(function (e) {
+        if (window.console) console.error(e);
+        lo.replaceChildren(el("p", null, "We could not load the lifting order just now. Please try again in a moment."));
+      });
+    }).catch(function (e) { fail(root, e); });
+  }
+
   // ---- Home: next events + latest news ---------------------------------------
   function home() {
     var ev = document.getElementById("home-events");
@@ -296,7 +381,7 @@
   }
 
   // ---- Boot -----------------------------------------------------------------
-  var routes = { calendar: calendar, committee: committee, news: news, post: post, faqs: faqs, records: records };
+  var routes = { calendar: calendar, committee: committee, news: news, post: post, faqs: faqs, records: records, competition: competition };
   function boot() {
     var page = document.body.getAttribute("data-view") || document.body.getAttribute("data-page");
     var root = document.getElementById("live");

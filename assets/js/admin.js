@@ -172,7 +172,7 @@
   }
 
   // ---- competitions ---------------------------------------------------------------
-  var STATE_LABEL = { archived: "Past", open: "Entry open", closed: "Entry closed", soon: "Entry not open yet", none: "No entry set" };
+  var STATE_LABEL = { archived: "Past", open: "Entry open", closed: "Entry closed", full: "Entries full", soon: "Entry not open yet", none: "No entry set" };
 
   function renderCompetitions(panel) {
     panel.replaceChildren(panelHead("Competitions", btn("Add competition", function () { editCompetition(); }, "btn-primary")),
@@ -198,25 +198,25 @@
       el("tbody", null, rows.map(function (c) {
         var st = Y.compState(c);
         var actions = el("span", { class: "actions" }, btn("Edit", function () { editCompetition(c); }));
-        if (st === "open" || st === "soon") {
-          actions.appendChild(btn("Close entry", function () { setClosed(c, true); }));
-        } else if (c.entry_manually_closed && st !== "archived") {
-          actions.appendChild(btn("Reopen entry", function () { setClosed(c, false); }));
+        if (st === "open" || st === "soon" || st === "none") {
+          actions.appendChild(btn("Mark entries full", function () { setFull(c, true); }));
+        } else if (c.entries_full && st !== "archived") {
+          actions.appendChild(btn("Entries not full", function () { setFull(c, false); }));
         }
         actions.appendChild(btn("Delete", function () { removeCompetition(c); }, "btn-danger"));
         return el("tr", null,
           el("th", { scope: "row" }, c.name, !c.published ? [" ", el("span", { class: "tag tag-position" }, "Draft")] : null,
             c.venue_name ? el("small", null, c.venue_name) : null),
           el("td", null, Y.dateRange(c.start_date, c.end_date)),
-          el("td", null, STATE_LABEL[st] + (c.entry_manually_closed && st !== "archived" ? " (closed by hand)" : ""),
+          el("td", null, STATE_LABEL[st],
             Y.entryLine(c) ? el("small", null, Y.entryLine(c)) : null),
           el("td", null, actions));
       }))));
   }
 
-  function setClosed(c, closed) {
-    sb.from("competitions").update({ entry_manually_closed: closed }).eq("id", c.id)
-      .then(ok).then(function () { toast(closed ? "Entry closed." : "Entry reopened."); route(); })
+  function setFull(c, full) {
+    sb.from("competitions").update({ entries_full: full }).eq("id", c.id)
+      .then(ok).then(function () { toast(full ? "Marked as full." + (c.waitlist_url ? "" : " Add a waiting list link by editing it, if you have one.") : "Entries reopened."); route(); })
       .catch(function (e) { toast(friendly(e), "error"); });
   }
   function removeCompetition(c) {
@@ -253,7 +253,10 @@
         { name: "entry_url", label: "Entry link", type: "url", placeholder: "https://…", help: "Goes live on the website at the time entry opens, and is hidden when entry closes." },
         { name: "entry_opens", label: "Entry opens (UK time)", type: "datetime", half: true, help: "Filled in as 8 weeks before, at 9am. Change it if you need to." },
         { name: "entry_closes", label: "Entry closes (UK time)", type: "datetime", half: true, help: "Filled in as 3 weeks before, at noon." },
-        { name: "entry_manually_closed", label: "Entry closed by hand", type: "checkbox", help: "Tick this once the competition is full. It hides the entry link straight away." },
+        { name: "entries_full", label: "Entries full", type: "checkbox", help: "Tick this when the competition fills up before entry closes. The entry link is replaced by a “Join the waiting list” link (if you add one below)." },
+        { name: "waitlist_url", label: "Waiting list link (Google Form)", type: "url", placeholder: "https://forms.gle/…", help: "Only shown on the website while entries are marked full." },
+        { name: "lifting_order_url", label: "Lifting order sheet (optional)", type: "url", placeholder: "https://docs.google.com/spreadsheets/d/e/…/pub?output=csv",
+          help: "A published Google Sheet (File > Share > Publish to web > CSV), one row per lifter, with columns Day, Session, Flight, Name, Open IPF, Instagram, Age, Class, GLP. Add it any time: a “View lifting order” link appears once it is here. Optional extra columns Weigh-in, Lift off and Session name show session times." },
         { name: "published", label: "Show on the website", type: "checkbox", help: "Untick to keep it as a draft." }
       ],
       validate: function (v) {
@@ -262,6 +265,8 @@
         if (v.entry_url && !/^https?:\/\//i.test(v.entry_url)) return "The entry link must start with https://";
         if (v.map_url && !/^https?:\/\//i.test(v.map_url)) return "The map link must start with https://";
         if (v.openipf_url && !/^https:\/\//i.test(v.openipf_url)) return "The OpenIPF link must start with https://";
+        if (v.waitlist_url && !/^https:\/\//i.test(v.waitlist_url)) return "The waiting list link must start with https://";
+        if (v.lifting_order_url && !Y.sheetCsvUrl(v.lifting_order_url)) return "The lifting order link does not look usable. It must start with https://";
         return null;
       },
       onSave: function (v) {
@@ -271,10 +276,20 @@
           venue_name: v.venue_name, venue_address: v.venue_address, map_url: v.map_url, openipf_url: v.openipf_url,
           capacity: v.capacity, entry_url: v.entry_url,
           entry_opens: Y.fromLondonInput(v.entry_opens), entry_closes: Y.fromLondonInput(v.entry_closes),
-          entry_manually_closed: v.entry_manually_closed, published: v.published
+          entries_full: v.entries_full, waitlist_url: v.waitlist_url, lifting_order_url: v.lifting_order_url, published: v.published
         };
         var q = isNew ? sb.from("competitions").insert(row) : sb.from("competitions").update(row).eq("id", c.id);
-        return q.then(ok).then(function () { toast(isNew ? "Competition added." : "Competition saved."); route(); });
+        return q.then(ok).then(function () {
+          toast(isNew ? "Competition added." : "Competition saved.");
+          route();
+          if (v.lifting_order_url && v.lifting_order_url !== c.lifting_order_url) {
+            // Check the sheet really works, and say so straight away.
+            Y.loadSheet(v.lifting_order_url).then(function (s) {
+              var r = Y.parseLiftingOrder(s);
+              toast("Lifting order read fine: " + r.lifters.length + " lifters in " + r.flightCount + " flights.");
+            }).catch(function (e) { toast("Saved, but the lifting order could not be read: " + e.message, "error"); });
+          }
+        });
       }
     });
 

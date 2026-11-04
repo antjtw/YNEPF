@@ -158,15 +158,15 @@
   }
 
   // ---- Competitions --------------------------------------------------------
-  // state: "archived" | "closed" | "open" | "soon" | "none"
+  // state: "archived" | "closed" | "full" | "open" | "soon" | "none"
   function compState(c, now) {
     now = now || new Date();
     var last = c.end_date || c.start_date;
     if (last < todayLondon()) return "archived";
     var opens = c.entry_opens ? new Date(c.entry_opens) : null;
     var closes = c.entry_closes ? new Date(c.entry_closes) : null;
-    if (c.entry_manually_closed) return "closed";
     if (closes && now >= closes) return "closed";
+    if (c.entries_full) return "full";
     if (opens && now < opens) return "soon";
     if (opens || closes || c.entry_url) return "open";
     return "none";
@@ -192,6 +192,7 @@
   var STATE_TAG = {
     open: ["tag tag-open", "Entry open"],
     closed: ["tag tag-closed", "Entry closed"],
+    full: ["tag tag-full", "Entries full"],
     soon: ["tag tag-closed", "Entry not open yet"]
   };
 
@@ -244,6 +245,19 @@
         card.appendChild(el("p", { style: "margin:var(--space-3) 0 0;" },
           el("a", { class: "btn btn-primary", href: c.entry_url, target: "_blank", rel: "noopener" }, "Enter this competition")));
       }
+    }
+    if (state === "full" && !opts.brief) {
+      card.appendChild(el("p", { style: "margin:var(--space-3) 0 0;" },
+        c.waitlist_url ? "All places have been taken. You can join the waiting list in case one comes up." : "All places have been taken."));
+      if (c.waitlist_url) {
+        card.appendChild(el("p", { style: "margin:var(--space-2) 0 0;" },
+          el("a", { class: "btn btn-ghost", href: c.waitlist_url, target: "_blank", rel: "noopener",
+            "aria-label": "Join the waiting list for " + c.name + " (opens in a new tab)" }, "Join the waiting list ", Y_EXT())));
+      }
+    }
+    if (c.lifting_order_url && !opts.brief && !opts.detail) {
+      card.appendChild(el("p", { style: "margin:var(--space-3) 0 0;" },
+        el("a", { class: "btn btn-secondary", href: "competition.html?c=" + encodeURIComponent(c.id) }, "View lifting order")));
     }
     card.appendChild(meta);
     return card;
@@ -305,6 +319,51 @@
     });
   }
 
+  // ---- Lifting order (a published Google Sheet, one row per lifter) -------------
+  // Needs columns Day, Session, Flight, Name. Optional: Open IPF, Instagram, Age,
+  // Class, GLP, and per-session Weigh-in, Lift off and Session name.
+  var LO_COLS = {
+    day: ["day"], session: ["session"], flight: ["flight"], name: ["name"],
+    openIpf: ["open ipf", "openipf"], instagram: ["instagram"], age: ["age"], cls: ["class"], glp: ["glp"],
+    weighIn: ["weigh-in", "weigh in", "weighin"], liftOff: ["lift off", "lift-off", "liftoff"],
+    sessionName: ["session name", "session label"]
+  };
+  function igHandle(s) {
+    return (s || "").trim().replace(/^https?:\/\/(www\.)?instagram\.com\//i, "").replace(/^@/, "").split(/[/?#]/)[0];
+  }
+  function parseLiftingOrder(sheet) {
+    var head = sheet.header.map(function (h) { return h.trim().toLowerCase(); });
+    var idx = {};
+    Object.keys(LO_COLS).forEach(function (k) {
+      idx[k] = -1;
+      LO_COLS[k].forEach(function (alias) { if (idx[k] < 0) idx[k] = head.indexOf(alias); });
+    });
+    var missing = ["day", "session", "flight", "name"].filter(function (k) { return idx[k] < 0; });
+    if (missing.length) {
+      throw new Error("The sheet needs columns called Day, Session, Flight and Name (missing: " + missing.join(", ") + ").");
+    }
+    var get = function (r, k) { return idx[k] < 0 ? "" : (r[idx[k]] || "").trim(); };
+    var lifters = sheet.rows.map(function (r) {
+      var glp = parseFloat(get(r, "glp"));
+      return {
+        day: parseInt(get(r, "day"), 10), session: parseInt(get(r, "session"), 10), flight: get(r, "flight"),
+        name: get(r, "name"), openIpf: /^https?:\/\//i.test(get(r, "openIpf")) ? get(r, "openIpf") : "",
+        instagram: igHandle(get(r, "instagram")), age: get(r, "age"), cls: get(r, "cls"),
+        glp: isFinite(glp) ? glp : null,
+        weighIn: get(r, "weighIn"), liftOff: get(r, "liftOff"), sessionName: get(r, "sessionName")
+      };
+    }).filter(function (l) { return l.name && isFinite(l.day) && isFinite(l.session) && l.flight; });
+    var flights = {};
+    lifters.forEach(function (l) { flights[l.day + "-" + l.session + "-" + l.flight] = 1; });
+    return { lifters: lifters, flightCount: Object.keys(flights).length };
+  }
+  function longDay(ymd) {
+    var p = {};
+    new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", weekday: "long", day: "numeric", month: "long", year: "numeric" })
+      .formatToParts(new Date(ymd + "T12:00:00Z")).forEach(function (x) { p[x.type] = x.value; });
+    return p.weekday + " " + p.day + " " + p.month + " " + p.year;
+  }
+
   // ---- Page status helpers --------------------------------------------------
   function notice(target, message, kind) {
     target.replaceChildren(el("div", { class: "callout", role: kind === "error" ? "alert" : "status" },
@@ -323,6 +382,7 @@
     toLondonInput: toLondonInput, fromLondonInput: fromLondonInput,
     todayLondon: todayLondon, yearOf: function (c) { return c.start_date.slice(0, 4); }, addDays: addDays, dateRange: dateRange, longDate: longDate,
     compState: compState, entryLine: entryLine, mapsUrl: mapsUrl, competitionCard: competitionCard,
+    parseLiftingOrder: parseLiftingOrder, longDay: longDay, igHandle: igHandle,
     sheetCsvUrl: sheetCsvUrl, parseCsv: parseCsv, loadSheet: loadSheet,
     notice: notice, guard: guard
   };
