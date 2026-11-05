@@ -398,8 +398,9 @@ total per hour (best effort, per running instance). About ten minutes to set up:
    (Until you verify your own domain there, Resend can only email the account
    owner, which is exactly the entries address.)
 2. In Supabase, **Edge Functions > Deploy a new function**, name it
-   `send-contact`, and paste in `supabase/functions/send-contact/index.ts` and
-   `build-email.ts` from this repo.
+   `send-contact`, and replace its code with the whole of
+   `supabase/functions/send-contact/index.ts` from this repo. It is a single
+   self-contained file; there is nothing else to add.
 3. In that function's settings switch **Verify JWT** off (visitors are not signed
    in, and the publishable key is not a JWT).
 4. **Edge Functions > Secrets**: add `RESEND_API_KEY`. Optional: `NOTIFY_TO`
@@ -409,7 +410,7 @@ total per hour (best effort, per running instance). About ten minutes to set up:
 
 Until the function is deployed the form shows "Sorry, your message could not be
 sent" with the entries address to email instead. The email logic
-(`build-email.ts`) and the form are tested, including that line breaks cannot be
+(the helpers at the top of `index.ts`) and the form are tested, including that line breaks cannot be
 smuggled into the email headers; the function itself has not been run against a
 live Resend account. **Re-run `supabase/schema.sql`**: it removes the old
 `contact_messages` table (any messages stored in it are deleted, so copy out
