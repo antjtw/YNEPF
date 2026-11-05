@@ -176,34 +176,33 @@ policy is in `docs/privacy-policy-draft.md`.
 
 ### Images
 
-The homepage hero shows a competition photo. The untouched original is kept in
-`design/source-photos/`; the site only ever loads the compressed copies below.
+The homepage hero shows a competition photo, **chosen at random on each visit**
+(never the same one twice running on the same device). The untouched originals are
+kept in `design/source-photos/`; the site only ever loads the compressed copies.
 
-| Slot | File | Suggested size | Notes |
-|------|------|----------------|-------|
-| Hero (right of the headline) | `assets/img/hero.webp` / `hero.jpg` (1000px) and `hero-640.*` (phones) | 1000 x 1250 | Fills the rounded frame from the centre (`object-fit: cover`). |
+| Slot | Files | Notes |
+|------|-------|-------|
+| Hero (right of the headline) | `assets/img/<name>.webp` / `.jpg` (1000px) and `<name>-640.*` (phones), for each photo in the list | Fills the rounded frame from the centre (`object-fit: cover`). Portrait photos work best; landscape ones are cropped evenly from the centre. |
 
-**Adding a photo.** Resize and compress it first, so it costs visitors almost no bandwidth:
+**Adding a photo to the rotation.** Resize and compress it, then add one line to the
+list:
 
 ```bash
 npm install --no-save sharp                     # once
-node scripts/optimise-image.js ~/Downloads/bench.jpg hero 1000
+node scripts/optimise-image.js design/source-photos/squat.jpg hero-squat 1000 --responsive
 ```
 
-That writes `assets/img/hero.webp` (about 150 KB) and `hero.jpg` at 1000px wide (the
-hero shows at about 520px, so this is sharp on retina screens), never scaling a small
-photo up. The page then fills the frame with it from the centre (`object-fit: cover`),
-so a portrait or landscape photo both work. Point the hero at it in `index.html`:
+That writes `hero-squat.webp/.jpg` (1000px, about 150 KB) and `hero-squat-640.webp/.jpg`
+(phones, about 70 KB), never scaling a small photo up. Then in `index.html`, add an entry
+to the `PHOTOS` list in the small script inside the hero:
 
-```html
-<picture>
-  <source srcset="assets/img/hero.webp" type="image/webp">
-  <img src="assets/img/hero.jpg" alt="A lifter benching at a YNEPF competition" width="1000" height="1250" fetchpriority="high">
-</picture>
+```js
+{ n: "hero-squat", alt: "A lifter squatting at a YNEPF competition, with a spotter behind" }
 ```
 
-Set `width` and `height` to the real size the script reports, and write an `alt` that
-describes the photo.
+`n` is the file name without the extension; `alt` should describe the photo (no names).
+One image is downloaded per visit, picked before the browser asks for anything, so
+more photos cost nothing extra. With JavaScript off, the original `hero` photo is shown.
 
 Keep photos under about 300KB each (export as JPG or WebP).
 

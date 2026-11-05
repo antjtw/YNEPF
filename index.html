@@ -90,11 +90,34 @@
         </div>
       </div>
       <div class="hero-media">
+        <!-- The hero photo is picked at random on each visit (never the same one twice running).
+             To add photos, optimise them with scripts/optimise-image.js and add a line to PHOTOS.
+             Each entry: n = file name in assets/img (without .webp/.jpg), alt = what the photo shows. -->
         <figure class="hero-photo">
-          <picture>
-            <source type="image/webp" srcset="assets/img/hero-640.webp 640w, assets/img/hero.webp 1000w" sizes="(min-width: 64em) 520px, calc(100vw - 2rem)">
-            <img src="assets/img/hero.jpg" srcset="assets/img/hero-640.jpg 640w, assets/img/hero.jpg 1000w" sizes="(min-width: 64em) 520px, calc(100vw - 2rem)" alt="A lifter benching at a YNEPF competition, with spotters either side of the bar" width="1000" height="1250" fetchpriority="high">
-          </picture>
+          <script>
+            (function () {
+              var PHOTOS = [
+                { n: "hero", alt: "A lifter benching at a YNEPF competition, with spotters either side of the bar" }
+              ];
+              var i = Math.floor(Math.random() * PHOTOS.length);
+              try {
+                var last = parseInt(localStorage.getItem("ynepf-hero"), 10);
+                if (PHOTOS.length > 1 && last === i) i = (i + 1 + Math.floor(Math.random() * (PHOTOS.length - 1))) % PHOTOS.length;
+                localStorage.setItem("ynepf-hero", String(i));
+              } catch (e) { /* private browsing: just use the random pick */ }
+              var p = PHOTOS[i], sizes = "(min-width: 64em) 520px, calc(100vw - 2rem)", d = "assets/img/";
+              var alt = p.alt.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+              document.currentScript.parentNode.insertAdjacentHTML("beforeend",
+                '<picture><source type="image/webp" srcset="' + d + p.n + '-640.webp 640w, ' + d + p.n + '.webp 1000w" sizes="' + sizes + '">' +
+                '<img src="' + d + p.n + '.jpg" srcset="' + d + p.n + '-640.jpg 640w, ' + d + p.n + '.jpg 1000w" sizes="' + sizes + '" alt="' + alt + '" width="1000" height="1250" fetchpriority="high"></picture>');
+            })();
+          </script>
+          <noscript>
+            <picture>
+              <source type="image/webp" srcset="assets/img/hero-640.webp 640w, assets/img/hero.webp 1000w" sizes="(min-width: 64em) 520px, calc(100vw - 2rem)">
+              <img src="assets/img/hero.jpg" srcset="assets/img/hero-640.jpg 640w, assets/img/hero.jpg 1000w" sizes="(min-width: 64em) 520px, calc(100vw - 2rem)" alt="A lifter benching at a YNEPF competition, with spotters either side of the bar" width="1000" height="1250">
+            </picture>
+          </noscript>
         </figure>
       </div>
     </div>
