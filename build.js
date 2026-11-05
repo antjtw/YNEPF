@@ -27,6 +27,17 @@ const HDR = ["<!-- @partial:header start -->", "<!-- @partial:header end -->"];
 const FTR = ["<!-- @partial:footer start -->", "<!-- @partial:footer end -->"];
 
 const pages = [
+  "index.html",
+  "calendar.html",
+  "committee.html",
+  "records.html",
+  "lifting/index.html",
+  "news.html",
+  "post.html",
+  "faqs.html",
+  "chairperson.html",
+  "rules.html",
+  "contact.html",
   "rules/the-lifts.html",
   "rules/categories.html",
   "rules/squat.html",
@@ -78,7 +89,7 @@ function setActive(html, block) {
 function reinline(html, root) {
   const hdr = header.replace(/\{\{ROOT\}\}/g, root);
   const hb = HDR[0] + "\n" + setActive(html, hdr) + "\n" + HDR[1];
-  const fb = FTR[0] + "\n" + footer + "\n" + FTR[1];
+  const fb = FTR[0] + "\n" + footer.replace(/\{\{ROOT\}\}/g, root) + "\n" + FTR[1];
   const hRe = new RegExp(HDR[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "[\\s\\S]*?" + HDR[1].replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
   const fRe = new RegExp(FTR[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "[\\s\\S]*?" + FTR[1].replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
   if (html.includes("<!--#include header-->")) html = html.replace("<!--#include header-->", hb);

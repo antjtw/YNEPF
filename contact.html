@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Contact us — YNEPF</title>
+  <meta name="description" content="Get in touch with the Yorkshire &amp; North East Powerlifting Federation.">
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="assets/img/favicon-48.png" type="image/png" sizes="48x48">
+  <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
+  <link rel="stylesheet" href="assets/css/fonts.css">
+  <link rel="stylesheet" href="assets/css/tokens.css">
+  <link rel="stylesheet" href="assets/css/base.css">
+  <link rel="stylesheet" href="assets/css/components.css">
+</head>
+<body data-page="contact">
+  <a class="skip-link" href="#main">Skip to main content</a>
+
+  <!-- @partial:header start -->
+<section class="service-banner" aria-label="Service notice">
+  <div class="container">
+    <span class="tag-alpha">Alpha</span>
+    <p>This is a new service. For urgent matters, please visit <a href="https://www.ynepf.co.uk">ynepf.co.uk</a>.</p>
+  </div>
+</section>
+<header class="site-header">
+  <div class="container header-inner">
+    <a class="brand" href="index.html" data-nav="home">
+      <img class="brand-mark-img" src="assets/img/logo-colour.svg" alt="" width="44" height="44" aria-hidden="true">
+      <span class="brand-name">
+        <span class="brand-full">Yorkshire &amp; North East</span>
+        <span class="brand-full">Powerlifting Federation</span>
+        <span class="brand-short">YNEPF</span>
+      </span>
+    </a>
+    <nav class="site-nav" aria-label="Primary">
+      <ul>
+        <li><a href="calendar.html" data-nav="calendar">Calendar</a></li>
+        <li><a href="records.html" data-nav="records">Records</a></li>
+        <li><a href="news.html" data-nav="news">News</a></li>
+        <li><a href="committee.html" data-nav="committee">Committee</a></li>
+        <li><a href="faqs.html" data-nav="faqs">FAQs</a></li>
+      </ul>
+    </nav>
+    <div class="header-actions">
+      <a href="contact.html" data-nav="contact" aria-current="page" class="btn btn-primary btn-sm header-cta">Contact us</a>
+      <button class="menu-toggle" type="button" aria-haspopup="dialog" aria-controls="site-menu" aria-expanded="false">
+        <span class="burger" aria-hidden="true"><i></i></span>
+        <span>Menu</span>
+      </button>
+    </div>
+  </div>
+</header>
+<dialog id="site-menu" class="drawer" aria-labelledby="site-menu-title">
+  <div class="drawer-panel">
+    <div class="drawer-head">
+      <p class="drawer-title" id="site-menu-title">Menu</p>
+      <button class="btn btn-secondary btn-sm" type="button" data-close-menu>Close <span class="visually-hidden">menu</span></button>
+    </div>
+    <nav aria-label="Menu">
+      <ul class="drawer-links">
+        <li><a href="index.html" data-nav="home">Home</a></li>
+        <li><a href="calendar.html" data-nav="calendar">Calendar</a></li>
+        <li><a href="records.html" data-nav="records">Records</a></li>
+        <li><a href="news.html" data-nav="news">News</a></li>
+        <li><a href="committee.html" data-nav="committee">Committee</a></li>
+        <li><a href="faqs.html" data-nav="faqs">FAQs</a></li>
+        <li><a href="contact.html" data-nav="contact" aria-current="page">Contact us</a></li>
+      </ul>
+    </nav>
+    <div class="drawer-foot">
+      <ul id="drawer-legal">
+        <li><a href="#">Privacy policy</a></li>
+        <li><a href="#">Franchise agreements</a></li>
+        <li><a href="admin/">Site editor</a></li>
+      </ul>
+      <a href="contact.html" class="btn btn-primary">Get in touch</a>
+    </div>
+  </div>
+</dialog>
+<!-- @partial:header end -->
+
+  <main id="main">
+  <section class="page-hero">
+    <div class="container">
+      <h1>Contact us</h1>
+      <p class="lede">Questions about entries, competitions or volunteering? Send us a message and we will reply by email.</p>
+    </div>
+  </section>
+
+    <div class="container">
+      <div class="grid-row">
+        <div class="grid-column-two-thirds">
+          <div id="error-summary" class="error-summary" role="alert" tabindex="-1" aria-labelledby="error-summary-title" hidden>
+            <h2 id="error-summary-title">There is a problem</h2>
+            <ul id="error-list"></ul>
+          </div>
+
+          <form id="contact-form" class="contact-card" novalidate>
+            <div class="field" data-field="name">
+              <label for="name">Your name</label>
+              <p class="field-error" id="name-error" hidden></p>
+              <input id="name" name="name" type="text" autocomplete="name" maxlength="120" required>
+            </div>
+            <div class="field" data-field="email">
+              <label for="email">Your email address</label>
+              <p class="help" id="email-help">We will reply to this address.</p>
+              <p class="field-error" id="email-error" hidden></p>
+              <input id="email" name="email" type="email" autocomplete="email" spellcheck="false" maxlength="254" required aria-describedby="email-help">
+            </div>
+            <div class="field" data-field="subject">
+              <label for="subject">Subject</label>
+              <p class="field-error" id="subject-error" hidden></p>
+              <input id="subject" name="subject" type="text" maxlength="200" required>
+            </div>
+            <div class="field" data-field="message">
+              <label for="message">Your message</label>
+              <p class="help" id="message-help">Please do not include bank details or other sensitive information.</p>
+              <p class="field-error" id="message-error" hidden></p>
+              <textarea id="message" name="message" rows="8" maxlength="4000" required aria-describedby="message-help"></textarea>
+            </div>
+            <div class="field" data-field="faqcheck">
+              <p class="field-error" id="faqcheck-error" hidden></p>
+              <div class="field-check">
+                <input id="faqcheck" name="faqcheck" type="checkbox">
+                <label for="faqcheck">I have looked through the <a href="faqs.html" target="_blank" rel="noopener">FAQs<span class="visually-hidden"> (opens in a new tab)</span></a> and my question is not answered there</label>
+              </div>
+            </div>
+            <div class="hp-field" aria-hidden="true">
+              <label for="website">Leave this field empty</label>
+              <input id="website" name="website" type="text" tabindex="-1" autocomplete="off">
+            </div>
+            <p class="small">We only use your details to reply to your message.<span data-privacy-note hidden> Read our <a href="#">privacy policy</a>.</span></p>
+            <button class="btn btn-primary" type="submit" id="send">Send message</button>
+          </form>
+
+          <div id="sent" class="success-panel" tabindex="-1" hidden>
+            <div class="tick" aria-hidden="true">&#10003;</div>
+            <h2 style="margin-top:0;">Message sent</h2>
+            <p>Thank you. We have your message and will reply to <strong id="sent-email"></strong>.</p>
+            <p><button class="btn btn-secondary" type="button" id="send-another">Send another message</button></p>
+          </div>
+        </div>
+
+        <aside class="grid-column-one-third contact-aside" aria-label="Other ways to get help">
+          <div class="panel">
+            <h2>Check the FAQs first</h2>
+            <p>Entries, refunds, kit, weigh-in and volunteering are all covered.</p>
+            <p><a href="faqs.html">Read the FAQs</a></p>
+          </div>
+          <div class="panel">
+            <h2>Prefer email?</h2>
+            <p><a href="mailto:ynepfentries@gmail.com">ynepfentries@gmail.com</a></p>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </main>
+
+  <!-- @partial:footer start -->
+<footer class="site-footer on-dark" data-root="">
+  <div class="container">
+    <!-- The columns, social links and bottom-row links are edited under Footer in the site editor.
+         What is written here is the fallback shown if the database cannot be reached. -->
+    <div class="grid-row" id="footer-main">
+      <div class="grid-column-one-third" id="footer-brand">
+        <a class="footer-brand" href="index.html">
+          <img src="assets/img/logo-white.svg" alt="" width="52" height="52">
+          <span>Yorkshire &amp; North East<br>Powerlifting Federation</span>
+        </a>
+        <p>The home of drug tested powerlifting in Yorkshire and the North East.</p>
+        <ul class="footer-social" id="footer-social" aria-label="Social media">
+          <li><a href="https://linktr.ee/ynepf" target="_blank" rel="noopener">Linktree<span class="visually-hidden"> (opens in a new tab)</span></a></li>
+        </ul>
+        <p class="small">Entries and general enquiries:<br><a href="mailto:ynepfentries@gmail.com">ynepfentries@gmail.com</a></p>
+      </div>
+      <div class="grid-column-one-third" data-footer-col>
+        <h2 class="footer-heading">Explore</h2>
+        <nav aria-label="Footer: Explore">
+          <ul class="footer-list">
+            <li><a href="calendar.html">Competition calendar</a></li>
+            <li><a href="records.html">Records</a></li>
+            <li><a href="news.html">News</a></li>
+            <li><a href="committee.html">Committee</a></li>
+            <li><a href="faqs.html">FAQs</a></li>
+            <li><a href="contact.html">Contact us</a></li>
+          </ul>
+        </nav>
+      </div>
+      <div class="grid-column-one-third" data-footer-col>
+        <h2 class="footer-heading">Competing</h2>
+        <nav aria-label="Footer: Competing">
+          <ul class="footer-list">
+            <li><a href="https://www.britishpowerlifting.org/membership/" target="_blank" rel="noopener">Buy a membership<span class="visually-hidden"> (opens in a new tab)</span></a></li>
+            <li><a href="https://www.powerlifting.sport/rules/codes/info/technical-rules" target="_blank" rel="noopener">Technical rules<span class="visually-hidden"> (opens in a new tab)</span></a></li>
+            <li><a href="https://www.powerlifting.sport/rules/codes/info/approved-list" target="_blank" rel="noopener">Approved kit<span class="visually-hidden"> (opens in a new tab)</span></a></li>
+            <li><a href="https://www.openpowerlifting.org/" target="_blank" rel="noopener">Divisional records<span class="visually-hidden"> (opens in a new tab)</span></a></li>
+          </ul>
+        </nav>
+      </div>
+    </div>
+    <hr class="footer-rule">
+    <div class="grid-row footer-meta">
+      <div class="grid-column-two-thirds">
+        <nav aria-label="Footer: legal">
+          <ul class="footer-legal" id="footer-legal">
+            <li><a href="#">Privacy policy</a></li>
+            <li><a href="#">Franchise agreements</a></li>
+            <li><a href="admin/">Site editor</a></li>
+          </ul>
+        </nav>
+      </div>
+      <div class="grid-column-one-third">
+        <p>&copy; Yorkshire &amp; North East Powerlifting Federation 2026</p>
+      </div>
+    </div>
+  </div>
+  <script src="assets/js/config.js"></script>
+  <script src="assets/js/footer.js" defer></script>
+</footer>
+<!-- @partial:footer end -->
+  <script src="assets/js/contact.js"></script>
+  <script src="assets/js/nav.js" defer></script>
+</body>
+</html>

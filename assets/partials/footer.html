@@ -1,5 +1,60 @@
-<footer class="site-footer">
+<footer class="site-footer on-dark" data-root="{{ROOT}}">
   <div class="container">
-    <p style="margin:0;">&copy; Yorkshire &amp; North East Powerlifting Federation 2026</p>
+    <!-- The columns, social links and bottom-row links are edited under Footer in the site editor.
+         What is written here is the fallback shown if the database cannot be reached. -->
+    <div class="grid-row" id="footer-main">
+      <div class="grid-column-one-third" id="footer-brand">
+        <a class="footer-brand" href="{{ROOT}}index.html">
+          <img src="{{ROOT}}assets/img/logo-white.svg" alt="" width="52" height="52">
+          <span>Yorkshire &amp; North East<br>Powerlifting Federation</span>
+        </a>
+        <p>The home of drug tested powerlifting in Yorkshire and the North East.</p>
+        <ul class="footer-social" id="footer-social" aria-label="Social media">
+          <li><a href="https://linktr.ee/ynepf" target="_blank" rel="noopener">Linktree<span class="visually-hidden"> (opens in a new tab)</span></a></li>
+        </ul>
+        <p class="small">Entries and general enquiries:<br><a href="mailto:ynepfentries@gmail.com">ynepfentries@gmail.com</a></p>
+      </div>
+      <div class="grid-column-one-third" data-footer-col>
+        <h2 class="footer-heading">Explore</h2>
+        <nav aria-label="Footer: Explore">
+          <ul class="footer-list">
+            <li><a href="{{ROOT}}calendar.html">Competition calendar</a></li>
+            <li><a href="{{ROOT}}records.html">Records</a></li>
+            <li><a href="{{ROOT}}news.html">News</a></li>
+            <li><a href="{{ROOT}}committee.html">Committee</a></li>
+            <li><a href="{{ROOT}}faqs.html">FAQs</a></li>
+            <li><a href="{{ROOT}}contact.html">Contact us</a></li>
+          </ul>
+        </nav>
+      </div>
+      <div class="grid-column-one-third" data-footer-col>
+        <h2 class="footer-heading">Competing</h2>
+        <nav aria-label="Footer: Competing">
+          <ul class="footer-list">
+            <li><a href="https://www.britishpowerlifting.org/membership/" target="_blank" rel="noopener">Buy a membership<span class="visually-hidden"> (opens in a new tab)</span></a></li>
+            <li><a href="https://www.powerlifting.sport/rules/codes/info/technical-rules" target="_blank" rel="noopener">Technical rules<span class="visually-hidden"> (opens in a new tab)</span></a></li>
+            <li><a href="https://www.powerlifting.sport/rules/codes/info/approved-list" target="_blank" rel="noopener">Approved kit<span class="visually-hidden"> (opens in a new tab)</span></a></li>
+            <li><a href="https://www.openpowerlifting.org/" target="_blank" rel="noopener">Divisional records<span class="visually-hidden"> (opens in a new tab)</span></a></li>
+          </ul>
+        </nav>
+      </div>
+    </div>
+    <hr class="footer-rule">
+    <div class="grid-row footer-meta">
+      <div class="grid-column-two-thirds">
+        <nav aria-label="Footer: legal">
+          <ul class="footer-legal" id="footer-legal">
+            <li><a href="#">Privacy policy</a></li>
+            <li><a href="#">Franchise agreements</a></li>
+            <li><a href="{{ROOT}}admin/">Site editor</a></li>
+          </ul>
+        </nav>
+      </div>
+      <div class="grid-column-one-third">
+        <p>&copy; Yorkshire &amp; North East Powerlifting Federation 2026</p>
+      </div>
+    </div>
   </div>
+  <script src="{{ROOT}}assets/js/config.js"></script>
+  <script src="{{ROOT}}assets/js/footer.js" defer></script>
 </footer>

@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Committee — YNEPF</title>
   <meta name="description" content="Meet the YNEPF committee: the executive team, supporting committee, and our international and national referees.">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="assets/img/favicon-48.png" type="image/png" sizes="48x48">
+  <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
   <link rel="stylesheet" href="assets/css/fonts.css">
   <link rel="stylesheet" href="assets/css/tokens.css">
   <link rel="stylesheet" href="assets/css/base.css">
@@ -17,335 +17,151 @@
   <a class="skip-link" href="#main">Skip to main content</a>
 
   <!-- @partial:header start -->
-<div class="service-banner">
+<section class="service-banner" aria-label="Service notice">
   <div class="container">
     <span class="tag-alpha">Alpha</span>
     <p>This is a new service. For urgent matters, please visit <a href="https://www.ynepf.co.uk">ynepf.co.uk</a>.</p>
   </div>
-</div>
+</section>
 <header class="site-header">
-  <div class="container">
+  <div class="container header-inner">
     <a class="brand" href="index.html" data-nav="home">
-      <img class="brand-mark-img" src="assets/img/logo-white.svg" alt="" width="48" height="48" aria-hidden="true">
+      <img class="brand-mark-img" src="assets/img/logo-colour.svg" alt="" width="44" height="44" aria-hidden="true">
       <span class="brand-name">
-        <span>Yorkshire &amp; North East</span>
-        <span>Powerlifting Federation</span>
+        <span class="brand-full">Yorkshire &amp; North East</span>
+        <span class="brand-full">Powerlifting Federation</span>
+        <span class="brand-short">YNEPF</span>
       </span>
     </a>
-    <button class="nav-toggle" aria-expanded="false" aria-controls="primary-nav">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-      Menu
-    </button>
-    <nav class="site-nav" id="primary-nav" aria-label="Primary">
+    <nav class="site-nav" aria-label="Primary">
       <ul>
-        <li><a href="committee.html" data-nav="committee" aria-current="page">Committee</a></li>
         <li><a href="calendar.html" data-nav="calendar">Calendar</a></li>
+        <li><a href="records.html" data-nav="records">Records</a></li>
+        <li><a href="news.html" data-nav="news">News</a></li>
+        <li><a href="committee.html" data-nav="committee" aria-current="page">Committee</a></li>
         <li><a href="faqs.html" data-nav="faqs">FAQs</a></li>
       </ul>
     </nav>
+    <div class="header-actions">
+      <a href="contact.html" data-nav="contact" class="btn btn-primary btn-sm header-cta">Contact us</a>
+      <button class="menu-toggle" type="button" aria-haspopup="dialog" aria-controls="site-menu" aria-expanded="false">
+        <span class="burger" aria-hidden="true"><i></i></span>
+        <span>Menu</span>
+      </button>
+    </div>
   </div>
 </header>
+<dialog id="site-menu" class="drawer" aria-labelledby="site-menu-title">
+  <div class="drawer-panel">
+    <div class="drawer-head">
+      <p class="drawer-title" id="site-menu-title">Menu</p>
+      <button class="btn btn-secondary btn-sm" type="button" data-close-menu>Close <span class="visually-hidden">menu</span></button>
+    </div>
+    <nav aria-label="Menu">
+      <ul class="drawer-links">
+        <li><a href="index.html" data-nav="home">Home</a></li>
+        <li><a href="calendar.html" data-nav="calendar">Calendar</a></li>
+        <li><a href="records.html" data-nav="records">Records</a></li>
+        <li><a href="news.html" data-nav="news">News</a></li>
+        <li><a href="committee.html" data-nav="committee" aria-current="page">Committee</a></li>
+        <li><a href="faqs.html" data-nav="faqs">FAQs</a></li>
+        <li><a href="contact.html" data-nav="contact">Contact us</a></li>
+      </ul>
+    </nav>
+    <div class="drawer-foot">
+      <ul id="drawer-legal">
+        <li><a href="#">Privacy policy</a></li>
+        <li><a href="#">Franchise agreements</a></li>
+        <li><a href="admin/">Site editor</a></li>
+      </ul>
+      <a href="contact.html" class="btn btn-primary">Get in touch</a>
+    </div>
+  </div>
+</dialog>
 <!-- @partial:header end -->
 
   <main id="main">
+  <section class="page-hero">
     <div class="container">
       <h1>Committee</h1>
-      <p class="lede">The people who run the division. Scroll each row to meet the team, from our directors to the referees who judge your lifts.</p>
+      <p class="lede">The people who run the division, from our directors to the referees who officiate our competitions.</p>
+    </div>
+  </section>
 
-      <h2 style="margin-top:0;">Executive team</h2>
-      <p class="lede">The Executive Team sets the direction for the division and leads its day-to-day running.</p>
-      <ul class="carousel carousel-bleed" role="list">
-      <li class="person-card">
-        <img class="photo" src="../assets/img/person-placeholder.png" alt="" width="240" height="296">
-        <div class="p-head">
-        <p class="p-name">Ant White</p>
-        <p class="p-role">Chair Person</p>
-        </div>
-        <p class="p-blurb">Leads the division's strategy, governance and links with British Powerlifting and beyond. The safeguarding lead at the top level.</p>
-        <a class="p-social" href="https://www.instagram.com/shred.kemper/" aria-label="Ant White on Instagram" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor"/></svg></a>
-      </li>
-      <li class="person-card">
-        <img class="photo" src="../assets/img/person-placeholder.png" alt="" width="240" height="296">
-        <div class="p-head">
-        <p class="p-name">Matt Dempsey</p>
-        <p class="p-role">Competition &amp; Operations Director</p>
-        </div>
-        <p class="p-blurb">Sets up competitions and runs the calendar. Oversees health, safety and safeguarding at events, and works with venues and host clubs.</p>
-        <a class="p-social" href="https://www.instagram.com/dempseyleeds/" aria-label="Matt Dempsey on Instagram" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor"/></svg></a>
-      </li>
-      <li class="person-card">
-        <img class="photo" src="../assets/img/person-placeholder.png" alt="" width="240" height="296">
-        <div class="p-head">
-        <p class="p-name">Jo Frost</p>
-        <p class="p-role">Technical &amp; Compliance Director</p>
-        </div>
-        <p class="p-blurb">Assigns referees, upholds refereeing standards and anti-doping compliance, and runs referee courses for the division.</p>
-        <a class="p-social" href="https://www.instagram.com/jttfrost71/" aria-label="Jo Frost on Instagram" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor"/></svg></a>
-      </li>
-      <li class="person-card">
-        <img class="photo" src="../assets/img/person-placeholder.png" alt="" width="240" height="296">
-        <div class="p-head">
-        <p class="p-name">Gemma Gibson</p>
-        <p class="p-role">Finance Director</p>
-        </div>
-        <p class="p-blurb">Manages the division's accounts, fees, invoices and sponsorship, and oversees merchandise finances.</p>
-        <a class="p-social" href="https://www.instagram.com/gemmasgibson/" aria-label="Gemma Gibson on Instagram" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor"/></svg></a>
-      </li>
-      <li class="person-card">
-        <img class="photo" src="../assets/img/person-placeholder.png" alt="" width="240" height="296">
-        <div class="p-head">
-        <p class="p-name">Tarrin Wilson</p>
-        <p class="p-role">Growth &amp; Strategy Director</p>
-        </div>
-        <p class="p-blurb">Leads media, social media, the website and livestreams, plus merchandise, sponsorship and outreach to juniors and universities.</p>
-        <a class="p-social" href="https://www.instagram.com/Tarrinwilson/" aria-label="Tarrin Wilson on Instagram" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor"/></svg></a>
-      </li>
-      </ul>
-
-      <h2>Supporting committee</h2>
-      <p class="lede">The Supporting Committee delivers the work behind our competitions, reporting to the directors.</p>
-      <ul class="carousel carousel-bleed" role="list">
-      <li class="person-card">
-        <img class="photo" src="../assets/img/person-placeholder.png" alt="" width="240" height="296">
-        <div class="p-head">
-        <p class="p-name">Ed Butcher</p>
-        <p class="p-role">Junior Development Officer</p>
-        </div>
-        <p class="p-blurb">Builds the junior pathway, links with schools and universities, and supports competitions and coaching for younger lifters.</p>
-        <a class="p-social" href="https://www.instagram.com/butcher__edward/" aria-label="Ed Butcher on Instagram" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor"/></svg></a>
-      </li>
-      <li class="person-card">
-        <img class="photo" src="../assets/img/person-placeholder.png" alt="" width="240" height="296">
-        <div class="p-head">
-        <p class="p-name">Will Butcher</p>
-        <p class="p-role">Technology Officer</p>
-        </div>
-        <p class="p-blurb">Improves the tech, systems and tools the division relies on, and runs the competition livestream setup.</p>
-        <a class="p-social" href="https://www.instagram.com/willbutcherphotography/" aria-label="Will Butcher on Instagram" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor"/></svg></a>
-      </li>
-      <li class="person-card">
-        <img class="photo" src="../assets/img/person-placeholder.png" alt="" width="240" height="296">
-        <div class="p-head">
-        <p class="p-name">Ben Gibson</p>
-        <p class="p-role">Health &amp; Safety Officer</p>
-        </div>
-        <p class="p-blurb">Runs risk assessments, keeps our health and safety policies up to date, and makes sure first aid cover is in place at every event.</p>
-        <a class="p-social" href="https://www.instagram.com/bigbengibson/" aria-label="Ben Gibson on Instagram" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor"/></svg></a>
-      </li>
-      <li class="person-card">
-        <img class="photo" src="../assets/img/person-placeholder.png" alt="" width="240" height="296">
-        <div class="p-head">
-        <p class="p-name">Matthew Gill</p>
-        <p class="p-role">Equipped Development Officer</p>
-        </div>
-        <p class="p-blurb">Champions equipped lifting in the division, running workshops and taster sessions and looking after division-owned equipped kit.</p>
-        <a class="p-social" href="https://www.instagram.com/matthewgill.coach/" aria-label="Matthew Gill on Instagram" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor"/></svg></a>
-      </li>
-      <li class="person-card">
-        <img class="photo" src="../assets/img/person-placeholder.png" alt="" width="240" height="296">
-        <div class="p-head">
-        <p class="p-name">Karen Horwood</p>
-        <p class="p-role">Records Registrar</p>
-        </div>
-        <p class="p-blurb">Keeps the divisional records up to date, verifies and certifies new records, and publishes them for everyone to see.</p>
-        <a class="p-social" href="https://www.instagram.com/karen1423178/" aria-label="Karen Horwood on Instagram" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor"/></svg></a>
-      </li>
-      <li class="person-card">
-        <img class="photo" src="../assets/img/person-placeholder.png" alt="" width="240" height="296">
-        <div class="p-head">
-        <p class="p-name">Andrew Kearsey</p>
-        <p class="p-role">Equipment Officer</p>
-        </div>
-        <p class="p-blurb">Keeps a register of all federation equipment, sources and maintains it, and makes sure it meets IPF standards.</p>
-        <a class="p-social" href="https://www.instagram.com/mrkearsey/" aria-label="Andrew Kearsey on Instagram" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor"/></svg></a>
-      </li>
-      <li class="person-card">
-        <img class="photo" src="../assets/img/person-placeholder.png" alt="" width="240" height="296">
-        <div class="p-head">
-        <p class="p-name">Sabrina Labuhn</p>
-        <p class="p-role">Entries Coordinator</p>
-        </div>
-        <p class="p-blurb">Sets up competition entries, handles refunds and changes, plans lifting orders, and reports results to OpenIPF.</p>
-        <a class="p-social" href="https://www.instagram.com/sabs_labuhn/" aria-label="Sabrina Labuhn on Instagram" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor"/></svg></a>
-      </li>
-      <li class="person-card">
-        <img class="photo" src="../assets/img/person-placeholder.png" alt="" width="240" height="296">
-        <div class="p-head">
-        <p class="p-name">Gigi Nicolson</p>
-        <p class="p-role">Volunteer Coordinator</p>
-        </div>
-        <p class="p-blurb">Recruits and assigns volunteers, plans the rotas, and runs the volunteer points system across all competitions.</p>
-        <a class="p-social" href="https://www.instagram.com/xgigi_n/" aria-label="Gigi Nicolson on Instagram" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor"/></svg></a>
-      </li>
-      <li class="person-card">
-        <img class="photo" src="../assets/img/person-placeholder.png" alt="" width="240" height="296">
-        <div class="p-head">
-        <p class="p-name">Rachel Steedman</p>
-        <p class="p-role">Equipped Development Officer</p>
-        </div>
-        <p class="p-blurb">Champions equipped lifting in the division, running workshops and taster sessions and looking after division-owned equipped kit.</p>
-        <a class="p-social" href="https://www.instagram.com/steedmanrachel8/" aria-label="Rachel Steedman on Instagram" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor"/></svg></a>
-      </li>
-      </ul>
-
-      <h2>International referees</h2>
-      <p class="lede">IPF referees who can officiate at all levels of competition, from a Novice to the IPF World Championships.</p>
-      <ul class="carousel carousel-bleed" role="list">
-      <li class="person-card">
-        <img class="photo" src="../assets/img/person-placeholder.png" alt="" width="240" height="296">
-        <div class="p-head">
-        <p class="p-name">Carole Springett</p>
-        <p class="p-role">IPF Category I</p>
-        </div>
-        <a class="p-social" href="https://www.instagram.com/carole7582/" aria-label="Carole Springett on Instagram" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor"/></svg></a>
-      </li>
-      <li class="person-card">
-        <img class="photo" src="../assets/img/person-placeholder.png" alt="" width="240" height="296">
-        <div class="p-head">
-        <p class="p-name">Jo Frost</p>
-        <p class="p-role">IPF Category I</p>
-        </div>
-        <a class="p-social" href="https://www.instagram.com/jttfrost71/" aria-label="Jo Frost on Instagram" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor"/></svg></a>
-      </li>
-      <li class="person-card">
-        <img class="photo" src="../assets/img/person-placeholder.png" alt="" width="240" height="296">
-        <div class="p-head">
-        <p class="p-name">Jacqui Rees</p>
-        <p class="p-role">IPF Category I</p>
-        </div>
-        <a class="p-social" href="https://www.instagram.com/jacquivrees/" aria-label="Jacqui Rees on Instagram" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor"/></svg></a>
-      </li>
-      <li class="person-card">
-        <img class="photo" src="../assets/img/person-placeholder.png" alt="" width="240" height="296">
-        <div class="p-head">
-        <p class="p-name">Phil Frost</p>
-        <p class="p-role">IPF Category I</p>
-        </div>
-        <a class="p-social" href="https://www.instagram.com/fr03tay/" aria-label="Phil Frost on Instagram" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor"/></svg></a>
-      </li>
-      <li class="person-card">
-        <img class="photo" src="../assets/img/person-placeholder.png" alt="" width="240" height="296">
-        <div class="p-head">
-        <p class="p-name">Ant White</p>
-        <p class="p-role">IPF Category II</p>
-        </div>
-        <a class="p-social" href="https://www.instagram.com/shred.kemper/" aria-label="Ant White on Instagram" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor"/></svg></a>
-      </li>
-      </ul>
-
-      <h2>National referees</h2>
-      <p class="lede">Nationally qualified referees who can lead national competitions as Chief Referee and Jury members.</p>
-      <ul class="carousel carousel-bleed" role="list">
-      <li class="person-card">
-        <img class="photo" src="../assets/img/person-placeholder.png" alt="" width="240" height="296">
-        <div class="p-head">
-        <p class="p-name">Richard Caine</p>
-        <p class="p-role">Senior National Referee</p>
-        </div>
-        <a class="p-social" href="https://www.instagram.com/squstbenchdead/" aria-label="Richard Caine on Instagram" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor"/></svg></a>
-      </li>
-      <li class="person-card">
-        <img class="photo" src="../assets/img/person-placeholder.png" alt="" width="240" height="296">
-        <div class="p-head">
-        <p class="p-name">Caitlin Baxter</p>
-        <p class="p-role">National Referee</p>
-        </div>
-        <a class="p-social" href="https://www.instagram.com/twoplatecait/" aria-label="Caitlin Baxter on Instagram" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor"/></svg></a>
-      </li>
-      <li class="person-card">
-        <img class="photo" src="../assets/img/person-placeholder.png" alt="" width="240" height="296">
-        <div class="p-head">
-        <p class="p-name">Ed Butcher</p>
-        <p class="p-role">National Referee</p>
-        </div>
-        <a class="p-social" href="https://www.instagram.com/butcher__edward/" aria-label="Ed Butcher on Instagram" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor"/></svg></a>
-      </li>
-      <li class="person-card">
-        <img class="photo" src="../assets/img/person-placeholder.png" alt="" width="240" height="296">
-        <div class="p-head">
-        <p class="p-name">Sam Butler</p>
-        <p class="p-role">National Referee</p>
-        </div>
-        <a class="p-social" href="https://www.instagram.com/samcad93/" aria-label="Sam Butler on Instagram" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor"/></svg></a>
-      </li>
-      <li class="person-card">
-        <img class="photo" src="../assets/img/person-placeholder.png" alt="" width="240" height="296">
-        <div class="p-head">
-        <p class="p-name">Ben Gibson</p>
-        <p class="p-role">National Referee</p>
-        </div>
-        <a class="p-social" href="https://www.instagram.com/bigbengibson/" aria-label="Ben Gibson on Instagram" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor"/></svg></a>
-      </li>
-      <li class="person-card">
-        <img class="photo" src="../assets/img/person-placeholder.png" alt="" width="240" height="296">
-        <div class="p-head">
-        <p class="p-name">Hollie Johnson</p>
-        <p class="p-role">National Referee</p>
-        </div>
-        <a class="p-social" href="https://www.instagram.com/hj_strengthcoaching/" aria-label="Hollie Johnson on Instagram" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor"/></svg></a>
-      </li>
-      <li class="person-card">
-        <img class="photo" src="../assets/img/person-placeholder.png" alt="" width="240" height="296">
-        <div class="p-head">
-        <p class="p-name">Alex Macaulay</p>
-        <p class="p-role">National Referee</p>
-        </div>
-        <a class="p-social" href="https://www.instagram.com/itsalexmacaulay/" aria-label="Alex Macaulay on Instagram" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor"/></svg></a>
-      </li>
-      <li class="person-card">
-        <img class="photo" src="../assets/img/person-placeholder.png" alt="" width="240" height="296">
-        <div class="p-head">
-        <p class="p-name">Elspeth McLeod</p>
-        <p class="p-role">National Referee</p>
-        </div>
-        <a class="p-social" href="https://www.instagram.com/elspethmcleod/" aria-label="Elspeth McLeod on Instagram" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor"/></svg></a>
-      </li>
-      <li class="person-card">
-        <img class="photo" src="../assets/img/person-placeholder.png" alt="" width="240" height="296">
-        <div class="p-head">
-        <p class="p-name">Gigi Nicolson</p>
-        <p class="p-role">National Referee</p>
-        </div>
-        <a class="p-social" href="https://www.instagram.com/xgigi_n/" aria-label="Gigi Nicolson on Instagram" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor"/></svg></a>
-      </li>
-      <li class="person-card">
-        <img class="photo" src="../assets/img/person-placeholder.png" alt="" width="240" height="296">
-        <div class="p-head">
-        <p class="p-name">Carole O'Neil</p>
-        <p class="p-role">National Referee</p>
-        </div>
-        <a class="p-social" href="https://www.instagram.com/caroleoneil/" aria-label="Carole O'Neil on Instagram" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor"/></svg></a>
-      </li>
-      <li class="person-card">
-        <img class="photo" src="../assets/img/person-placeholder.png" alt="" width="240" height="296">
-        <div class="p-head">
-        <p class="p-name">Tarrin Wilson</p>
-        <p class="p-role">National Referee</p>
-        </div>
-        <a class="p-social" href="https://www.instagram.com/Tarrinwilson/" aria-label="Tarrin Wilson on Instagram" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor"/></svg></a>
-      </li>
-      </ul>
-
-      <div class="notice">
-        <p>We are also supported by many divisional referees who are not listed here. They can officiate at divisional competitions and support at national competitions.</p>
-      </div>
-
-      <div class="callout">
-        <p class="callout-title">Something missing?</p>
-        <p>If you spot a gap, or you would like to support the division in another way, please get in touch.</p>
-        <a class="btn btn-secondary" href="mailto:ynepfentries@gmail.com">Get in touch</a>
-      </div>
+    <div class="container">
+      <div id="live" aria-live="polite"><p>Loading…</p></div>
     </div>
   </main>
 
   <!-- @partial:footer start -->
-<footer class="site-footer">
+<footer class="site-footer on-dark" data-root="">
   <div class="container">
-    <p style="margin:0;">&copy; Yorkshire &amp; North East Powerlifting Federation 2026</p>
+    <!-- The columns, social links and bottom-row links are edited under Footer in the site editor.
+         What is written here is the fallback shown if the database cannot be reached. -->
+    <div class="grid-row" id="footer-main">
+      <div class="grid-column-one-third" id="footer-brand">
+        <a class="footer-brand" href="index.html">
+          <img src="assets/img/logo-white.svg" alt="" width="52" height="52">
+          <span>Yorkshire &amp; North East<br>Powerlifting Federation</span>
+        </a>
+        <p>The home of drug tested powerlifting in Yorkshire and the North East.</p>
+        <ul class="footer-social" id="footer-social" aria-label="Social media">
+          <li><a href="https://linktr.ee/ynepf" target="_blank" rel="noopener">Linktree<span class="visually-hidden"> (opens in a new tab)</span></a></li>
+        </ul>
+        <p class="small">Entries and general enquiries:<br><a href="mailto:ynepfentries@gmail.com">ynepfentries@gmail.com</a></p>
+      </div>
+      <div class="grid-column-one-third" data-footer-col>
+        <h2 class="footer-heading">Explore</h2>
+        <nav aria-label="Footer: Explore">
+          <ul class="footer-list">
+            <li><a href="calendar.html">Competition calendar</a></li>
+            <li><a href="records.html">Records</a></li>
+            <li><a href="news.html">News</a></li>
+            <li><a href="committee.html">Committee</a></li>
+            <li><a href="faqs.html">FAQs</a></li>
+            <li><a href="contact.html">Contact us</a></li>
+          </ul>
+        </nav>
+      </div>
+      <div class="grid-column-one-third" data-footer-col>
+        <h2 class="footer-heading">Competing</h2>
+        <nav aria-label="Footer: Competing">
+          <ul class="footer-list">
+            <li><a href="https://www.britishpowerlifting.org/membership/" target="_blank" rel="noopener">Buy a membership<span class="visually-hidden"> (opens in a new tab)</span></a></li>
+            <li><a href="https://www.powerlifting.sport/rules/codes/info/technical-rules" target="_blank" rel="noopener">Technical rules<span class="visually-hidden"> (opens in a new tab)</span></a></li>
+            <li><a href="https://www.powerlifting.sport/rules/codes/info/approved-list" target="_blank" rel="noopener">Approved kit<span class="visually-hidden"> (opens in a new tab)</span></a></li>
+            <li><a href="https://www.openpowerlifting.org/" target="_blank" rel="noopener">Divisional records<span class="visually-hidden"> (opens in a new tab)</span></a></li>
+          </ul>
+        </nav>
+      </div>
+    </div>
+    <hr class="footer-rule">
+    <div class="grid-row footer-meta">
+      <div class="grid-column-two-thirds">
+        <nav aria-label="Footer: legal">
+          <ul class="footer-legal" id="footer-legal">
+            <li><a href="#">Privacy policy</a></li>
+            <li><a href="#">Franchise agreements</a></li>
+            <li><a href="admin/">Site editor</a></li>
+          </ul>
+        </nav>
+      </div>
+      <div class="grid-column-one-third">
+        <p>&copy; Yorkshire &amp; North East Powerlifting Federation 2026</p>
+      </div>
+    </div>
   </div>
+  <script src="assets/js/config.js"></script>
+  <script src="assets/js/footer.js" defer></script>
 </footer>
 <!-- @partial:footer end -->
 
+  <script src="assets/vendor/supabase.js"></script>
+  <script src="assets/vendor/marked.min.js"></script>
+  <script src="assets/vendor/purify.min.js"></script>
+  <script src="assets/js/config.js"></script>
+  <script src="assets/js/site.js"></script>
+  <script src="assets/js/public.js"></script>
   <script src="assets/js/nav.js" defer></script>
 </body>
 </html>

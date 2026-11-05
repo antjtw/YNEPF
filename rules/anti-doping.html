@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Anti-doping and clean sport — YNEPF</title>
   <meta name="description" content="What doping is, who can be tested, what happens if you test positive, and where to check substances.">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+  <link rel="icon" href="../assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="../assets/img/favicon-48.png" type="image/png" sizes="48x48">
+  <link rel="apple-touch-icon" href="../assets/img/apple-touch-icon.png">
   <link rel="stylesheet" href="../assets/css/fonts.css">
   <link rel="stylesheet" href="../assets/css/tokens.css">
   <link rel="stylesheet" href="../assets/css/base.css">
@@ -17,49 +17,84 @@
   <a class="skip-link" href="#main">Skip to main content</a>
 
   <!-- @partial:header start -->
-<div class="service-banner">
+<section class="service-banner" aria-label="Service notice">
   <div class="container">
     <span class="tag-alpha">Alpha</span>
     <p>This is a new service. For urgent matters, please visit <a href="https://www.ynepf.co.uk">ynepf.co.uk</a>.</p>
   </div>
-</div>
+</section>
 <header class="site-header">
-  <div class="container">
+  <div class="container header-inner">
     <a class="brand" href="../index.html" data-nav="home">
-      <img class="brand-mark-img" src="../assets/img/logo-white.svg" alt="" width="48" height="48" aria-hidden="true">
+      <img class="brand-mark-img" src="../assets/img/logo-colour.svg" alt="" width="44" height="44" aria-hidden="true">
       <span class="brand-name">
-        <span>Yorkshire &amp; North East</span>
-        <span>Powerlifting Federation</span>
+        <span class="brand-full">Yorkshire &amp; North East</span>
+        <span class="brand-full">Powerlifting Federation</span>
+        <span class="brand-short">YNEPF</span>
       </span>
     </a>
-    <button class="nav-toggle" aria-expanded="false" aria-controls="primary-nav">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-      Menu
-    </button>
-    <nav class="site-nav" id="primary-nav" aria-label="Primary">
+    <nav class="site-nav" aria-label="Primary">
       <ul>
-        <li><a href="../committee.html" data-nav="committee">Committee</a></li>
         <li><a href="../calendar.html" data-nav="calendar">Calendar</a></li>
+        <li><a href="../records.html" data-nav="records">Records</a></li>
+        <li><a href="../news.html" data-nav="news">News</a></li>
+        <li><a href="../committee.html" data-nav="committee">Committee</a></li>
         <li><a href="../faqs.html" data-nav="faqs">FAQs</a></li>
       </ul>
     </nav>
+    <div class="header-actions">
+      <a href="../contact.html" data-nav="contact" class="btn btn-primary btn-sm header-cta">Contact us</a>
+      <button class="menu-toggle" type="button" aria-haspopup="dialog" aria-controls="site-menu" aria-expanded="false">
+        <span class="burger" aria-hidden="true"><i></i></span>
+        <span>Menu</span>
+      </button>
+    </div>
   </div>
 </header>
+<dialog id="site-menu" class="drawer" aria-labelledby="site-menu-title">
+  <div class="drawer-panel">
+    <div class="drawer-head">
+      <p class="drawer-title" id="site-menu-title">Menu</p>
+      <button class="btn btn-secondary btn-sm" type="button" data-close-menu>Close <span class="visually-hidden">menu</span></button>
+    </div>
+    <nav aria-label="Menu">
+      <ul class="drawer-links">
+        <li><a href="../index.html" data-nav="home">Home</a></li>
+        <li><a href="../calendar.html" data-nav="calendar">Calendar</a></li>
+        <li><a href="../records.html" data-nav="records">Records</a></li>
+        <li><a href="../news.html" data-nav="news">News</a></li>
+        <li><a href="../committee.html" data-nav="committee">Committee</a></li>
+        <li><a href="../faqs.html" data-nav="faqs">FAQs</a></li>
+        <li><a href="../contact.html" data-nav="contact">Contact us</a></li>
+      </ul>
+    </nav>
+    <div class="drawer-foot">
+      <ul id="drawer-legal">
+        <li><a href="#">Privacy policy</a></li>
+        <li><a href="#">Franchise agreements</a></li>
+        <li><a href="../admin/">Site editor</a></li>
+      </ul>
+      <a href="../contact.html" class="btn btn-primary">Get in touch</a>
+    </div>
+  </div>
+</dialog>
 <!-- @partial:header end -->
 
-  <nav class="breadcrumbs" aria-label="Breadcrumb">
+  <main id="main">
+  <section class="page-hero">
     <div class="container">
-      <ol>
+      <nav class="breadcrumbs" aria-label="Breadcrumb">
+        <ol>
         <li><a href="../rules.html">Rules</a></li>
         <li class="sep" aria-hidden="true">&rsaquo;</li>
         <li aria-current="page">Anti-doping</li>
       </ol>
-    </div>
-  </nav>
-
-  <main id="main">
-    <div class="container">
+      </nav>
       <h1>Anti-doping and clean sport</h1>
+    </div>
+  </section>
+
+    <div class="container">
       <div class="notice">
         <p><strong>This is a plain-English guide.</strong> Anti-doping is run under World Anti-Doping Agency (WADA) rules. Always check the official sources below.</p>
       </div>
@@ -86,10 +121,65 @@
   </main>
 
   <!-- @partial:footer start -->
-<footer class="site-footer">
+<footer class="site-footer on-dark" data-root="../">
   <div class="container">
-    <p style="margin:0;">&copy; Yorkshire &amp; North East Powerlifting Federation 2026</p>
+    <!-- The columns, social links and bottom-row links are edited under Footer in the site editor.
+         What is written here is the fallback shown if the database cannot be reached. -->
+    <div class="grid-row" id="footer-main">
+      <div class="grid-column-one-third" id="footer-brand">
+        <a class="footer-brand" href="../index.html">
+          <img src="../assets/img/logo-white.svg" alt="" width="52" height="52">
+          <span>Yorkshire &amp; North East<br>Powerlifting Federation</span>
+        </a>
+        <p>The home of drug tested powerlifting in Yorkshire and the North East.</p>
+        <ul class="footer-social" id="footer-social" aria-label="Social media">
+          <li><a href="https://linktr.ee/ynepf" target="_blank" rel="noopener">Linktree<span class="visually-hidden"> (opens in a new tab)</span></a></li>
+        </ul>
+        <p class="small">Entries and general enquiries:<br><a href="mailto:ynepfentries@gmail.com">ynepfentries@gmail.com</a></p>
+      </div>
+      <div class="grid-column-one-third" data-footer-col>
+        <h2 class="footer-heading">Explore</h2>
+        <nav aria-label="Footer: Explore">
+          <ul class="footer-list">
+            <li><a href="../calendar.html">Competition calendar</a></li>
+            <li><a href="../records.html">Records</a></li>
+            <li><a href="../news.html">News</a></li>
+            <li><a href="../committee.html">Committee</a></li>
+            <li><a href="../faqs.html">FAQs</a></li>
+            <li><a href="../contact.html">Contact us</a></li>
+          </ul>
+        </nav>
+      </div>
+      <div class="grid-column-one-third" data-footer-col>
+        <h2 class="footer-heading">Competing</h2>
+        <nav aria-label="Footer: Competing">
+          <ul class="footer-list">
+            <li><a href="https://www.britishpowerlifting.org/membership/" target="_blank" rel="noopener">Buy a membership<span class="visually-hidden"> (opens in a new tab)</span></a></li>
+            <li><a href="https://www.powerlifting.sport/rules/codes/info/technical-rules" target="_blank" rel="noopener">Technical rules<span class="visually-hidden"> (opens in a new tab)</span></a></li>
+            <li><a href="https://www.powerlifting.sport/rules/codes/info/approved-list" target="_blank" rel="noopener">Approved kit<span class="visually-hidden"> (opens in a new tab)</span></a></li>
+            <li><a href="https://www.openpowerlifting.org/" target="_blank" rel="noopener">Divisional records<span class="visually-hidden"> (opens in a new tab)</span></a></li>
+          </ul>
+        </nav>
+      </div>
+    </div>
+    <hr class="footer-rule">
+    <div class="grid-row footer-meta">
+      <div class="grid-column-two-thirds">
+        <nav aria-label="Footer: legal">
+          <ul class="footer-legal" id="footer-legal">
+            <li><a href="#">Privacy policy</a></li>
+            <li><a href="#">Franchise agreements</a></li>
+            <li><a href="../admin/">Site editor</a></li>
+          </ul>
+        </nav>
+      </div>
+      <div class="grid-column-one-third">
+        <p>&copy; Yorkshire &amp; North East Powerlifting Federation 2026</p>
+      </div>
+    </div>
   </div>
+  <script src="../assets/js/config.js"></script>
+  <script src="../assets/js/footer.js" defer></script>
 </footer>
 <!-- @partial:footer end -->
 

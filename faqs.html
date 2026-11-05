@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FAQs — YNEPF</title>
   <meta name="description" content="Plain-English answers about competing with the Yorkshire & North East Powerlifting Federation: entering, weigh-in, kit, volunteering, records and competition day.">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="assets/img/favicon-48.png" type="image/png" sizes="48x48">
+  <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
   <link rel="stylesheet" href="assets/css/fonts.css">
   <link rel="stylesheet" href="assets/css/tokens.css">
   <link rel="stylesheet" href="assets/css/base.css">
@@ -17,366 +17,161 @@
   <a class="skip-link" href="#main">Skip to main content</a>
 
   <!-- @partial:header start -->
-<div class="service-banner">
+<section class="service-banner" aria-label="Service notice">
   <div class="container">
     <span class="tag-alpha">Alpha</span>
     <p>This is a new service. For urgent matters, please visit <a href="https://www.ynepf.co.uk">ynepf.co.uk</a>.</p>
   </div>
-</div>
+</section>
 <header class="site-header">
-  <div class="container">
+  <div class="container header-inner">
     <a class="brand" href="index.html" data-nav="home">
-      <img class="brand-mark-img" src="assets/img/logo-white.svg" alt="" width="48" height="48" aria-hidden="true">
+      <img class="brand-mark-img" src="assets/img/logo-colour.svg" alt="" width="44" height="44" aria-hidden="true">
       <span class="brand-name">
-        <span>Yorkshire &amp; North East</span>
-        <span>Powerlifting Federation</span>
+        <span class="brand-full">Yorkshire &amp; North East</span>
+        <span class="brand-full">Powerlifting Federation</span>
+        <span class="brand-short">YNEPF</span>
       </span>
     </a>
-    <button class="nav-toggle" aria-expanded="false" aria-controls="primary-nav">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-      Menu
-    </button>
-    <nav class="site-nav" id="primary-nav" aria-label="Primary">
+    <nav class="site-nav" aria-label="Primary">
       <ul>
-        <li><a href="committee.html" data-nav="committee">Committee</a></li>
         <li><a href="calendar.html" data-nav="calendar">Calendar</a></li>
+        <li><a href="records.html" data-nav="records">Records</a></li>
+        <li><a href="news.html" data-nav="news">News</a></li>
+        <li><a href="committee.html" data-nav="committee">Committee</a></li>
         <li><a href="faqs.html" data-nav="faqs" aria-current="page">FAQs</a></li>
       </ul>
     </nav>
+    <div class="header-actions">
+      <a href="contact.html" data-nav="contact" class="btn btn-primary btn-sm header-cta">Contact us</a>
+      <button class="menu-toggle" type="button" aria-haspopup="dialog" aria-controls="site-menu" aria-expanded="false">
+        <span class="burger" aria-hidden="true"><i></i></span>
+        <span>Menu</span>
+      </button>
+    </div>
   </div>
 </header>
+<dialog id="site-menu" class="drawer" aria-labelledby="site-menu-title">
+  <div class="drawer-panel">
+    <div class="drawer-head">
+      <p class="drawer-title" id="site-menu-title">Menu</p>
+      <button class="btn btn-secondary btn-sm" type="button" data-close-menu>Close <span class="visually-hidden">menu</span></button>
+    </div>
+    <nav aria-label="Menu">
+      <ul class="drawer-links">
+        <li><a href="index.html" data-nav="home">Home</a></li>
+        <li><a href="calendar.html" data-nav="calendar">Calendar</a></li>
+        <li><a href="records.html" data-nav="records">Records</a></li>
+        <li><a href="news.html" data-nav="news">News</a></li>
+        <li><a href="committee.html" data-nav="committee">Committee</a></li>
+        <li><a href="faqs.html" data-nav="faqs" aria-current="page">FAQs</a></li>
+        <li><a href="contact.html" data-nav="contact">Contact us</a></li>
+      </ul>
+    </nav>
+    <div class="drawer-foot">
+      <ul id="drawer-legal">
+        <li><a href="#">Privacy policy</a></li>
+        <li><a href="#">Franchise agreements</a></li>
+        <li><a href="admin/">Site editor</a></li>
+      </ul>
+      <a href="contact.html" class="btn btn-primary">Get in touch</a>
+    </div>
+  </div>
+</dialog>
 <!-- @partial:header end -->
 
   <main id="main">
+  <section class="page-hero">
     <div class="container">
       <h1>FAQs</h1>
       <p class="lede">These answers cover how our competitions work. They do not cover the rules of lifting itself. For those, read the two official guides below before you compete.</p>
+    </div>
+  </section>
 
+    <div class="container">
       <div class="callout" style="margin-top:0;">
         <p class="callout-title">Read these first</p>
         <p style="margin-bottom:var(--space-3);">The rules of lifting and the list of allowed kit are set by the IPF, not by us.</p>
         <ul style="margin-bottom:0;">
-          <li><a href="https://www.powerlifting.sport/rules/codes/info/technical-rules">IPF Technical Rules</a> &mdash; how each lift is judged, and why a lift can fail</li>
+          <li><a href="https://www.powerlifting.sport/rules/codes/info/technical-rules">IPF Technical Rules</a> &mdash; how each lift is refereed, and why a lift can fail</li>
           <li><a href="https://www.powerlifting.sport/rules/codes/info/approved-list">IPF Approved Kit List</a> &mdash; the only kit you may use in a sanctioned competition</li>
         </ul>
       </div>
 
-      <h2>Before you enter</h2>
-      <div class="faq">
-        <details>
-          <summary>Do I need a membership to compete?</summary>
-          <div class="faq-body">
-            <p>Yes. You must be a member of British Powerlifting to lift at our competitions. <a href="https://www.britishpowerlifting.org/membership/">Buy a membership on the British Powerlifting website</a>.</p>
-            <p>Bring proof of your membership to weigh-in. You can show it as a PDF, an image, a Digital Wallet card, or a printed copy. If you cannot show it, you will not be allowed to lift.</p>
-            <p>You also need photo ID, such as a driving licence or passport. A photo of it is fine. For Sub-Junior lifters, a birth certificate is also accepted.</p>
-          </div>
-        </details>
-        <details>
-          <summary>Who can enter a competition?</summary>
-          <div class="faq-body">
-            <p>Anyone can enter, from your first competition to your hundredth. You do need to be able to lift the bar and collars, which weigh 25&nbsp;kg together, so your opening attempt in each lift must be at least 25&nbsp;kg.</p>
-            <p>The only other exception is a competition that needs a qualifying total. If that applies, we say so clearly in the competition details.</p>
-          </div>
-        </details>
-        <details>
-          <summary>Can I compete with YNEPF if I have competed in a non-IPF event?</summary>
-          <div class="faq-body">
-            <p>Possibly. Under IPF by-law 15.8, anyone who takes part in an event run by a body that is not recognised by the World Anti-Doping Agency (WADA) becomes ineligible for authorised <strong>National or International</strong> competitions for 12 months from that event.</p>
-            <p>Our competitions are divisional, which sits below national level, so this restriction does not automatically rule you out of a YNEPF competition. If you have competed in a non-IPF event and are unsure where you stand, email us at <a href="mailto:ynepfentries@gmail.com">ynepfentries@gmail.com</a> before you enter and we will check for you.</p>
-          </div>
-        </details>
-        <details>
-          <summary>What kit am I allowed to use?</summary>
-          <div class="faq-body">
-            <p>You may only use kit from the <a href="https://www.powerlifting.sport/rules/codes/info/approved-list">IPF Approved Kit List</a>. Anything not on that list is not allowed. Lifting straps are not allowed.</p>
-            <p>Chalk is provided on the day. Liquid chalk is not allowed.</p>
-          </div>
-        </details>
-        <details>
-          <summary>What equipment will be on the platform?</summary>
-          <div class="faq-body">
-            <p>On the competition platform we use an Eleiko rack with a soft-pad bench, and Eleiko bars. At franchise competitions, run by clubs rather than the Federation, other IPF-approved racks, bars, plates or collars may be used.</p>
-            <p>In the warm-up area, every venue has adjustable racks, power bars and calibrated plates.</p>
-          </div>
-        </details>
-      </div>
-
-      <h2>Entry, changes and refunds</h2>
-      <div class="faq">
-        <details>
-          <summary>How do I find out when entries open?</summary>
-          <div class="faq-body">
-            <p>We post the dates and times for priority, general and guest entry on our social media channels. Watch those for the entry link.</p>
-          </div>
-        </details>
-        <details>
-          <summary>Can I change or cancel my entry?</summary>
-          <div class="faq-body">
-            <p>You can change or cancel up to the date in the competition details. This is usually the Saturday three weeks before the competition. There are no exceptions.</p>
-          </div>
-        </details>
-        <details>
-          <summary>Can I get a refund?</summary>
-          <div class="faq-body">
-            <p>Once entry closes, we cannot make changes or give refunds if you pull out. Entries cannot be moved to another event.</p>
-            <p>If you pre-ordered a media package and then pull out, we will refund that.</p>
-          </div>
-        </details>
-        <details>
-          <summary>I am a guest lifter. What does that mean?</summary>
-          <div class="faq-body">
-            <p>Guest lifters can enter one week after general entry, if spaces are left. As a guest you are not eligible to win, to place, or to set divisional records. You can still set a qualifying total for national competitions, in the weight class you lift in on the day.</p>
-          </div>
-        </details>
-        <details>
-          <summary>When can I see the lifting order?</summary>
-          <div class="faq-body">
-            <p>We put the lifting order together once entries reach around 80% of capacity, or when entries slow down, or when the competition is full.</p>
-            <p>We send it out by email as soon as we can. At the latest, this will be shortly after entries close, around three weeks before the competition.</p>
-            <p>If you have not received the email, check your spam or junk folder, or contact us at <a href="mailto:ynepfentries@gmail.com">ynepfentries@gmail.com</a>. The lifting order is also always on our <a href="https://linktr.ee/ynepf" target="_blank" rel="noopener">Linktree</a>, so you can check there too.</p>
-          </div>
-        </details>
-        <details>
-          <summary>Can I request which day to lift on at a multi-day competition?</summary>
-          <div class="faq-body">
-            <p>No. The lifting order flexes around how many lifters we have, which we try to balance across the competition days. If we accommodated one lifter's preference, we would have to accommodate everyone's.</p>
-            <p>Please keep both competition days free.</p>
-          </div>
-        </details>
-        <details>
-          <summary>How do I claim a discount?</summary>
-          <div class="faq-body">
-            <p>If you have volunteer points to spend, you can claim a discount from us by email. Please do this at least 24 hours before entry opens. Email <a href="mailto:ynepfentries@gmail.com">ynepfentries@gmail.com</a>.</p>
-            <p>Discount codes are non-transferable. Any lifter who uses a discount code without authorisation will be refunded and refused entry.</p>
-          </div>
-        </details>
-      </div>
-
-      <h2>Volunteering, points and discounts</h2>
-      <div class="faq">
-        <details>
-          <summary>Can I volunteer at a competition?</summary>
-          <div class="faq-body">
-            <p>Yes, and we would love your help. Volunteers take on roles such as setting up, taking down, platform crew, the table team and MC. You do not need any experience for these, and we give every volunteer a full briefing before you start.</p>
-            <p>Refereeing is different. Referees must pass a divisional referees exam, which we host periodically when there is enough interest. Keep an eye on our social media for dates, or <a href="https://forms.gle/3N9eVSnGBKtuUHB27">register your interest here</a>.</p>
-            <p>When you volunteer, you earn points you can spend on future competitions. Scotland and Wales already run this approach, letting volunteers earn priority access and discounts on competitions and memberships.</p>
-          </div>
-        </details>
-        <details>
-          <summary>Can under-18s volunteer?</summary>
-          <div class="faq-body">
-            <p>No. You must be 18 or over to volunteer at our competitions. This is for safeguarding reasons.</p>
-            <p>Under-18s are very welcome to compete, and to come along and watch.</p>
-          </div>
-        </details>
-        <details>
-          <summary>How do I earn points?</summary>
-          <div class="faq-body">
-            <p>Points are based on the role and how long you give:</p>
-            <ul>
-              <li>Set up or take down: 1 point each</li>
-              <li>Set up and take down: 2 points total</li>
-              <li>Session role (refereeing, platform crew, table team, MC): 1 point</li>
-              <li>Ad hoc volunteering, outside competition: 1 to 3 points, decided by the committee based on the size of the task</li>
-            </ul>
-            <p>Points stack. Volunteer for two sessions and you earn 4 points.</p>
-            <p>Executive and committee members receive 3 points for each quarter of service after 6 months, awarded from that point.</p>
-            <p>You can bank points for 24 months. After that, they expire 24 months after being earned.</p>
-          </div>
-        </details>
-        <details>
-          <summary>How do I spend points?</summary>
-          <div class="faq-body">
-            <p>You can spend points in several ways, from early access to entries through to a free British Powerlifting membership:</p>
-            <ul>
-              <li>Priority entry: 1 point</li>
-              <li>£20 off competition entry: 4 points</li>
-              <li>£20 off, with priority entry: 5 points</li>
-              <li>£40 off competition entry: 8 points</li>
-              <li>£40 off, with priority entry: 9 points</li>
-              <li>Half-price BP membership: 5 points</li>
-              <li>Free BP membership: 10 points</li>
-            </ul>
-            <p>Here is how each one works:</p>
-            <ul>
-              <li>Priority entry: links are emailed to all volunteers 24 hours before general entry opens. Do not pass your link on to anyone else.</li>
-              <li>Entry discounts: issued as a code on request by email. Email <a href="mailto:ynepfentries@gmail.com">ynepfentries@gmail.com</a> at least 24 hours before general entry. Codes are for you only and cannot be added after you have paid.</li>
-              <li>Memberships: refunded in part or in full on request by email, with proof of purchase.</li>
-            </ul>
-            <p>We are also looking at gift cards and discount codes with our federation partners.</p>
-          </div>
-        </details>
-        <details>
-          <summary>How do I check my points?</summary>
-          <div class="faq-body">
-            <p>Your points are kept up to date on our rewards tracker. <a href="https://docs.google.com/spreadsheets/u/1/d/e/2PACX-1vSEGYi0fHlW-MkpaUNuISwz-DWoXezIMDo352dkZfRcUTjzvmyZJtRFgxlydJh4qc1Yqy3tb1tr7gde/pubhtml?gid=825507740&single=true" target="_blank" rel="noopener">View the points tracker</a>.</p>
-          </div>
-        </details>
-      </div>
-
-      <h2>YNE Worlds</h2>
-      <div class="faq">
-        <details>
-          <summary>What is YNE Worlds?</summary>
-          <div class="faq-body">
-            <p>YNE Worlds is our divisional championship, held in the November Open slot. With new restrictions at the Open British Championships, it gives our lifters a prestigious platform of their own. To keep the standard high and manage demand, there is a qualifying process.</p>
-          </div>
-        </details>
-        <details>
-          <summary>How do I qualify for YNE Worlds?</summary>
-          <div class="faq-body">
-            <p>There are two ways to qualify:</p>
-            <ul>
-              <li>Achieve a minimum of 70 GLP, at or after the Nov Open 2025, or</li>
-              <li>Win Best Lifter at YNE Worlds 2025.</li>
-            </ul>
-            <p>GLP (GL points) is a score that adjusts your total for your bodyweight. All age classes must meet 70 GLP. The qualifying total must have been achieved within the 12 months before the competition.</p>
-          </div>
-        </details>
-        <details>
-          <summary>Do I need to qualify in the weight class I will compete in?</summary>
-          <div class="faq-body">
-            <p>No. As long as you achieved 70 GLP in the 12 months beforehand, in any weight class, you are good to enter. You do not have to hit the score in the same class you compete in on the day.</p>
-          </div>
-        </details>
-        <details>
-          <summary>Can equipped lifters enter YNE Worlds?</summary>
-          <div class="faq-body">
-            <p>Yes. Equipped lifters who reach 70 GLP are welcome to enter and place within their category. They cannot compete for the Best Lifter award. This competition does not offer bench-only entries.</p>
-          </div>
-        </details>
-      </div>
-
-      <h2>Cost</h2>
-      <div class="faq">
-        <details>
-          <summary>How much does it cost to enter?</summary>
-          <div class="faq-body">
-            <p>Our 2026 entry fees are:</p>
-            <div class="table-wrap">
-              <table class="data">
-                <caption class="visually-hidden">2026 competition entry fees by type</caption>
-                <thead><tr><th scope="col">Type</th><th scope="col">Fee</th></tr></thead>
-                <tbody>
-                  <tr><th scope="row">Full power</th><td>£40</td></tr>
-                  <tr><th scope="row">Bench-only</th><td>£25</td></tr>
-                  <tr><th scope="row">Sub-junior</th><td>£15</td></tr>
-                </tbody>
-              </table>
-            </div>
-            <p>We raised our fees for 2026 to bring us in line with other divisions, and to help us run a cleaner, fairer sport. The fee lets us keep drug testing at our competitions and reward our volunteers with entry discounts for their time.</p>
-          </div>
-        </details>
-      </div>
-
-      <h2>Photos and media</h2>
-      <div class="faq">
-        <details>
-          <summary>How do I get photos of my lifting?</summary>
-          <div class="faq-body">
-            <p>Our competition photos are taken by White Lights Media. You can order your photos from their website: <a href="https://whitelightsmediaregionals.com/" target="_blank" rel="noopener">whitelightsmediaregionals.com</a>.</p>
-            <p>There is a pre-order discount if you buy your photos at the same time as your entry.</p>
-            <p>Photos are supplied by White Lights Media, not by YNEPF. They usually aim to deliver media packages within two weeks.</p>
-          </div>
-        </details>
-        <details>
-          <summary>Can I opt out of my photos being used?</summary>
-          <div class="faq-body">
-            <p>Yes. We take photos and videos at our competitions and may use them to promote the sport and the division, for example on our social media and website.</p>
-            <p>When you enter, you can opt out of your photos and videos being used this way. You can change your choice at any time by emailing <a href="mailto:ynepfentries@gmail.com">ynepfentries@gmail.com</a>.</p>
-          </div>
-        </details>
-      </div>
-
-      <h2>On the day</h2>
-      <div class="faq">
-        <details>
-          <summary>When and how does weigh-in work?</summary>
-          <div class="faq-body">
-            <p>Weigh-in is on competition day, two hours before your flight starts. Try to arrive as it opens, or a little earlier. Some competitions call you in lot-number order. If you miss your turn, you wait until everyone else has weighed in.</p>
-            <p>Weigh-in is single sex and private. At weigh-in we ask for your BP membership, your photo ID, and your openers (your first weight in each lift).</p>
-          </div>
-        </details>
-        <details>
-          <summary>What happens if I do not make my weight?</summary>
-          <div class="faq-body">
-            <p>If you are over your category weight, you can try again later in the weigh-in period. You can have as many tries as you like while weigh-in is open.</p>
-            <p>If you still do not make weight, you lift as a guest. You will not be eligible to win, to place, or to set divisional records. You can still set a qualifying total for national competitions, in the weight class you lift in on the day. You start in the flight you were first given.</p>
-          </div>
-        </details>
-        <details>
-          <summary>When do I set my rack heights and check my kit?</summary>
-          <div class="faq-body">
-            <p>You set your squat and bench rack and safety heights after weigh-in, before the competition starts. Wear the shoes you will compete in when you set them.</p>
-            <p>Kit check happens at the same time as weigh-in, and closes when weigh-in closes. It is advisable to weigh in before you get your kit checked. If both sexes are weighing in, you can get your kit checked while the other sex weighs in.</p>
-            <p>Anything you will or may wear on the platform must be shown and passed at kit check. This includes borrowed or shared kit. If you go to the platform with an item that was not checked, you will be asked to remove or replace it, and your one-minute attempt timer may run out while you do. Always get everything checked, even if you are unsure.</p>
-          </div>
-        </details>
-        <details>
-          <summary>Are your competitions drug tested?</summary>
-          <div class="faq-body">
-            <p>Yes. We are a drug-tested federation. Testing started at the Nov Open 2025, and we are working towards testing at every competition in 2026. Testing is carried out under UK Anti-Doping rules.</p>
-          </div>
-        </details>
-        <details>
-          <summary>Can I bring a coach or handler?</summary>
-          <div class="faq-body">
-            <p>Yes. You do not need a membership to coach. You can have one coach or handler in the warm-up area. Sub-Junior lifters can have two.</p>
-            <p>Coaches get a wristband at weigh-in and must wear it at all times. Anyone in the warm-up area without a wristband will be asked to return to the audience.</p>
-          </div>
-        </details>
-        <details>
-          <summary>Can people come and watch?</summary>
-          <div class="faq-body">
-            <p>Yes. Spectators are very welcome. We do not charge for entry to our own competitions, though some franchise competitions, run by clubs rather than the Federation, may charge a small spectator fee to manage the crowd. If a YNEPF competition ever plans to charge, we will say so clearly. You can also watch our competitions live on <a href="https://www.youtube.com/@YNEPF-Powerlifting">our YouTube channel</a>.</p>
-          </div>
-        </details>
-      </div>
-
-      <h2>Records</h2>
-      <div class="faq">
-        <details>
-          <summary>What divisional records can I set?</summary>
-          <div class="faq-body">
-            <p>We keep divisional records for Sub-Junior, Junior, Open and the Masters groups. We do not split Juniors down further.</p>
-            <p>You must make your category weight to set a record. Guest lifters and lifters who miss weight cannot set divisional records.</p>
-          </div>
-        </details>
-        <details>
-          <summary>How much do I need to beat a record by?</summary>
-          <div class="faq-body">
-            <p>You can beat a current record by as little as 0.5&nbsp;kg.</p>
-          </div>
-        </details>
-      </div>
-
-      <h2>Competition day checklist</h2>
-      <p>Pack these the night before:</p>
-      <ul class="checklist">
-        <li>Singlet and long socks</li>
-        <li>Underwear. Any sports bra or commercial bra is fine.</li>
-        <li>Squat shoes and deadlift shoes</li>
-        <li>Belt, knee sleeves and wrist wraps</li>
-        <li>A plain, round-neck cotton T-shirt with short, form-fitting sleeves that cover the shoulders</li>
-        <li>Any warm-up kit, such as a foam roller or bands</li>
-        <li>Your BP membership, and a pen</li>
-        <li>Food and drink</li>
-        <li>Talc, if you use it (chalk is provided on the platform)</li>
-        <li>Sanitary protection, if you may need it</li>
-        <li>A basic first aid kit (painkillers, plasters, tape, hot and cold gels, nail clippers)</li>
-      </ul>
+      <div id="live" aria-live="polite"><p>Loading…</p></div>
 
       <p style="margin-top:var(--space-6);">Still stuck? Email <a href="mailto:ynepfentries@gmail.com">ynepfentries@gmail.com</a> and we will help.</p>
     </div>
   </main>
 
   <!-- @partial:footer start -->
-<footer class="site-footer">
+<footer class="site-footer on-dark" data-root="">
   <div class="container">
-    <p style="margin:0;">&copy; Yorkshire &amp; North East Powerlifting Federation 2026</p>
+    <!-- The columns, social links and bottom-row links are edited under Footer in the site editor.
+         What is written here is the fallback shown if the database cannot be reached. -->
+    <div class="grid-row" id="footer-main">
+      <div class="grid-column-one-third" id="footer-brand">
+        <a class="footer-brand" href="index.html">
+          <img src="assets/img/logo-white.svg" alt="" width="52" height="52">
+          <span>Yorkshire &amp; North East<br>Powerlifting Federation</span>
+        </a>
+        <p>The home of drug tested powerlifting in Yorkshire and the North East.</p>
+        <ul class="footer-social" id="footer-social" aria-label="Social media">
+          <li><a href="https://linktr.ee/ynepf" target="_blank" rel="noopener">Linktree<span class="visually-hidden"> (opens in a new tab)</span></a></li>
+        </ul>
+        <p class="small">Entries and general enquiries:<br><a href="mailto:ynepfentries@gmail.com">ynepfentries@gmail.com</a></p>
+      </div>
+      <div class="grid-column-one-third" data-footer-col>
+        <h2 class="footer-heading">Explore</h2>
+        <nav aria-label="Footer: Explore">
+          <ul class="footer-list">
+            <li><a href="calendar.html">Competition calendar</a></li>
+            <li><a href="records.html">Records</a></li>
+            <li><a href="news.html">News</a></li>
+            <li><a href="committee.html">Committee</a></li>
+            <li><a href="faqs.html">FAQs</a></li>
+            <li><a href="contact.html">Contact us</a></li>
+          </ul>
+        </nav>
+      </div>
+      <div class="grid-column-one-third" data-footer-col>
+        <h2 class="footer-heading">Competing</h2>
+        <nav aria-label="Footer: Competing">
+          <ul class="footer-list">
+            <li><a href="https://www.britishpowerlifting.org/membership/" target="_blank" rel="noopener">Buy a membership<span class="visually-hidden"> (opens in a new tab)</span></a></li>
+            <li><a href="https://www.powerlifting.sport/rules/codes/info/technical-rules" target="_blank" rel="noopener">Technical rules<span class="visually-hidden"> (opens in a new tab)</span></a></li>
+            <li><a href="https://www.powerlifting.sport/rules/codes/info/approved-list" target="_blank" rel="noopener">Approved kit<span class="visually-hidden"> (opens in a new tab)</span></a></li>
+            <li><a href="https://www.openpowerlifting.org/" target="_blank" rel="noopener">Divisional records<span class="visually-hidden"> (opens in a new tab)</span></a></li>
+          </ul>
+        </nav>
+      </div>
+    </div>
+    <hr class="footer-rule">
+    <div class="grid-row footer-meta">
+      <div class="grid-column-two-thirds">
+        <nav aria-label="Footer: legal">
+          <ul class="footer-legal" id="footer-legal">
+            <li><a href="#">Privacy policy</a></li>
+            <li><a href="#">Franchise agreements</a></li>
+            <li><a href="admin/">Site editor</a></li>
+          </ul>
+        </nav>
+      </div>
+      <div class="grid-column-one-third">
+        <p>&copy; Yorkshire &amp; North East Powerlifting Federation 2026</p>
+      </div>
+    </div>
   </div>
+  <script src="assets/js/config.js"></script>
+  <script src="assets/js/footer.js" defer></script>
 </footer>
 <!-- @partial:footer end -->
+  <script src="assets/vendor/supabase.js"></script>
+  <script src="assets/vendor/marked.min.js"></script>
+  <script src="assets/vendor/purify.min.js"></script>
+  <script src="assets/js/config.js"></script>
+  <script src="assets/js/site.js"></script>
+  <script src="assets/js/public.js"></script>
   <script src="assets/js/nav.js" defer></script>
 </body>
 </html>
