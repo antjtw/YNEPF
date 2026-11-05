@@ -573,7 +573,7 @@ A few parts of the site are ordinary pages that a developer changes:
 - The **rules pages** (`/rules` and everything under it).
 - The **Chairperson** page and other fixed pages.
 - Colours, fonts, and layout.
-- The **hero photo** on the home page.
+- The **hero photo** on the home page (a random one from a small set is shown on each visit; new photos are added in the code, see the README's Images section).
 
 If you need one of these changed, ask whoever maintains the site code. The repository `README.md` has an "Editing the rest of the site" section that explains how.
 
