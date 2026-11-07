@@ -297,11 +297,12 @@
     try { u = new URL((raw || "").trim()); } catch (e) { return ""; }
     if (u.protocol !== "https:") return "";
     var gid = u.searchParams.get("gid") || (u.hash.match(/gid=(\d+)/) || [])[1];
-    var pub = u.pathname.match(/^\/spreadsheets\/d\/e\/([^/]+)\/pub/);
+    // Google adds /u/1/ (the signed-in account number) when a link is copied from the address bar; it means nothing here.
+    var pub = u.pathname.match(/^\/spreadsheets(?:\/u\/\d+)?\/d\/e\/([^/]+)\/pub/);
     if (u.hostname === "docs.google.com" && pub) {
       return "https://docs.google.com/spreadsheets/d/e/" + pub[1] + "/pub?output=csv" + (gid ? "&gid=" + gid : "");
     }
-    var share = u.pathname.match(/^\/spreadsheets\/d\/([^/]+)/);
+    var share = u.pathname.match(/^\/spreadsheets(?:\/u\/\d+)?\/d\/([^/]+)/);
     if (u.hostname === "docs.google.com" && share) {
       return "https://docs.google.com/spreadsheets/d/" + share[1] + "/export?format=csv&gid=" + (gid || "0");
     }
