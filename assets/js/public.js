@@ -458,17 +458,18 @@
       var status = el("p", { class: "visually-hidden", role: "status" });
       root.appendChild(el("div", { class: "rec-tools" },
         el("label", { for: "rec-search" }, "Search all records"), search, status));
-      root.appendChild(el("ul", { class: "rec-jump" }, sources.map(function (s) {
-        return el("li", null, el("a", { href: "#" + slug(s.title) }, s.title));
-      })));
-      root.appendChild(el("p", { class: "rec-note" }, "All weights are in kilograms. “Standard” means nobody has beaten the qualifying standard yet."));
+      var tablist = el("div", { class: "tablist", role: "tablist", "aria-label": "Record tables" });
+      var tabsWrap = el("div", { class: "tabs", style: "margin-top:0;" }, tablist,
+        el("p", { class: "rec-note" }, "All weights are in kilograms. “Standard” means nobody has beaten the qualifying standard yet."));
+      root.appendChild(tabsWrap);
 
+      var onLoaded = function () {};   // set below: lets a link to a weight class wait for its sheet to arrive
       var sections = sources.map(function (s) {
         var body = el("div", null, el("p", null, "Loading…"));
         var sid = slug(s.title);
-        var sec = el("section", { class: "rec-section", id: sid, "aria-labelledby": "h-" + sid },
-          el("h2", { id: "h-" + sid }, s.title), body);
-        root.appendChild(sec);
+        var sec = el("section", { class: "rec-section", id: sid, role: "tabpanel", "aria-labelledby": "tab-" + sid, tabindex: "0", hidden: true },
+          el("h2", { class: "visually-hidden" }, s.title), body);
+        tabsWrap.appendChild(sec);
         var state = { rows: [], groups: [], body: body };
         Y.loadSheet(s.url).then(function (sheet) {
           if (!sheet.header.length) { body.replaceChildren(el("p", null, "No records in this sheet yet.")); return; }
@@ -484,6 +485,7 @@
               }))
             ].concat(grids.map(function (g) { return g.group; }), [state.empty]).filter(Boolean);
             body.replaceChildren.apply(body, kids);
+            onLoaded();
             return;
           }
           // Any other sheet: show it as a plain table, exactly as it is.
@@ -499,6 +501,7 @@
               el("thead", null, el("tr", null, sheet.header.map(function (h) { return el("th", { scope: "col" }, h); }))),
               tbody)),
             state.empty);
+          onLoaded();
         }).catch(function (e) {
           if (window.console) console.error(e);
           body.replaceChildren(el("p", null, "We could not load these records just now. ",
@@ -507,8 +510,51 @@
         return { sec: sec, state: state };
       });
 
+      // ---- Tabs (WAI-ARIA tabs pattern: arrows, Home and End; deep links #women-s-classic or a class such as #women-s-classic-57kg)
+      var tabEls = [];
+      function select(i, opts) {
+        opts = opts || {};
+        sections.forEach(function (x, n) {
+          var on = n === i;
+          tabEls[n].setAttribute("aria-selected", String(on));
+          tabEls[n].tabIndex = on ? 0 : -1;
+          x.sec.hidden = !on;
+        });
+        if (opts.focus) tabEls[i].focus();
+        if (opts.fromUser) { try { history.replaceState(null, "", "#" + slug(sources[i].title)); } catch (e) { /* file:// */ } }
+      }
+      sources.forEach(function (s, i) {
+        var sid = slug(s.title);
+        var t = el("button", { type: "button", role: "tab", id: "tab-" + sid, "aria-controls": sid, "aria-selected": "false", tabindex: "-1",
+          onclick: function () { select(i, { fromUser: true }); },
+          onkeydown: function (e) {
+            var n = e.key === "ArrowRight" ? (i + 1) % sources.length : e.key === "ArrowLeft" ? (i + sources.length - 1) % sources.length
+              : e.key === "Home" ? 0 : e.key === "End" ? sources.length - 1 : -1;
+            if (n < 0) return;
+            e.preventDefault();
+            select(n, { focus: true, fromUser: true });
+          } }, s.title, el("span", { class: "rec-badge", hidden: true }));
+        tabEls.push(t);
+        tablist.appendChild(t);
+      });
+      var hashPending = !!location.hash;   // a link such as #women-s-classic-57kg may point at something still loading
+      function recFromHash() {
+        var id = decodeURIComponent(location.hash.slice(1)), target = id && document.getElementById(id), at = 0;
+        sections.forEach(function (x, n) { if (target && x.sec.contains(target)) at = n; });
+        select(at);
+        if (target && target.closest(".rec-section")) { target.scrollIntoView(); hashPending = false; }   // the panel was hidden when the browser first tried to jump
+      }
+      onLoaded = function () {
+        if (!hashPending) return;
+        var id = decodeURIComponent(location.hash.slice(1));
+        if (id && document.getElementById(id)) recFromHash();
+      };
+      tablist.addEventListener("click", function () { hashPending = false; });
+      recFromHash();
+      window.addEventListener("hashchange", function () { hashPending = false; recFromHash(); });
+
       search.addEventListener("input", function () {
-        var q = search.value.trim().toLowerCase(), shown = 0;
+        var q = search.value.trim().toLowerCase(), shown = 0, firstHit = -1, counts = [];
         sections.forEach(function (x) {
           var n = 0;
           x.state.rows.forEach(function (r) {
@@ -520,7 +566,16 @@
           x.state.groups.forEach(function (g) { g.el.hidden = !g.rows.some(function (r) { return !r.tr.hidden; }); });
           if (x.state.empty) x.state.empty.hidden = n > 0 || !x.state.rows.length;
           shown += n;
+          counts.push(n);
+          if (n && firstHit < 0) firstHit = counts.length - 1;
         });
+        // Show how many matches each tab has, and move to one that has some if the open tab has none.
+        counts.forEach(function (n, i) {
+          var b = tabEls[i].querySelector(".rec-badge");
+          b.hidden = !q;
+          b.replaceChildren(el("span", { "aria-hidden": "true" }, String(n)), el("span", { class: "visually-hidden" }, " matching records"));
+        });
+        if (q && firstHit >= 0 && tabEls.every(function (t, i) { return t.getAttribute("aria-selected") !== "true" || !counts[i]; })) select(firstHit);
         status.textContent = q ? shown + " matching record" + (shown === 1 ? "" : "s") : "";
       });
     }).catch(function (e) { fail(root, e); });

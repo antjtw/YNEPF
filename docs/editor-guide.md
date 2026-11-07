@@ -376,9 +376,11 @@ A small example in the same layout is in `docs/mockups/sample-records.csv`.
 - The **first column becomes the row label** (it is shown in bold, and is what screen readers announce first).
 - Everything is shown **exactly as typed**. **Blank rows are skipped.** Empty columns at the right-hand side are trimmed.
 
-### Searching and jumping around
+### Tabs, searching and jumping around
 
-Visitors can **search across every table** at once (by name, class, lift or weight). In the grids, classes with no match are hidden and matching boxes are highlighted. Each sheet also has a row of weight class buttons to jump straight to a class.
+Each record sheet you add in the editor becomes a **tab** on the Records page, in the order you set with the ↑ ↓ arrows. The first one is open when the page loads, and visitors switch with a click or the left and right arrow keys. A link such as `/records#women-s-classic` opens a particular tab.
+
+Visitors can **search across every tab** at once (by name, class, lift or weight). While they search, each tab shows how many matches it has, and the page moves to a tab that has some. Within the grids, classes with no match are hidden and matching boxes are highlighted. Under the tabs, each sheet has a row of weight class buttons to jump straight to a class.
 
 ### Publish the sheet and add it to the site
 

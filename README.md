@@ -374,8 +374,8 @@ news, users and more) is in [`docs/editor-guide.md`](docs/editor-guide.md).
   CSV, and paste the link into the editor. A normal share link also works if the
   sheet is shared with "anyone with the link". The divisional records layout (a block per weight
   class, with each lift's current record in three rows: weight, holder, date) is
-  recognised automatically and shown as a grid per weight class with search and
-  jump links; any other sheet is shown as a plain table (first row = headings, blank
+  recognised automatically and shown as a grid per weight class (each sheet is a
+  tab, with search across all tabs and weight class jump links); any other sheet is shown as a plain table (first row = headings, blank
   rows and columns ignored). `docs/mockups/sample-records.csv` shows the layout. To move the
   records elsewhere, edit the entry and paste the new link; leaving the link
   blank hides that table. Google refreshes published sheets every few minutes.
