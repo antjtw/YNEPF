@@ -372,8 +372,11 @@ news, users and more) is in [`docs/editor-guide.md`](docs/editor-guide.md).
   the editor, each read live from a Google Sheet (men and women, classic and
   equipped). In each sheet use File > Share > Publish to web, choose the tab and
   CSV, and paste the link into the editor. A normal share link also works if the
-  sheet is shared with "anyone with the link". The first row of the sheet is used
-  as the table heading, and blank rows and columns are ignored. To move the
+  sheet is shared with "anyone with the link". The divisional records layout (a block per weight
+  class, with each lift's current record in three rows: weight, holder, date) is
+  recognised automatically and shown as a grid per weight class with search and
+  jump links; any other sheet is shown as a plain table (first row = headings, blank
+  rows and columns ignored). `docs/mockups/sample-records.csv` shows the layout. To move the
   records elsewhere, edit the entry and paste the new link; leaving the link
   blank hides that table. Google refreshes published sheets every few minutes.
 - All user-written Markdown is sanitised before it is shown on the site.

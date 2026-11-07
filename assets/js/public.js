@@ -413,6 +413,41 @@
 
   // ---- Records ----------------------------------------------------------------
   function slug(t) { return t.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""); }
+  // One weight class as a grid: lifts down the side, age classes across the top. Each cell
+  // is the weight (bold), the holder and the date. "Standard" means nobody has beaten it yet.
+  function recordGrid(sectionId, sheetTitle, cls, state) {
+    var id = sectionId + "-" + slug(cls.label);
+    var thead = el("tr", null, el("th", { scope: "col" }, "Lift"),
+      cls.ages.map(function (a) { return el("th", { scope: "col" }, a); }));
+    var rows = cls.lifts.map(function (l) {
+      var texts = [cls.label, l.label];
+      var tds = cls.ages.map(function (a) {
+        var c = l.cells[a];
+        if (!c) return { td: el("td", { class: "rec-cell rec-none" }, el("span", { "aria-hidden": "true" }, "–"), el("span", { class: "visually-hidden" }, "No record")), text: "" };
+        var text = [c.weight, c.holder, c.date].join(" ").toLowerCase();
+        texts.push(text);
+        var td = el("td", { class: "rec-cell" },
+          c.weight ? el("strong", { class: "rec-w" }, c.weight) : null,
+          c.standard ? el("span", { class: "rec-std" }, "Standard") : null,
+          c.holder ? el("span", { class: "rec-n" }, c.holder) : null,
+          c.date ? el("span", { class: "rec-d" }, c.date) : null);
+        return { td: td, text: text };
+      });
+      var tr = el("tr", null, el("th", { scope: "row" }, l.label), tds.map(function (x) { return x.td; }));
+      return { tr: tr, text: texts.join(" ").toLowerCase(), cells: tds };
+    });
+    var group = el("section", { class: "rec-class", id: id, "aria-labelledby": "h-" + id },
+      el("h3", { id: "h-" + id }, cls.label),
+      el("div", { class: "table-wrap", tabindex: "0", role: "region", "aria-labelledby": "h-" + id },
+        el("table", { class: "data records rec-grid" },
+          el("caption", { class: "visually-hidden" }, sheetTitle + ", " + cls.label + " records"),
+          el("thead", null, thead),
+          el("tbody", null, rows.map(function (r) { return r.tr; })))));
+    state.rows = state.rows.concat(rows);
+    state.groups.push({ el: group, rows: rows });
+    return { group: group, id: id };
+  }
+
   function records(root) {
     load("record_sources", function (t) { return t.select("*").order("sort_order"); }).then(function (sources) {
       sources = sources.filter(function (s) { return s.url; });
@@ -426,28 +461,44 @@
       root.appendChild(el("ul", { class: "rec-jump" }, sources.map(function (s) {
         return el("li", null, el("a", { href: "#" + slug(s.title) }, s.title));
       })));
+      root.appendChild(el("p", { class: "rec-note" }, "All weights are in kilograms. “Standard” means nobody has beaten the qualifying standard yet."));
 
       var sections = sources.map(function (s) {
         var body = el("div", null, el("p", null, "Loading…"));
-        var sec = el("section", { class: "rec-section", id: slug(s.title), "aria-labelledby": "h-" + slug(s.title) },
-          el("h2", { id: "h-" + slug(s.title) }, s.title), body);
+        var sid = slug(s.title);
+        var sec = el("section", { class: "rec-section", id: sid, "aria-labelledby": "h-" + sid },
+          el("h2", { id: "h-" + sid }, s.title), body);
         root.appendChild(sec);
-        var state = { rows: [], body: body };
+        var state = { rows: [], groups: [], body: body };
         Y.loadSheet(s.url).then(function (sheet) {
           if (!sheet.header.length) { body.replaceChildren(el("p", null, "No records in this sheet yet.")); return; }
+          var parsed = Y.parseRecords(sheet.all);
+          if (parsed) {
+            // The sheet's own layout: one grid per weight class.
+            var grids = parsed.classes.map(function (c) { return recordGrid(sid, s.title, c, state); });
+            state.empty = el("p", { hidden: true }, "No records match your search.");
+            var kids = [
+              parsed.updated ? el("p", { class: "rec-updated" }, "Updated " + parsed.updated) : null,
+              el("ul", { class: "rec-classes", "aria-label": s.title + " weight classes" }, grids.map(function (g, i) {
+                return el("li", null, el("a", { href: "#" + g.id }, parsed.classes[i].label));
+              }))
+            ].concat(grids.map(function (g) { return g.group; }), [state.empty]).filter(Boolean);
+            body.replaceChildren.apply(body, kids);
+            return;
+          }
+          // Any other sheet: show it as a plain table, exactly as it is.
           var tbody = el("tbody", null, sheet.rows.map(function (r) {
             var tr = el("tr", null, r.map(function (c, i) { return el(i === 0 ? "th" : "td", i === 0 ? { scope: "row" } : null, c); }));
             state.rows.push({ tr: tr, text: r.join(" ").toLowerCase() });
             return tr;
           }));
-          var empty = el("p", { hidden: true }, "No records match your search.");
-          state.empty = empty;
+          state.empty = el("p", { hidden: true }, "No records match your search.");
           body.replaceChildren(
             el("div", { class: "table-wrap" }, el("table", { class: "data records" },
               el("caption", { class: "visually-hidden" }, s.title + " records"),
               el("thead", null, el("tr", null, sheet.header.map(function (h) { return el("th", { scope: "col" }, h); }))),
               tbody)),
-            empty);
+            state.empty);
         }).catch(function (e) {
           if (window.console) console.error(e);
           body.replaceChildren(el("p", null, "We could not load these records just now. ",
@@ -460,7 +511,13 @@
         var q = search.value.trim().toLowerCase(), shown = 0;
         sections.forEach(function (x) {
           var n = 0;
-          x.state.rows.forEach(function (r) { var hit = !q || r.text.indexOf(q) >= 0; r.tr.hidden = !hit; if (hit) n++; });
+          x.state.rows.forEach(function (r) {
+            var hit = !q || r.text.indexOf(q) >= 0;
+            r.tr.hidden = !hit;
+            if (hit) n++;
+            if (r.cells) r.cells.forEach(function (c) { c.td.classList.toggle("rec-hit", !!q && !!c.text && c.text.indexOf(q) >= 0); });
+          });
+          x.state.groups.forEach(function (g) { g.el.hidden = !g.rows.some(function (r) { return !r.tr.hidden; }); });
           if (x.state.empty) x.state.empty.hidden = n > 0 || !x.state.rows.length;
           shown += n;
         });
@@ -469,7 +526,6 @@
     }).catch(function (e) { fail(root, e); });
   }
 
-  // ---- Boot -----------------------------------------------------------------
   var routes = { calendar: calendar, committee: committee, news: news, post: post, faqs: faqs, records: records, lifting: lifting };
   function boot() {
     var page = document.body.getAttribute("data-view") || document.body.getAttribute("data-page");
