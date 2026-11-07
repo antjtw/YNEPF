@@ -647,7 +647,7 @@
   function renderRecords(panel) {
     panel.replaceChildren(panelHead("Records", btn("Add record sheet", function () { editSource(); }, "btn-primary")),
       el("div", { class: "panel-intro" },
-        el("p", null, "Each entry below becomes a table on the Records page, read live from a Google Sheet. To get a link: in the sheet choose ",
+        el("p", null, "Each entry below becomes a section on the Records page, read live from a Google Sheet (the divisional records layout is shown as a grid for each weight class). To get a link: in the sheet choose ",
           el("strong", null, "File > Share > Publish to web"), ", pick the tab, choose ", el("strong", null, "Comma-separated values (.csv)"),
           ", press Publish and paste the link here. Changes in the sheet appear on the site within a few minutes."),
         el("p", null, "To move the records somewhere else later, edit the entry and paste the new link. Entries with no link are hidden from the public page.")),

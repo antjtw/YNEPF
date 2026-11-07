@@ -350,30 +350,39 @@ Edit the Google Sheet whenever lifters move or withdraw. The public page follows
 
 ## 7. Records: the full guide to the spreadsheets
 
-The Records page shows one table per record sheet (for example Men's equipped, Men's classic, Women's equipped, Women's classic). Each table is read live from its own Google Sheet.
+The Records page shows one section per record sheet (for example Men's equipped, Men's classic, Women's equipped, Women's classic). Each section is read live from its own Google Sheet.
 
-### How the table is built
+### Two kinds of sheet
+
+The site recognises two layouts and picks the right one by itself. You never choose.
+
+**1. The divisional records layout (what YNEPF uses).** This is the working sheet with one block per weight class. The page turns it into a clear grid for each class, with the lifts down the side (Squat, Bench press, Deadlift, Total, Bench (A/C)) and the age classes across the top. Each box shows the **weight in bold, the record holder and the date**. Where nobody has beaten the qualifying standard yet, the box shows the weight with a small **Standard** tag. Where there is no record and no standard, it shows a dash.
+
+How the sheet must be laid out for this to work:
+
+- **Row 1** is the title, for example `BP - Yorkshire North East Divisional Records - WOMEN - CLASSIC - updated 1st November 2026`. If it contains the words "updated ...", the page shows "Updated 1st November 2026" above the grids.
+- **A weight class starts** on a row with the class in **column A** (for example `-66kg`, `84kg+`) and the age classes across the same row (`u16`, `u18`, `u23`, `open`, `m1` to `m4`). A class can have fewer age classes than the others (the lightest class often has only u18 and u23).
+- **Each lift** has its history and then the **current record**, which sits on a row with the lift's name in **column B** (`SQUAT`, `BENCH`, `DEADLIFT`, `TOTAL`, or `BENCH (A/C)`) and uses **three rows**: the weight on the lift's row, the **holder's name** on the next row, and the **date** on the row after. In the name row, `standard` means nobody has beaten the standard yet.
+- The **last** row carrying a lift's name before the next lift starts is read as the current record. Everything above it (the standards and the history of who held the record before) is ignored, so keep that history in the sheet as much as you like.
+- Dates such as `5/4/2017` are shown as `05/04/2017`.
+- Everything else is shown as typed. Names such as `Jo Smith (U)` appear exactly like that.
+
+A small example in the same layout is in `docs/mockups/sample-records.csv`.
+
+**2. Any other sheet.** If the layout is not recognised, the sheet is shown as a plain table instead:
 
 - **Row 1 is the table heading row.** Whatever you type there becomes the column headings.
 - **Every other row is a record**, shown in the order they appear in the sheet.
-- The **first column becomes the row label** (it is shown in bold, and is what screen readers announce first). Put the thing people look up first there, usually the weight class.
-- Everything is shown **exactly as typed**, as text. Format numbers how you want them to look (for example `150` or `150.5`).
-- **Blank rows are skipped.** Columns that are entirely empty at the right-hand side are trimmed.
-- Visitors can **search across every table** at once (by name, class, lift and so on) and jump between tables with the links at the top.
+- The **first column becomes the row label** (it is shown in bold, and is what screen readers announce first).
+- Everything is shown **exactly as typed**. **Blank rows are skipped.** Empty columns at the right-hand side are trimmed.
 
-### Suggested layout
+### Searching and jumping around
 
-| Class | Lift | Record | Lifter | Club | Date | Competition |
-|---|---|---|---|---|---|---|
-| 59kg | Squat | 150 | Jo Smith | Leeds PL | 14 Mar 2026 | Yorkshire Open |
-| 59kg | Bench | 95.5 | Jo Smith | Leeds PL | 14 Mar 2026 | Yorkshire Open |
-| 59kg | Deadlift | 180 | Pat Jones | York Barbell | 02 Nov 2025 | November Classic |
-
-You are free to choose different columns. The site does not care what the headings are.
+Visitors can **search across every table** at once (by name, class, lift or weight). In the grids, classes with no match are hidden and matching boxes are highlighted. Each sheet also has a row of weight class buttons to jump straight to a class.
 
 ### Publish the sheet and add it to the site
 
-1. Create (or open) the Google Sheet for that table. Keep the data on **one tab** with headings in row 1.
+1. Open the Google Sheet tab for that table (one tab per table, for example Women's classic).
 2. **File > Share > Publish to web**.
 3. Pick **the specific tab** (not "Entire document").
 4. Pick **Comma-separated values (.csv)**.
@@ -382,7 +391,7 @@ You are free to choose different columns. The site does not care what the headin
 7. In **Heading on the page**, type the title, for example `Men's classic`.
 8. Paste the link into **Google Sheets link** and press **Add**.
 
-Reload the Records page to check the new table appears and the numbers look right.
+Reload the Records page to check the grids appear and a few of the numbers match your sheet. The page always reads the sheet itself, so there is nothing to copy in: **update the sheet and the site follows within a few minutes.**
 
 ### Managing record tables
 

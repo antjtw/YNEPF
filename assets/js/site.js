@@ -335,14 +335,76 @@
       return r.text();
     }).then(function (text) {
       if (/^\s*<(!doctype|html)/i.test(text)) throw new Error("That link returned a web page, not data. Publish the sheet to the web as CSV.");
-      var rows = parseCsv(text).map(function (r) { return r.map(function (c) { return c.trim(); }); })
-        .filter(function (r) { return r.some(Boolean); });
-      if (!rows.length) return { header: [], rows: [] };
+      var every = parseCsv(text).map(function (r) { return r.map(function (c) { return c.trim(); }); });
+      var rows = every.filter(function (r) { return r.some(Boolean); });
+      if (!rows.length) return { header: [], rows: [], all: [] };
       var width = 0;
       rows.forEach(function (r) { r.forEach(function (c, i) { if (c && i + 1 > width) width = i + 1; }); });
       rows = rows.map(function (r) { var o = r.slice(0, width); while (o.length < width) o.push(""); return o; });
-      return { header: rows[0], rows: rows.slice(1) };
+      return { header: rows[0], rows: rows.slice(1), all: every };   // all = every row exactly as laid out, blanks included
     });
+  }
+
+  // ---- Records (the divisional records sheets) ----------------------------------
+  // The sheet is laid out for people, not as a flat table: a title row, then one block
+  // per weight class. A block starts with the class in column A and the age classes
+  // across the same row. Each lift is a stack (standards, then the history of who held
+  // the record), ending in the CURRENT record, labelled SQUAT, BENCH, DEADLIFT, TOTAL or
+  // BENCH (A/C), over three rows: weight, then the holder's name ("standard" when
+  // nobody has beaten the standard yet), then the date. parseRecords reads that layout
+  // and returns null for any other sheet, which is then shown as a plain table.
+  var REC_LIFTS = [["SQUAT", "Squat"], ["BENCH", "Bench press"], ["DEADLIFT", "Deadlift"], ["TOTAL", "Total"], ["BENCH (A/C)", "Bench (A/C)"]];
+  var REC_AGE = /^(u\d+|open|m[1-4]|sj|j)$/i;
+  function recAge(t) { return /^open$/i.test(t) ? "Open" : t.toUpperCase(); }
+  function recDate(t) {
+    var m = (t || "").match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    return m ? ("0" + m[1]).slice(-2) + "/" + ("0" + m[2]).slice(-2) + "/" + m[3] : (t || "");
+  }
+  function parseRecords(all) {
+    if (!all || all.length < 4) return null;
+    var cell = function (r, c) { return ((r && r[c]) || "").trim(); };
+    var title = cell(all[0], 0), up = title.match(/updated\s+(.+)$/i);
+    var blocks = [], cur = null;
+    for (var i = 1; i < all.length; i++) {
+      var r = all[i];
+      if (cell(r, 0)) {
+        var cols = [];
+        for (var c = 1; c < r.length; c++) if (REC_AGE.test(cell(r, c))) cols.push({ c: c, age: recAge(cell(r, c)) });
+        if (cols.length) { cur = { label: cell(r, 0), cols: cols, labelled: [] }; blocks.push(cur); continue; }
+      }
+      if (cur) {
+        var key = cell(r, 1).toUpperCase().replace(/\s+/g, " ");
+        if (REC_LIFTS.some(function (l) { return l[0] === key; })) cur.labelled.push({ i: i, key: key });
+      }
+    }
+    var classes = blocks.map(function (b) {
+      var lifts = [];
+      REC_LIFTS.forEach(function (l, k) {
+        // The current record is the LAST row with this label before the next lift's stack begins.
+        var boundary = Infinity;
+        for (var n = k + 1; n < REC_LIFTS.length && boundary === Infinity; n++) {
+          b.labelled.forEach(function (x) { if (x.key === REC_LIFTS[n][0] && x.i < boundary) boundary = x.i; });
+        }
+        var pick = null;
+        b.labelled.forEach(function (x) {
+          if (x.key !== l[0] || x.i >= boundary) return;
+          var hasWeight = b.cols.some(function (col) { return /^\d+(\.\d+)?$/.test(cell(all[x.i], col.c)); });
+          if (hasWeight) pick = x.i;
+        });
+        if (pick === null) return;
+        var cells = {};
+        b.cols.forEach(function (col) {
+          var w = cell(all[pick], col.c), n = cell(all[pick + 1], col.c), d = cell(all[pick + 2], col.c);
+          if (!w && !n && !d) { cells[col.age] = null; return; }
+          var std = /^standard$/i.test(n);
+          if (std && !(parseFloat(w) > 0)) { cells[col.age] = null; return; }   // no record and no standard: nothing to show
+          cells[col.age] = { weight: w, standard: std, holder: std ? "" : n, date: std ? "" : recDate(d) };
+        });
+        lifts.push({ key: l[0], label: l[1], cells: cells });
+      });
+      return { label: b.label, ages: b.cols.map(function (col) { return col.age; }), lifts: lifts };
+    }).filter(function (b) { return b.lifts.length; });
+    return classes.length ? { title: title, updated: up ? up[1].trim() : "", classes: classes } : null;
   }
 
   // ---- Lifting order (a published Google Sheet, one row per lifter) -------------
@@ -435,7 +497,7 @@
     toLondonInput: toLondonInput, fromLondonInput: fromLondonInput,
     todayLondon: todayLondon, yearOf: function (c) { return c.start_date.slice(0, 4); }, addDays: addDays, dateRange: dateRange, longDate: longDate,
     compState: compState, timeRange: timeRange, entryLine: entryLine, mapsUrl: mapsUrl, competitionCard: competitionCard,
-    parseLiftingOrder: parseLiftingOrder, AGE_NAMES: AGE_NAMES, liftingHref: liftingHref, longDay: longDay, igHandle: igHandle,
+    parseLiftingOrder: parseLiftingOrder, parseRecords: parseRecords, AGE_NAMES: AGE_NAMES, liftingHref: liftingHref, longDay: longDay, igHandle: igHandle,
     extIcon: Y_EXT, sheetCsvUrl: sheetCsvUrl, parseCsv: parseCsv, loadSheet: loadSheet,
     notice: notice, guard: guard
   };
