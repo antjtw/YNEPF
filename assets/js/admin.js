@@ -479,7 +479,7 @@
       { name: "question", label: "Question", required: true },
       { name: "answer_md", label: "Answer", type: "md", required: true, help: "Links, lists and tables are all fine." }
     ],
-    gSub: function () { return ""; },
+    gSub: function (g) { return "Link to this category: faqs#" + Y.anchorSlug(g.title) + " (it changes if you rename the category)"; },
     iTitle: function (f) { return f.question; },
     iSub: function () { return ""; },
     normalise: function (v) { return v; },

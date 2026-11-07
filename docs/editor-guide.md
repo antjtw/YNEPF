@@ -480,6 +480,15 @@ The **FAQs** tab controls the FAQs page. Questions sit under **category headings
 - Each FAQ has a **Question** and an **Answer**. The answer uses the same visual editor as news posts, so links, lists and tables all work.
 - Reorder categories and questions with the ↑ ↓ arrows.
 
+### Linking to a category or a single question
+
+Every category heading and every question has its own web address, made from its title, so you can link straight to it from news posts, emails or social media:
+
+- A category: `faqs#yne-worlds` (the page scrolls to that heading). The editor shows each category's link under its name.
+- A single question: `faqs#how-do-i-enter` (the page scrolls to it and opens the answer).
+
+The address is the title in lower case with spaces and symbols turned into hyphens, so "YNE Worlds" becomes `yne-worlds` and "Entry & rules" becomes `entry-and-rules`. **If you rename a category or question, its address changes**, so old links to it will stop jumping to it (the page itself still opens). If two titles are the same, the second gets `-2` on the end.
+
 Good FAQ habits:
 
 - Write the question the way a lifter would ask it.

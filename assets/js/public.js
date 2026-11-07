@@ -397,17 +397,35 @@
       load("faqs", function (t) { return t.select("*").order("sort_order"); })
     ]).then(function (res) {
       root.replaceChildren();
+      // Every category and every question gets an address you can link to, such as faqs#yne-worlds
+      // (the category) or faqs#how-do-i-enter (one question, which opens when linked).
+      var used = {};
+      function anchorId(text) {
+        var base = Y.anchorSlug(text) || "faq", id = base, n = 2;
+        while (used[id] || document.getElementById(id)) id = base + "-" + n++;
+        used[id] = true;
+        return id;
+      }
       res[0].forEach(function (c) {
         var items = res[1].filter(function (f) { return f.category_id === c.id; });
         if (!items.length) return;
-        root.appendChild(el("h2", null, c.title));
+        root.appendChild(el("h2", { id: anchorId(c.title) }, c.title));
         root.appendChild(el("div", { class: "faq" }, items.map(function (f) {
           var body = Y.markdown(f.answer_md);
           body.className = "faq-body md";
-          return el("details", null, el("summary", null, f.question), body);
+          return el("details", { id: anchorId(f.question) }, el("summary", null, f.question), body);
         })));
       });
       if (!root.children.length) root.appendChild(el("p", null, "No FAQs yet."));
+      // The content arrives after the page has loaded, so jump to a linked heading or question ourselves.
+      function toHash() {
+        var id = decodeURIComponent(location.hash.slice(1)), t = id && document.getElementById(id);
+        if (!t || !root.contains(t)) return;
+        if (t.tagName === "DETAILS") t.open = true;
+        t.scrollIntoView();
+      }
+      toHash();
+      window.addEventListener("hashchange", toHash);
     }).catch(function (e) { fail(root, e); });
   }
 

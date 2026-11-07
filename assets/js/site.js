@@ -82,6 +82,11 @@
     });
     return tmp;
   }
+  // A readable page anchor from a heading: "YNE Worlds" -> "yne-worlds", "Entry & rules" -> "entry-and-rules".
+  function anchorSlug(s) {
+    return String(s || "").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/&/g, " and ")
+      .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60).replace(/-+$/, "");
+  }
   // Plain-text excerpt from markdown, for list pages.
   function excerpt(md, max) {
     var t = (md || "")
@@ -494,7 +499,7 @@
 
   window.YNEPF = {
     TZ: TZ, db: db, configured: configured, el: el, svg: svg, ICONS: ICONS,
-    markdown: markdown, excerpt: excerpt,
+    markdown: markdown, excerpt: excerpt, anchorSlug: anchorSlug,
     toLondonInput: toLondonInput, fromLondonInput: fromLondonInput,
     todayLondon: todayLondon, yearOf: function (c) { return c.start_date.slice(0, 4); }, addDays: addDays, dateRange: dateRange, longDate: longDate,
     compState: compState, timeRange: timeRange, entryLine: entryLine, mapsUrl: mapsUrl, competitionCard: competitionCard,

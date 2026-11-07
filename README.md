@@ -379,6 +379,7 @@ news, users and more) is in [`docs/editor-guide.md`](docs/editor-guide.md).
   rows and columns ignored). `docs/mockups/sample-records.csv` shows the layout. To move the
   records elsewhere, edit the entry and paste the new link; leaving the link
   blank hides that table. Google refreshes published sheets every few minutes.
+- **FAQ links.** Each FAQ category and question gets an address made from its title (`faqs#yne-worlds`, `faqs#how-do-i-enter`; a linked question opens). The editor shows each category's link. Renaming changes the address.
 - All user-written Markdown is sanitised before it is shown on the site.
 
 ### Contact form

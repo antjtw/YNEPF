@@ -430,6 +430,7 @@ ol.steps li::before { counter-increment: step; content: counter(step); position:
 .checklist li::before { background-color: var(--sage-100); background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232C5238' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E"); }
 
 /* FAQ: each question is a white card that opens smoothly */
+#live > h2[id], .faq details[id] { scroll-margin-top: calc(var(--header-height) + var(--space-4)); }   /* clear of the sticky header when linked */
 .faq { max-width: var(--measure); display: grid; gap: var(--space-2); margin-bottom: var(--space-4); }
 .faq details { transition: box-shadow var(--dur) ease; }
 .faq details[open], .faq details:hover { box-shadow: var(--shadow-md); }
