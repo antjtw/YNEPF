@@ -265,8 +265,7 @@ with g as (insert into public.footer_groups (title, placement, sort_order) value
 insert into public.footer_links (group_id, label, url, sort_order) values
 ((select id from g), $q$Buy a membership$q$, $q$https://www.britishpowerlifting.org/membership/$q$, 10),
 ((select id from g), $q$Technical rules$q$, $q$https://www.powerlifting.sport/rules/codes/info/technical-rules$q$, 20),
-((select id from g), $q$Approved kit$q$, $q$https://www.powerlifting.sport/rules/codes/info/approved-list$q$, 30),
-((select id from g), $q$Divisional records$q$, $q$https://www.openpowerlifting.org/$q$, 40);
+((select id from g), $q$Approved kit$q$, $q$https://www.powerlifting.sport/rules/codes/info/approved-list$q$, 30);
 with g as (insert into public.footer_groups (title, placement, sort_order) values ($q$Legal$q$, $q$bottom$q$, 30) returning id)
 insert into public.footer_links (group_id, label, url, sort_order) values
 ((select id from g), $q$Privacy policy$q$, $q$#$q$, 10),
