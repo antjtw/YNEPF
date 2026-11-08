@@ -351,6 +351,9 @@
     });
   }
 
+  // Where "Submit a record" goes until the editor changes it (Records tab) or if settings are not available.
+  var RECORDS_FORM_DEFAULT = "https://docs.google.com/forms/d/e/1FAIpQLScXK1vfOAfL0xJLbhIyLrcrOh2i4tu7sm2LW8xNrDRR2yyoug/viewform";
+
   // ---- Records (the divisional records sheets) ----------------------------------
   // The sheet is laid out for people, not as a flat table: a title row, then one block
   // per weight class. A block starts with the class in column A and the age classes
@@ -503,7 +506,7 @@
     toLondonInput: toLondonInput, fromLondonInput: fromLondonInput,
     todayLondon: todayLondon, yearOf: function (c) { return c.start_date.slice(0, 4); }, addDays: addDays, dateRange: dateRange, longDate: longDate,
     compState: compState, timeRange: timeRange, entryLine: entryLine, mapsUrl: mapsUrl, competitionCard: competitionCard,
-    parseLiftingOrder: parseLiftingOrder, parseRecords: parseRecords, AGE_NAMES: AGE_NAMES, liftingHref: liftingHref, longDay: longDay, igHandle: igHandle,
+    parseLiftingOrder: parseLiftingOrder, parseRecords: parseRecords, RECORDS_FORM_DEFAULT: RECORDS_FORM_DEFAULT, AGE_NAMES: AGE_NAMES, liftingHref: liftingHref, longDay: longDay, igHandle: igHandle,
     extIcon: Y_EXT, sheetCsvUrl: sheetCsvUrl, parseCsv: parseCsv, loadSheet: loadSheet,
     notice: notice, guard: guard
   };

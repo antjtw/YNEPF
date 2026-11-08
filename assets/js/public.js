@@ -467,9 +467,20 @@
   }
 
   function records(root) {
-    load("record_sources", function (t) { return t.select("*").order("sort_order"); }).then(function (sources) {
-      sources = sources.filter(function (s) { return s.url; });
+    // The submission form link is a setting; if settings cannot be read, fall back to the standard form.
+    var setting = Y.db().from("site_settings").select("*").eq("key", "records_submit_url")
+      .then(function (r) { return r.error ? null : (r.data || [])[0] || null; }, function () { return null; });
+    Promise.all([load("record_sources", function (t) { return t.select("*").order("sort_order"); }), setting]).then(function (got) {
+      var sources = got[0].filter(function (s) { return s.url; });
+      var formUrl = got[1] ? (got[1].value || "").trim() : Y.RECORDS_FORM_DEFAULT;   // a saved blank hides the button
       root.replaceChildren();
+      if (/^https:\/\//i.test(formUrl)) {
+        root.appendChild(el("div", { class: "rec-submit" },
+          el("div", null, el("p", { class: "rec-submit-title" }, "Set a new divisional record?"),
+            el("p", { class: "rec-submit-text" }, "Send it to us with the record submission form.")),
+          el("a", { class: "btn btn-primary", href: formUrl, target: "_blank", rel: "noopener",
+            "aria-label": "Submit a record (opens in a new tab)" }, "Submit a record ", Y.extIcon())));
+      }
       if (!sources.length) { root.appendChild(el("p", null, "Records are not available yet. Check back soon.")); return; }
 
       var search = el("input", { type: "search", id: "rec-search", autocomplete: "off", placeholder: "Name, weight class, lift..." });

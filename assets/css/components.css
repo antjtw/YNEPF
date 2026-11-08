@@ -528,6 +528,10 @@ table.data tbody tr:hover { background: var(--navy-10); }
 .rec-badge[hidden] { display: none; }
 .rec-section { outline-offset: 4px; }
 .rec-section h2 { scroll-margin-top: var(--space-4); margin-top: var(--space-8); }
+.rec-submit { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-4); max-width: var(--container); margin: 0 0 var(--space-6); padding: var(--space-4) var(--space-5); background: var(--surface-raised); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); }
+.rec-submit p { margin: 0; max-width: none; }
+.rec-submit-title { font-weight: 700; color: var(--text-heading); font-size: var(--fs-19); }
+.rec-submit-text { color: var(--text-muted); }
 .rec-note { color: var(--text-muted); font-size: var(--fs-16); max-width: none; margin: 0 0 var(--space-4); }
 .rec-updated { margin: 0 0 var(--space-3); color: var(--text-muted); max-width: none; }
 .rec-classes { list-style: none; display: flex; flex-wrap: wrap; gap: var(--space-1); padding: 0; margin: 0 0 var(--space-5); max-width: none; }

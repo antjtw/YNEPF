@@ -379,6 +379,7 @@ news, users and more) is in [`docs/editor-guide.md`](docs/editor-guide.md).
   rows and columns ignored). `docs/mockups/sample-records.csv` shows the layout. To move the
   records elsewhere, edit the entry and paste the new link; leaving the link
   blank hides that table. Google refreshes published sheets every few minutes.
+- **Submit a record button.** The Records page opens with a "Submit a record" button linking to a Google Form. The link is a row in `site_settings` (`records_submit_url`), edited in the Records tab of the editor (blank hides the button). Until `schema.sql` is re-run the standard form is used (`RECORDS_FORM_DEFAULT` in `site.js`). `site_settings` is readable by everyone, so never put secrets in it.
 - **FAQ links.** Each FAQ category and question gets an address made from its title (`faqs#yne-worlds`, `faqs#how-do-i-enter`; a linked question opens). The editor shows each category's link. Renaming changes the address.
 - All user-written Markdown is sanitised before it is shown on the site.
 

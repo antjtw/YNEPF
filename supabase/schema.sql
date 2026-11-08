@@ -180,6 +180,21 @@ create table if not exists public.record_sources (
 );
 
 -- ---------------------------------------------------------------------------
+-- Site settings: a few single values editors can change (one row per setting).
+-- Anyone can read them, so NEVER store anything secret here.
+--   records_submit_url   where the "Submit a record" button on the Records page goes
+--                        (blank hides the button)
+-- ---------------------------------------------------------------------------
+create table if not exists public.site_settings (
+  key text primary key,
+  value text not null default '',
+  updated_at timestamptz not null default now()
+);
+insert into public.site_settings (key, value) values
+  ('records_submit_url', 'https://docs.google.com/forms/d/e/1FAIpQLScXK1vfOAfL0xJLbhIyLrcrOh2i4tu7sm2LW8xNrDRR2yyoug/viewform')
+on conflict (key) do nothing;
+
+-- ---------------------------------------------------------------------------
 -- Contact form: messages are emailed (see supabase/functions/send-contact), not
 -- stored. Earlier versions kept them in a table; remove it and its rules.
 -- ---------------------------------------------------------------------------
@@ -353,6 +368,7 @@ alter table public.people          enable row level security;
 alter table public.faq_categories  enable row level security;
 alter table public.faqs            enable row level security;
 alter table public.record_sources  enable row level security;
+alter table public.site_settings    enable row level security;
 alter table public.footer_groups   enable row level security;
 alter table public.footer_links    enable row level security;
 alter table public.posts           enable row level security;
@@ -375,7 +391,7 @@ create policy "admins manage editors" on public.editors
 do $$
 declare t text;
 begin
-  foreach t in array array['org_sections','people','faq_categories','faqs','record_sources','footer_groups','footer_links'] loop
+  foreach t in array array['org_sections','people','faq_categories','faqs','record_sources','footer_groups','footer_links','site_settings'] loop
     execute format('drop policy if exists "public read" on public.%I', t);
     execute format('create policy "public read" on public.%I for select to anon, authenticated using (true)', t);
     execute format('drop policy if exists "editors write" on public.%I', t);
@@ -403,13 +419,13 @@ grant usage on schema public to anon, authenticated;
 
 grant select on public.org_sections, public.people, public.faq_categories,
                 public.faqs, public.posts, public.competitions_public, public.record_sources,
-                public.footer_groups, public.footer_links
+                public.footer_groups, public.footer_links, public.site_settings
   to anon;
 
 grant select, insert, update, delete on
   public.org_sections, public.people, public.faq_categories, public.faqs,
   public.posts, public.competitions, public.record_sources, public.editors,
-  public.footer_groups, public.footer_links
+  public.footer_groups, public.footer_links, public.site_settings
   to authenticated;
 
 grant select on public.competitions_public to authenticated;

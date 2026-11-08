@@ -652,9 +652,11 @@
           ", press Publish and paste the link here. Changes in the sheet appear on the site within a few minutes."),
         el("p", null, "To move the records somewhere else later, edit the entry and paste the new link. Entries with no link are hidden from the public page.")),
       el("p", null, "Loading…"));
-    sb.from("record_sources").select("*").order("sort_order").then(function (res) {
-      var rows = ok(res);
+    var settingQ = sb.from("site_settings").select("*").eq("key", SUBMIT_KEY).then(function (r) { return r; }, function (e) { return { error: e }; });
+    Promise.all([sb.from("record_sources").select("*").order("sort_order"), settingQ]).then(function (both) {
+      var res = both[0], rows = ok(res);
       panel.lastChild.remove();
+      panel.appendChild(submitCard(both[1]));
       if (!rows.length) { panel.appendChild(el("p", { class: "empty" }, "No record sheets yet.")); return; }
       var list = el("ul", { class: "item-list card", style: "padding:0 var(--space-5);" });
       rows.forEach(function (r, i) {
@@ -670,6 +672,35 @@
       });
       panel.appendChild(list);
     }).catch(function (e) { panel.lastChild.textContent = friendly(e); });
+  }
+
+  // The "Submit a record" button on the Records page: a link to a Google Form, kept as a site setting.
+  var SUBMIT_KEY = "records_submit_url";
+  function submitCard(res) {
+    var missingTable = !!res.error;                        // settings table not created yet (schema.sql not re-run)
+    var row = !missingTable && res.data && res.data[0];
+    var current = row ? (row.value || "") : Y.RECORDS_FORM_DEFAULT;
+    return el("div", { class: "card", style: "margin-bottom:var(--space-6);" },
+      el("div", { class: "setting-row" },
+        el("div", { class: "item-main" },
+          el("p", { class: "item-title" }, "“Submit a record” form"),
+          el("p", { class: "item-sub", style: "overflow-wrap:anywhere;" }, current || "No link (the button is hidden on the Records page)"),
+          missingTable ? el("p", { class: "item-sub" }, "To change this link, run the latest supabase/schema.sql in Supabase first. Until then the standard form is used.") : null),
+        el("span", { class: "actions" }, missingTable ? null : btn("Edit", function () { editSubmitLink(current, !!row); }))));
+  }
+  function editSubmitLink(current, exists) {
+    openForm({
+      title: "“Submit a record” form",
+      values: { url: current },
+      saveLabel: "Save",
+      fields: [{ name: "url", label: "Form link", type: "url", placeholder: "https://docs.google.com/forms/d/e/…/viewform",
+        help: "Where the “Submit a record” button at the top of the Records page goes. It opens in a new tab. Leave blank to hide the button." }],
+      validate: function (v) { return v.url && !/^https:\/\//i.test(v.url) ? "The link must start with https://" : null; },
+      onSave: function (v) {
+        var q = exists ? sb.from("site_settings").update({ value: v.url }).eq("key", SUBMIT_KEY) : sb.from("site_settings").insert({ key: SUBMIT_KEY, value: v.url });
+        return q.then(ok).then(function () { toast(v.url ? "Saved." : "Saved. The button is now hidden."); route(); });
+      }
+    });
   }
 
   function moveSource(rows, index, dir) {

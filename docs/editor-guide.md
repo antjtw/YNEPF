@@ -395,6 +395,14 @@ Visitors can **search across every tab** at once (by name, class, lift or weight
 
 Reload the Records page to check the grids appear and a few of the numbers match your sheet. The page always reads the sheet itself, so there is nothing to copy in: **update the sheet and the site follows within a few minutes.**
 
+### The "Submit a record" button
+
+At the top of the Records page, above the search box, there is a **Submit a record** button. It opens your record submission form (a Google Form) in a new tab, so lifters can send in a new divisional record.
+
+To change where it goes: open the **Records** tab in the editor. The "Submit a record" form card sits above the list of tables. Press **Edit**, paste the new Google Form link and save. The link must start with `https://`. **Leave it blank to hide the button.**
+
+Use the form's normal link (the one ending `/viewform`) from the Google Form's **Send** button. If the Edit button is missing and the card says to run the latest `schema.sql`, ask your technical admin to do that first. Until then the button uses the standard form.
+
 ### Managing record tables
 
 - **Order:** use the ↑ ↓ arrows to reorder tables on the page.
