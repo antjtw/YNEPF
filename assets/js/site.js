@@ -73,7 +73,22 @@
       t.parentNode.insertBefore(wrap, t);
       wrap.appendChild(t);
     });
-    Array.prototype.forEach.call(tmp.querySelectorAll("img:not([alt])"), function (i) { i.setAttribute("alt", ""); });
+    // Pictures: only ones uploaded through the editor (our own Storage bucket) are allowed, so nobody can
+    // slip in an outside image or tracking pixel. They are lazy-loaded, and sized from the file name
+    // (<name>-<width>x<height>.webp) so the page does not jump as they arrive.
+    var base = ((window.YNEPF_CONFIG || {}).supabaseUrl || "").replace(/\/$/, "");
+    var allowed = base ? base + "/storage/v1/object/public/news-images/" : "";
+    Array.prototype.forEach.call(tmp.querySelectorAll("img"), function (i) {
+      var src = i.getAttribute("src") || "";
+      if (!allowed || src.indexOf(allowed) !== 0) { i.remove(); return; }
+      if (!i.hasAttribute("alt")) i.setAttribute("alt", "");
+      var m = src.match(/-(\d{2,5})x(\d{2,5})\.(?:webp|jpe?g)$/);
+      if (m) { i.setAttribute("width", m[1]); i.setAttribute("height", m[2]); }
+      i.setAttribute("loading", "lazy");
+      i.setAttribute("decoding", "async");
+    });
+    // A paragraph left empty by a removed picture would only add blank space.
+    Array.prototype.forEach.call(tmp.querySelectorAll("p"), function (p) { if (!p.textContent.trim() && !p.querySelector("img")) p.remove(); });
     Array.prototype.forEach.call(tmp.querySelectorAll("a[href]"), function (a) {
       if (/^https?:/i.test(a.getAttribute("href")) && a.hostname !== location.hostname) {
         a.setAttribute("target", "_blank");

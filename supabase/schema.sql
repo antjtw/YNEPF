@@ -413,6 +413,38 @@ create policy "editors all" on public.competitions
   for all to authenticated using (public.is_editor()) with check (public.is_editor());
 
 -- ---------------------------------------------------------------------------
+-- News images: a public Storage bucket. Anyone can view a picture; only editors
+-- can add, replace or remove them. The editor shrinks every picture in the browser
+-- before upload (WebP or JPEG, about 200 KB), and the bucket refuses anything else
+-- or anything over 2 MB. Skipped quietly on a database with no Storage.
+-- ---------------------------------------------------------------------------
+do $$
+begin
+  if to_regclass('storage.buckets') is null or to_regclass('storage.objects') is null then return; end if;
+  begin
+    insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+    values ('news-images', 'news-images', true, 2097152, array['image/webp', 'image/jpeg'])
+    on conflict (id) do update set public = true, file_size_limit = 2097152, allowed_mime_types = array['image/webp', 'image/jpeg'];
+  exception when undefined_column then      -- an older Storage without size and type limits
+    insert into storage.buckets (id, name, public) values ('news-images', 'news-images', true)
+    on conflict (id) do update set public = true;
+  end;
+  drop policy if exists "news images public read" on storage.objects;
+  create policy "news images public read" on storage.objects
+    for select to anon, authenticated using (bucket_id = 'news-images');
+  drop policy if exists "news images editors add" on storage.objects;
+  create policy "news images editors add" on storage.objects
+    for insert to authenticated with check (bucket_id = 'news-images' and public.is_editor());
+  drop policy if exists "news images editors change" on storage.objects;
+  create policy "news images editors change" on storage.objects
+    for update to authenticated using (bucket_id = 'news-images' and public.is_editor())
+    with check (bucket_id = 'news-images' and public.is_editor());
+  drop policy if exists "news images editors remove" on storage.objects;
+  create policy "news images editors remove" on storage.objects
+    for delete to authenticated using (bucket_id = 'news-images' and public.is_editor());
+end $$;
+
+-- ---------------------------------------------------------------------------
 -- Grants
 -- ---------------------------------------------------------------------------
 grant usage on schema public to anon, authenticated;

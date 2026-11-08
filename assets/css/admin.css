@@ -64,6 +64,13 @@ body.admin main { padding-block: var(--space-6) var(--space-8); }
 .admin-dialog .toastui-editor-defaultUI { font-family: var(--font-body); }
 .admin-dialog .toastui-editor-contents p { max-width: none; }
 
+/* Add an image */
+.img-dialog { width: min(34rem, calc(100vw - 2rem)); }
+.img-drop { display: block; padding: var(--space-5); text-align: center; border: 2px dashed var(--border-strong); border-radius: var(--radius-lg); cursor: pointer; background: var(--surface-muted); transition: background-color var(--dur-fast) ease, border-color var(--dur-fast) ease; }
+.img-drop:hover, .img-drop.over, #img-file:focus-visible + .img-drop { background: #fff; border-color: var(--navy-800); }
+.img-preview { display: block; width: 100%; max-height: 14rem; object-fit: contain; margin-top: var(--space-3); border-radius: var(--radius); background: var(--surface-muted); }
+.admin-dialog .toastui-editor-contents img { display: block; max-width: 100%; max-height: 20rem; object-fit: contain; margin: var(--space-3) 0; }
+
 /* Toast */
 .toast { position: fixed; left: 50%; bottom: var(--space-5); transform: translateX(-50%); z-index: 1000; display: flex; flex-direction: column; gap: var(--space-2); align-items: center; pointer-events: none; }
 .toast div { background: var(--navy-800); color: #fff; padding: var(--space-3) var(--space-5); border-radius: var(--radius); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25); }

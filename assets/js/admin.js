@@ -110,6 +110,108 @@
     return api;
   }
 
+  // ---- pictures in posts ----------------------------------------------------------
+  // "Add image": choose or drop a picture, it is shrunk in the browser, the editor describes it (alt text is
+  // required), and it is uploaded to the public news-images bucket. It then sits in the post at the width of
+  // the text. Pasting or dropping a picture straight into the editor opens the same step.
+  var IMG_BUCKET = "news-images", IMG_MAX_WIDTH = 1600;
+  function fileSize(n) { return n >= 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB"; }
+
+  // Never wider than 1600px (never scaled up), re-saved as WebP (or JPEG where the browser cannot), which also
+  // drops camera metadata such as the location. Resolves to { blob, width, height, ext }.
+  function shrinkImage(file) {
+    if (!/^image\//.test(file.type || "")) return Promise.reject(new Error("That file is not a picture. Try a JPG, PNG or WebP."));
+    if (file.size > 30 * 1048576) return Promise.reject(new Error("That picture is very large (over 30 MB). Try a smaller one."));
+    var make = window.createImageBitmap ? window.createImageBitmap(file, { imageOrientation: "from-image" }) : Promise.reject(new Error("x"));
+    return make.catch(function () { throw new Error("That picture could not be read. Try saving it as a JPG or PNG first."); })
+      .then(function (bmp) {
+        var scale = Math.min(1, IMG_MAX_WIDTH / bmp.width);
+        var w = Math.max(1, Math.round(bmp.width * scale)), h = Math.max(1, Math.round(bmp.height * scale));
+        var canvas = document.createElement("canvas");
+        canvas.width = w; canvas.height = h;
+        var ctx = canvas.getContext("2d");
+        ctx.drawImage(bmp, 0, 0, w, h);
+        if (bmp.close) bmp.close();
+        function toBlob(type, q) { return new Promise(function (res) { canvas.toBlob(res, type, q); }); }
+        return toBlob("image/webp", 0.8).then(function (b) {
+          if (b && b.type === "image/webp") return { blob: b, width: w, height: h, ext: "webp" };
+          // This browser cannot write WebP: JPEG on a white background (JPEG has no transparency).
+          ctx.globalCompositeOperation = "destination-over"; ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, w, h);
+          return toBlob("image/jpeg", 0.82).then(function (j) { return { blob: j, width: w, height: h, ext: "jpg" }; });
+        });
+      });
+  }
+
+  function uploadImage(shrunk, alt) {
+    var now = new Date(), rand = Math.random().toString(36).slice(2, 8);
+    var name = (slugify(alt).slice(0, 40) || "picture") + "-" + rand + "-" + shrunk.width + "x" + shrunk.height + "." + shrunk.ext;
+    var path = now.getUTCFullYear() + "/" + ("0" + (now.getUTCMonth() + 1)).slice(-2) + "/" + name;
+    var bucket = sb.storage.from(IMG_BUCKET);
+    return bucket.upload(path, shrunk.blob, { contentType: shrunk.blob.type, cacheControl: "31536000", upsert: false }).then(function (res) {
+      if (res.error) throw res.error;
+      return bucket.getPublicUrl(path).data.publicUrl;
+    });
+  }
+
+  // Resolves to { url, alt } once the picture is uploaded, or null if the editor cancels.
+  function imageDialog(initialFile) {
+    return new Promise(function (resolve) {
+      var dlg = el("dialog", { class: "admin-dialog img-dialog", "aria-labelledby": "img-title" });
+      var shrunk = null, busy = false, token = 0;
+      var err = el("p", { class: "form-error", role: "alert", hidden: true });
+      var info = el("p", { class: "help", role: "status", id: "img-info" });
+      var preview = el("img", { class: "img-preview", alt: "", hidden: true });
+      var fileInput = el("input", { type: "file", accept: "image/*", id: "img-file", class: "visually-hidden" });
+      var drop = el("label", { class: "img-drop", for: "img-file" }, el("strong", null, "Choose a picture"), " or drop one here");
+      var alt = el("input", { type: "text", id: "img-alt", maxlength: "200", autocomplete: "off", "aria-describedby": "img-alt-help", required: true });
+      var add = el("button", { class: "btn btn-primary", type: "submit", disabled: true }, "Add image");
+      var cancel = el("button", { class: "btn btn-secondary", type: "button" }, "Cancel");
+      var form = el("form", { novalidate: true },
+        el("h2", { id: "img-title" }, "Add an image"),
+        err,
+        el("div", { class: "field" }, fileInput, drop, preview, info),
+        el("div", { class: "field" }, el("label", { for: "img-alt" }, "Describe the picture"),
+          el("p", { class: "help", id: "img-alt-help" }, "A few words for people who cannot see it, for example “Lifters warming up before the first flight”. Required."), alt),
+        el("div", { class: "dialog-actions" }, add, cancel));
+      dlg.appendChild(form);
+      document.body.appendChild(dlg);
+
+      function done(v) { if (dlg.open) dlg.close(); dlg.remove(); resolve(v); }
+      function showErr(m) { err.textContent = m || ""; err.hidden = !m; }
+      function refresh() { add.disabled = busy || !shrunk || !alt.value.trim(); }
+      function take(file) {
+        if (!file) return;
+        var mine = ++token;
+        shrunk = null; showErr(""); preview.hidden = true; info.textContent = "Preparing the picture…"; refresh();
+        shrinkImage(file).then(function (s) {
+          if (mine !== token) return;
+          shrunk = s;
+          if (preview.src) URL.revokeObjectURL(preview.src);
+          preview.src = URL.createObjectURL(s.blob); preview.hidden = false;
+          info.textContent = file.name + ": shrunk from " + fileSize(file.size) + " to " + fileSize(s.blob.size) + " (" + s.width + " × " + s.height + ").";
+          refresh(); alt.focus();
+        }).catch(function (e) { if (mine !== token) return; info.textContent = ""; showErr(e.message); refresh(); });
+      }
+      fileInput.addEventListener("change", function () { take(fileInput.files[0]); });
+      ["dragenter", "dragover"].forEach(function (n) { dlg.addEventListener(n, function (e) { e.preventDefault(); drop.classList.add("over"); }); });
+      ["dragleave", "drop"].forEach(function (n) { dlg.addEventListener(n, function () { drop.classList.remove("over"); }); });
+      dlg.addEventListener("drop", function (e) { e.preventDefault(); take(e.dataTransfer && e.dataTransfer.files[0]); });
+      alt.addEventListener("input", refresh);
+      cancel.addEventListener("click", function () { if (!busy) done(null); });
+      dlg.addEventListener("cancel", function (e) { e.preventDefault(); if (!busy) done(null); });   // Esc
+      form.addEventListener("submit", function (e) {
+        e.preventDefault();
+        if (busy || !shrunk) return;
+        if (!alt.value.trim()) { showErr("Describe the picture in a few words, so people using screen readers know what it shows."); alt.focus(); return; }
+        busy = true; showErr(""); add.textContent = "Uploading…"; refresh();
+        uploadImage(shrunk, alt.value.trim()).then(function (url) { done({ url: url, alt: alt.value.trim() }); })
+          .catch(function (ex) { busy = false; add.textContent = "Add image"; refresh(); showErr("The picture could not be uploaded. " + friendly(ex)); });
+      });
+      dlg.showModal();
+      if (initialFile) take(initialFile); else fileInput.focus();
+    });
+  }
+
   function makeControl(f, value, editors) {
     editors.pending = editors.pending || [];
     var id = "f-" + f.name;
@@ -132,11 +234,21 @@
       var pendingSet = null;
       wrap = el("div", { class: "field" }, el("span", { class: "label", id: id + "-label" }, f.label), help, host);
       editors.pending.push(function () {
-        ed = new window.toastui.Editor({
+        var links = ["table", "link"], opts = {};
+        if (f.images) {
+          // Pictures (news posts): our own "Add image" step, from the toolbar or by pasting or dropping a picture.
+          var imgBtn = el("button", { type: "button", class: "toastui-editor-toolbar-icons image", "aria-label": "Add image", style: "margin:0" });
+          imgBtn.addEventListener("click", function () {
+            imageDialog(null).then(function (r) { if (r) { ed.focus(); ed.exec("addImage", { imageUrl: r.url, altText: r.alt }); } });
+          });
+          links = ["table", "link", { name: "image", tooltip: "Add image", el: imgBtn }];
+          opts.hooks = { addImageBlobHook: function (blob, callback) { imageDialog(blob).then(function (r) { if (r) callback(r.url, r.alt); }); } };
+        }
+        ed = new window.toastui.Editor(Object.assign({
           el: host, height: "380px", initialEditType: "wysiwyg", previewStyle: "tab",
           initialValue: value || "", usageStatistics: false, autofocus: false,
-          toolbarItems: [["heading", "bold", "italic", "strike"], ["ul", "ol"], ["quote", "hr"], ["table", "link"], ["code"]]
-        });
+          toolbarItems: [["heading", "bold", "italic", "strike"], ["ul", "ol"], ["quote", "hr"], links, ["code"]]
+        }, opts));
         editors.push(ed);
         if (pendingSet !== null) ed.setMarkdown(pendingSet);
       });
@@ -418,7 +530,7 @@
         { name: "title", label: "Title", required: true },
         { name: "post_date", label: "Post date (UK time)", type: "datetime", required: true, half: true },
         { name: "slug", label: "Web address ending", required: true, half: true, help: "Made from the title. Letters, numbers and hyphens only." },
-        { name: "body_md", label: "Post", type: "md", help: "Use the toolbar for headings, lists and links. Switch to Markdown at the bottom if you prefer." },
+        { name: "body_md", label: "Post", type: "md", images: true, help: "Use the toolbar for headings, lists, links and pictures. To add a picture, put the cursor on an empty line between paragraphs and press the picture button, or drop or paste a picture in. Switch to Markdown at the bottom if you prefer." },
         { name: "published", label: "Published", type: "checkbox", help: "Untick to save as a draft that only editors can see." }
       ],
       validate: function (v) {

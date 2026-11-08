@@ -452,6 +452,8 @@ ol.steps li::before { counter-increment: step; content: counter(step); position:
 
 /* Tables */
 .table-wrap { position: relative; overflow-x: auto; max-width: none; margin-bottom: var(--space-6); }   /* position: so visually hidden text inside is clipped too */
+/* Pictures in posts and descriptions: the width of the text, the whole picture shown, never taller than the cap. */
+.md img { display: block; width: 100%; height: auto; max-height: 36rem; object-fit: contain; margin: var(--space-6) 0; border-radius: var(--radius-lg); background: var(--surface-muted); }
 table.data { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; font-size: var(--fs-19); }
 table.data caption { text-align: left; font-weight: 700; padding: var(--space-3) var(--space-4); }
 table.data th, table.data td { text-align: left; padding: var(--space-3) var(--space-4); vertical-align: top; }

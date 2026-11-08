@@ -433,8 +433,24 @@ The **author** is filled in automatically from the editor's display name. You do
 
 - The editor works like a word processor. Use the toolbar for **headings, bold, italic, lists, quotes, tables and links**.
 - **Links:** select text and press the link button.
-- There are **no images** in posts. This keeps pages fast and accessible.
+- **Pictures** can be added to posts (see the next section). They are not available in FAQ answers or event descriptions.
 - If you prefer, you can switch to **Markdown** at the bottom of the editor.
+
+### Adding a picture to a post
+
+1. In the post editor, put the cursor on an **empty line between paragraphs**. That is where the picture will sit.
+2. Press the **picture button** in the toolbar. (You can also paste a picture or drag one into the editor, which opens the same step.)
+3. **Choose a picture** from your computer (or drop one into the box). It appears as a preview, with a note such as "shrunk from 4.2 MB to 180 KB". The site shrinks every picture for you, so there is no need to resize anything first.
+4. **Describe the picture** in a few words, for example "Lifters warming up before the first flight". This is required. It is read out to people using screen readers and shown if the picture cannot load.
+5. Press **Add image**. It uploads and appears in the post.
+
+How pictures look: each one runs the **full width of the text**, on its own line between the paragraphs above and below. There are no side-by-side pictures and no text wrapping. A very tall picture is capped at a sensible height (with the whole picture still shown), so it never takes over the page.
+
+Good to know:
+- Use JPG, PNG or WebP pictures. iPhone HEIC pictures may not open: export them as JPG first, or take the picture with "Most Compatible" in the camera settings.
+- Camera details such as the location are removed when the picture is shrunk.
+- To remove a picture, select it in the editor and delete it, like any text. The file stays in storage, which is harmless.
+- Only pictures added through this button are shown on the site. Pictures linked from other websites are ignored.
 
 ### Scheduling
 
@@ -691,6 +707,7 @@ Editors do not need this section.
 - **Contact form email:** the Contact page posts to the Edge Function in `supabase/functions/send-contact`, which emails the entries inbox through Resend with the sender as reply-to. Nothing is stored. Deploy it with Verify JWT off and add `RESEND_API_KEY` as a Supabase secret (never in the repository). Steps are in `README.md` under Contact form. Re-running `schema.sql` removes the old `contact_messages` table.
 - **Rest of the site, design system, images, favicon, accessibility checks:** see `README.md`.
 - **Build step:** `node build.js` inlines the shared header and footer into each page. Run it after changing `assets/partials/` and commit the result.
+- **News pictures:** stored in a public Supabase Storage bucket called `news-images`, created by `schema.sql` (re-run it; if your project has no Storage the step is skipped, and you can make a public bucket of that name in the dashboard). Only editors can add or remove files; the bucket accepts only WebP or JPEG up to 2 MB, which is what the editor produces. Storage and bandwidth use the project's plan limits.
 - **Pushing changes:** work on a branch and merge when ready. Vercel builds a preview for each branch.
 
 ---
