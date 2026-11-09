@@ -585,7 +585,9 @@ fieldset.choice legend { padding: 0; margin-bottom: var(--space-2); font-weight:
 .calc-prompt, .calc-detail { margin: var(--space-3) 0 0; color: var(--text-muted); max-width: none; }
 .calc-prompt[hidden] { display: none; }
 .calc-detail:empty { display: none; }
-.calc-h2 { margin-top: var(--space-8); }
+.calc-faq { max-width: none; margin-top: var(--space-6); }
+.calc-faq .faq-body { padding-top: var(--space-2); }
+.calc-faq .table-wrap { box-shadow: none; border-radius: var(--radius); background: transparent; margin-bottom: var(--space-2); }
 .formula { padding: var(--space-4) var(--space-5); background: var(--surface-muted); border-radius: var(--radius); font-weight: 600; color: var(--text-heading); overflow-wrap: anywhere; max-width: var(--measure); }
 .calc-note { color: var(--text-muted); font-size: var(--fs-16); margin-top: var(--space-5); }
 
