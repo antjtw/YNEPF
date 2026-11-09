@@ -38,6 +38,7 @@ const pages = [
   "chairperson.html",
   "rules.html",
   "contact.html",
+  "glp-calculator.html",
   "rules/the-lifts.html",
   "rules/categories.html",
   "rules/squat.html",

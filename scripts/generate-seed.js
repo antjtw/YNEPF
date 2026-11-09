@@ -180,7 +180,8 @@ function footer() {
     { title: "Competing", placement: "column", links: [
       ["Buy a membership", "https://www.britishpowerlifting.org/membership/"],
       ["Technical rules", "https://www.powerlifting.sport/rules/codes/info/technical-rules"],
-      ["Approved kit", "https://www.powerlifting.sport/rules/codes/info/approved-list"]] },
+      ["Approved kit", "https://www.powerlifting.sport/rules/codes/info/approved-list"],
+      ["GL points calculator", "glp-calculator.html"]] },
     // Placeholders: replace "#" with the real addresses in the editor.
     { title: "Legal", placement: "bottom", links: [["Privacy policy", "#"], ["Franchise agreements", "#"]] },
     { title: "Social", placement: "social", links: [["Linktree", "https://linktr.ee/ynepf"]] },

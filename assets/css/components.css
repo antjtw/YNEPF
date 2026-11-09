@@ -284,7 +284,7 @@ main:has(> .page-hero:first-child), main:has(> .lo-hero:first-child) { padding-t
 /* ==========================================================================
    5. Cards: white on the off-white page, soft shadow, no outlines
    ========================================================================== */
-.event, .news-item, .person-card, .resource, .initiative, .panel, .contact-card, .past-list, .faq details, .table-wrap, .success-panel {
+.event, .news-item, .person-card, .resource, .initiative, .panel, .contact-card, .calc-card, .calc-result, .past-list, .faq details, .table-wrap, .success-panel {
   background: var(--surface-raised); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm);
 }
 .layout-split { display: grid; grid-template-columns: 1fr; gap: var(--space-8); align-items: start; }
@@ -562,6 +562,32 @@ table.rec-grid tbody tr:hover { background: var(--navy-10); }
 .rec-none { color: var(--text-muted); }
 .rec-hit { background: var(--navy-50); box-shadow: inset 0 0 0 2px var(--navy-100); }
 table.records tr[hidden] { display: none; }
+
+/* GL points calculator */
+.calc-layout { display: grid; gap: var(--space-6); align-items: start; margin-bottom: var(--space-8); }
+@media (min-width: 56em) { .calc-layout { grid-template-columns: 1fr 20rem; } .calc-result { position: sticky; top: calc(var(--header-height) + var(--space-4)); } }
+.calc-card { padding: var(--space-6); }
+.calc-card .field:last-child { margin-bottom: 0; }
+fieldset.choice { border: 0; padding: 0; margin: 0 0 var(--space-5); min-width: 0; }
+fieldset.choice legend { padding: 0; margin-bottom: var(--space-2); font-weight: 600; color: var(--text-heading); }
+.choice-options { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.choice-option { display: inline-flex; align-items: center; gap: 0.6rem; min-height: 2.75rem; padding: 0.5rem 1rem; border-radius: var(--radius); background: var(--surface-muted); color: var(--text-heading); font-weight: 600; cursor: pointer; transition: background-color var(--dur-fast) ease, box-shadow var(--dur-fast) ease; }
+.choice-option:hover { background: var(--navy-100); }
+.choice-option input { width: 1.25rem; height: 1.25rem; margin: 0; accent-color: var(--accent); flex: none; }
+.choice-option:has(input:checked) { background: var(--surface-raised); box-shadow: inset 0 0 0 2px var(--navy-800); }
+.input-suffix { display: flex; align-items: center; gap: var(--space-2); max-width: 14rem; }
+.input-suffix input { flex: 1; min-width: 0; }
+.input-suffix span { color: var(--text-muted); font-weight: 600; }
+.calc-result { padding: var(--space-6); }
+.calc-result h2 { margin: 0 0 var(--space-3); font-size: var(--fs-24); }
+.calc-value { margin: 0; font-family: var(--font-display); font-size: var(--fs-80); line-height: 1; color: var(--text-heading); font-variant-numeric: tabular-nums; max-width: none; }
+.calc-result.ready { box-shadow: var(--shadow-md); }
+.calc-prompt, .calc-detail { margin: var(--space-3) 0 0; color: var(--text-muted); max-width: none; }
+.calc-prompt[hidden] { display: none; }
+.calc-detail:empty { display: none; }
+.calc-h2 { margin-top: var(--space-8); }
+.formula { padding: var(--space-4) var(--space-5); background: var(--surface-muted); border-radius: var(--radius); font-weight: 600; color: var(--text-heading); overflow-wrap: anywhere; max-width: var(--measure); }
+.calc-note { color: var(--text-muted); font-size: var(--fs-16); margin-top: var(--space-5); }
 
 /* Lifting order */
 .lo-hero { background: var(--surface-inverse); color: var(--text-on-inverse); }

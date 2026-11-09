@@ -540,6 +540,10 @@ Each **link** has **Link text** and **Address**. An address can be:
 
 Anything else is refused.
 
+### The GL points calculator link
+
+The GL points calculator page has no entry in the main menu. People reach it from a **footer link**, so the link needs to be in the Footer tab. In the **Competing** column add a link with the text **GL points calculator** and the address `glp-calculator.html`. (A fresh setup from `seed.sql` already has it.) If you ever remove it, nobody can find the page except from the "IPF GL points" rules page, which also links to it.
+
 ### Adding a Google Doc (privacy policy, franchise agreements)
 
 1. In the Google Doc, choose **Share** and set **General access** to **Anyone with the link** (Viewer).
