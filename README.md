@@ -176,34 +176,20 @@ policy is in `docs/privacy-policy-draft.md`.
 
 ### Images
 
-The homepage hero shows a competition photo. The untouched original is kept in
-`design/source-photos/`; the site only ever loads the compressed copies below.
+The homepage hero shows a competition photo, **a different one on every visit** (never the
+same one twice running on the same device). The photos are managed in the editor's **Home** tab
+(*Hero photos*): add one, hide it, describe it, delete it. Uploading shrinks the picture in the
+browser to 1000px and 640px wide (WebP, a few tens of KB each) and stores both in the public
+`site-images` bucket; the page picks one at random and downloads only that one. The two photos
+that ship with the site (`assets/img/hero*.webp`; the bench press original is kept in
+`design/source-photos/`) are the starting pool, and the page falls back to them if the pool is empty or cannot be read.
 
-| Slot | File | Suggested size | Notes |
-|------|------|----------------|-------|
-| Hero (right of the headline) | `assets/img/hero.webp` / `hero.jpg` (1000px) and `hero-640.*` (phones) | 1000 x 1250 | Fills the rounded frame from the centre (`object-fit: cover`). |
+| Slot | Files | Notes |
+|------|-------|-------|
+| Hero (right of the headline) | rows in `hero_images` (`url` 1000px, `small_url` 640px, `alt`, `active`) | Fills the rounded frame from the centre (`object-fit: cover`). Portrait photos work best; landscape ones are cropped evenly from the centre. |
 
-**Adding a photo.** Resize and compress it first, so it costs visitors almost no bandwidth:
-
-```bash
-npm install --no-save sharp                     # once
-node scripts/optimise-image.js ~/Downloads/bench.jpg hero 1000
-```
-
-That writes `assets/img/hero.webp` (about 150 KB) and `hero.jpg` at 1000px wide (the
-hero shows at about 520px, so this is sharp on retina screens), never scaling a small
-photo up. The page then fills the frame with it from the centre (`object-fit: cover`),
-so a portrait or landscape photo both work. Point the hero at it in `index.html`:
-
-```html
-<picture>
-  <source srcset="assets/img/hero.webp" type="image/webp">
-  <img src="assets/img/hero.jpg" alt="A lifter benching at a YNEPF competition" width="1000" height="1250" fetchpriority="high">
-</picture>
-```
-
-Set `width` and `height` to the real size the script reports, and write an `alt` that
-describes the photo.
+To add a photo in code instead (for example to ship it with the site), optimise it with
+`node scripts/optimise-image.js <photo> hero-name 1000 --responsive` and add a row to `hero_images`.
 
 Keep photos under about 300KB each (export as JPG or WebP).
 
@@ -379,6 +365,17 @@ news, users and more) is in [`docs/editor-guide.md`](docs/editor-guide.md).
   rows and columns ignored). `docs/mockups/sample-records.csv` shows the layout. To move the
   records elsewhere, edit the entry and paste the new link; leaving the link
   blank hides that table. Google refreshes published sheets every few minutes.
+- **Home tab.** The editor's Home tab changes the home page's headline and buttons, the *Upcoming
+  events* and *Latest news* headings and buttons, the *Resources* list (icon, colour, title, text,
+  link; up to 8), the *Find your place* cards (up to 6), the question band, and the hero photo
+  pool. Each block's wording is a JSON row in `site_settings` (`home.hero`, `home.events`,
+  `home.resources`, `home.cards`, `home.news`, `home.cta`); no row means the standard wording, which
+  is what `index.html` already says (the defaults live in `assets/js/home.js` and a test checks the
+  two agree). Events and news themselves still come from the Calendar and News tabs. The page works
+  without JavaScript and before the database answers; `home.js` keeps the last copy in
+  localStorage and applies it straight after each block, so edited wording does not flash the old
+  text. Links are checked (https, mailto, or a page on the site), text is always set as text, and
+  hero photo addresses must be the site's own pictures or the project's public storage.
 - **GL points calculator.** `glp-calculator.html` (address `/glp-calculator`) works out IPF GL points from sex, event (powerlifting or bench press only), kit (classic or equipped), bodyweight and result, live as you type, using the IPF's Table 1 constants (`assets/js/glp.js`, which also builds the constants table on the page, so the numbers have one source). Bodyweight must be at least 40 kg for men and 35 kg for women. It is deliberately **not in the main menu**: the only way in is a footer link, set in the editor's Footer tab (Competing column: label "GL points calculator", address `glp-calculator.html`), plus a link from the rules page on GL points.
 - **News pictures.** The news editor has an Add image step: pick, paste or drop a picture, it is shrunk in the browser (max 1600px wide, WebP at about 80%, metadata dropped), the editor must describe it (alt text), and it is uploaded to the public `news-images` Storage bucket (made by `schema.sql`; editors only can write; WebP/JPEG, 2 MB max). In a post it sits at the full width of the text, on its own line, with the whole picture shown and a 36rem height cap. Only pictures from that bucket are rendered anywhere markdown is shown; outside image URLs are removed. Files are named `<description>-<id>-<width>x<height>.webp` so the page can reserve space.
 - **Submit a record button.** The Records page opens with a "Submit a record" button linking to a Google Form. The link is a row in `site_settings` (`records_submit_url`), edited in the Records tab of the editor (blank hides the button). Until `schema.sql` is re-run the standard form is used (`RECORDS_FORM_DEFAULT` in `site.js`). `site_settings` is readable by everyone, so never put secrets in it.

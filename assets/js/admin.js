@@ -119,13 +119,13 @@
 
   // Never wider than 1600px (never scaled up), re-saved as WebP (or JPEG where the browser cannot), which also
   // drops camera metadata such as the location. Resolves to { blob, width, height, ext }.
-  function shrinkImage(file) {
+  function shrinkImage(file, maxWidth) {
     if (!/^image\//.test(file.type || "")) return Promise.reject(new Error("That file is not a picture. Try a JPG, PNG or WebP."));
     if (file.size > 30 * 1048576) return Promise.reject(new Error("That picture is very large (over 30 MB). Try a smaller one."));
     var make = window.createImageBitmap ? window.createImageBitmap(file, { imageOrientation: "from-image" }) : Promise.reject(new Error("x"));
     return make.catch(function () { throw new Error("That picture could not be read. Try saving it as a JPG or PNG first."); })
       .then(function (bmp) {
-        var scale = Math.min(1, IMG_MAX_WIDTH / bmp.width);
+        var scale = Math.min(1, (maxWidth || IMG_MAX_WIDTH) / bmp.width);
         var w = Math.max(1, Math.round(bmp.width * scale)), h = Math.max(1, Math.round(bmp.height * scale));
         var canvas = document.createElement("canvas");
         canvas.width = w; canvas.height = h;
@@ -142,32 +142,38 @@
       });
   }
 
-  function uploadImage(shrunk, alt) {
-    var now = new Date(), rand = Math.random().toString(36).slice(2, 8);
-    var name = (slugify(alt).slice(0, 40) || "picture") + "-" + rand + "-" + shrunk.width + "x" + shrunk.height + "." + shrunk.ext;
-    var path = now.getUTCFullYear() + "/" + ("0" + (now.getUTCMonth() + 1)).slice(-2) + "/" + name;
-    var bucket = sb.storage.from(IMG_BUCKET);
-    return bucket.upload(path, shrunk.blob, { contentType: shrunk.blob.type, cacheControl: "31536000", upsert: false }).then(function (res) {
-      if (res.error) throw res.error;
-      return bucket.getPublicUrl(path).data.publicUrl;
-    });
+  // Uploads every size of one picture (opts.widths gives them, largest first) and resolves to their public addresses.
+  function uploadImage(sizes, alt, opts) {
+    opts = opts || {};
+    var now = new Date(), rand = Math.random().toString(36).slice(2, 8), bucket = sb.storage.from(opts.bucket || IMG_BUCKET);
+    var folder = (opts.folder ? opts.folder + "/" : "") + now.getUTCFullYear() + "/" + ("0" + (now.getUTCMonth() + 1)).slice(-2) + "/";
+    return Promise.all(sizes.map(function (shrunk) {
+      var name = (slugify(alt).slice(0, 40) || "picture") + "-" + rand + "-" + shrunk.width + "x" + shrunk.height + "." + shrunk.ext;
+      return bucket.upload(folder + name, shrunk.blob, { contentType: shrunk.blob.type, cacheControl: "31536000", upsert: false }).then(function (res) {
+        if (res.error) throw res.error;
+        return bucket.getPublicUrl(folder + name).data.publicUrl;
+      });
+    }));
   }
 
-  // Resolves to { url, alt } once the picture is uploaded, or null if the editor cancels.
-  function imageDialog(initialFile) {
+  // Resolves to { url, alt } once the picture is uploaded (plus smallUrl when opts.widths has two sizes), or null if the
+  // editor cancels. opts: title, bucket, folder, widths (default one size, 1600px), frame (preview how it crops on the home page).
+  function imageDialog(initialFile, opts) {
+    opts = opts || {};
+    var widths = opts.widths || [IMG_MAX_WIDTH];
     return new Promise(function (resolve) {
       var dlg = el("dialog", { class: "admin-dialog img-dialog", "aria-labelledby": "img-title" });
       var shrunk = null, busy = false, token = 0;
       var err = el("p", { class: "form-error", role: "alert", hidden: true });
       var info = el("p", { class: "help", role: "status", id: "img-info" });
-      var preview = el("img", { class: "img-preview", alt: "", hidden: true });
+      var preview = el("img", { class: "img-preview" + (opts.frame ? " img-frame" : ""), alt: "", hidden: true });
       var fileInput = el("input", { type: "file", accept: "image/*", id: "img-file", class: "visually-hidden" });
       var drop = el("label", { class: "img-drop", for: "img-file" }, el("strong", null, "Choose a picture"), " or drop one here");
       var alt = el("input", { type: "text", id: "img-alt", maxlength: "200", autocomplete: "off", "aria-describedby": "img-alt-help", required: true });
       var add = el("button", { class: "btn btn-primary", type: "submit", disabled: true }, "Add image");
       var cancel = el("button", { class: "btn btn-secondary", type: "button" }, "Cancel");
       var form = el("form", { novalidate: true },
-        el("h2", { id: "img-title" }, "Add an image"),
+        el("h2", { id: "img-title" }, opts.title || "Add an image"),
         err,
         el("div", { class: "field" }, fileInput, drop, preview, info),
         el("div", { class: "field" }, el("label", { for: "img-alt" }, "Describe the picture"),
@@ -183,12 +189,15 @@
         if (!file) return;
         var mine = ++token;
         shrunk = null; showErr(""); preview.hidden = true; info.textContent = "Preparing the picture…"; refresh();
-        shrinkImage(file).then(function (s) {
+        Promise.all(widths.map(function (w) { return shrinkImage(file, w); })).then(function (all) {
           if (mine !== token) return;
-          shrunk = s;
+          var s = all[0];
+          shrunk = all;
           if (preview.src) URL.revokeObjectURL(preview.src);
           preview.src = URL.createObjectURL(s.blob); preview.hidden = false;
-          info.textContent = file.name + ": shrunk from " + fileSize(file.size) + " to " + fileSize(s.blob.size) + " (" + s.width + " × " + s.height + ").";
+          info.textContent = file.name + ": shrunk from " + fileSize(file.size) + " to " + fileSize(all.reduce(function (n, x) { return n + x.blob.size; }, 0)) +
+            " (" + s.width + " × " + s.height + (all.length > 1 ? ", plus a smaller copy for phones" : "") + ")." +
+            (opts.frame ? " The home page shows it in a nearly square frame, cropped evenly from the centre, as in the preview." : "");
           refresh(); alt.focus();
         }).catch(function (e) { if (mine !== token) return; info.textContent = ""; showErr(e.message); refresh(); });
       }
@@ -204,7 +213,7 @@
         if (busy || !shrunk) return;
         if (!alt.value.trim()) { showErr("Describe the picture in a few words, so people using screen readers know what it shows."); alt.focus(); return; }
         busy = true; showErr(""); add.textContent = "Uploading…"; refresh();
-        uploadImage(shrunk, alt.value.trim()).then(function (url) { done({ url: url, alt: alt.value.trim() }); })
+        uploadImage(shrunk, alt.value.trim(), opts).then(function (urls) { done({ url: urls[0], smallUrl: urls[1] || "", alt: alt.value.trim() }); })
           .catch(function (ex) { busy = false; add.textContent = "Add image"; refresh(); showErr("The picture could not be uploaded. " + friendly(ex)); });
       });
       dlg.showModal();
@@ -962,6 +971,266 @@
     panel.replaceChildren(panelHead("Account"), el("div", { style: "max-width:32rem;" }, nameForm, passForm));
   }
 
+  // ---- home page ------------------------------------------------------------------------
+  // The wording of each block is one row in site_settings (key home.<block>, the value is JSON); no row means
+  // "the standard wording" (the defaults in home.js, which is also what index.html says). The hero photos are
+  // rows in hero_images. See assets/js/home.js for how the page uses them.
+  var HOME = window.YNEPF_HOME;
+  var HOME_MAX = { resources: 8, cards: 6 };
+
+  function homeCurrent(name, saved) {
+    var d = HOME.DEFAULTS[name], sv = saved && saved[name];
+    if (!sv || typeof sv !== "object") return JSON.parse(JSON.stringify(d));
+    var out = {};
+    Object.keys(d).forEach(function (k) {
+      if (k === "items") out.items = Array.isArray(sv.items) ? sv.items : JSON.parse(JSON.stringify(d.items));
+      else out[k] = typeof sv[k] === "string" ? sv[k] : d[k];
+    });
+    return out;
+  }
+  function homeLoadSaved() {
+    return sb.from("site_settings").select("key,value").like("key", "home.%").then(function (res) {
+      var rows = ok(res), saved = {};
+      rows.forEach(function (r) { try { saved[r.key.slice(5)] = JSON.parse(r.value); } catch (e) { /* ignore a damaged row */ } });
+      return saved;
+    });
+  }
+  // Write a whole block: update its row if there is one, otherwise add it.
+  function homeWrite(name, value) {
+    var key = "home." + name, text = JSON.stringify(value);
+    return sb.from("site_settings").select("key").eq("key", key).then(ok).then(function (rows) {
+      return (rows.length ? sb.from("site_settings").update({ value: text }).eq("key", key) : sb.from("site_settings").insert({ key: key, value: text })).then(ok);
+    });
+  }
+  // Change a block from its freshest saved state (so two editors do not overwrite each other's other blocks or items).
+  function homeChange(name, fn) {
+    return homeLoadSaved().then(function (saved) {
+      var cur = homeCurrent(name, saved), next = fn(cur);
+      return next === false ? null : homeWrite(name, next);
+    });
+  }
+  function homeReset(name, what) {
+    if (!window.confirm("Go back to the standard " + what + "? Your changes to it will be lost.")) return;
+    sb.from("site_settings").delete().eq("key", "home." + name).then(ok)
+      .then(function () { toast("Back to the standard wording."); route(); })
+      .catch(function (e) { toast(friendly(e), "error"); });
+  }
+  function homeUrlCheck(v, fields) {
+    for (var i = 0; i < fields.length; i++) {
+      var f = fields[i];
+      if (v[f[0]] && !HOME.urlOk(v[f[0]])) return f[1] + " must start with https://, be a page on this site (like faqs.html), or be # for now.";
+    }
+    return null;
+  }
+  var LINK_HELP = "A full address starting https://, a page on this site such as faqs.html, or # for now.";
+
+  function homeCard(title, summary, actions, body) {
+    return el("section", { class: "card home-card" },
+      el("div", { class: "home-card-head" }, el("h2", null, title), el("span", { class: "actions" }, actions)),
+      summary ? el("div", { class: "home-summary" }, summary) : null, body || null);
+  }
+  function homeLine(label, text) { return el("p", { class: "home-line" }, el("span", null, label + ": "), el("strong", null, text)); }
+
+  function renderHome(panel) {
+    panel.replaceChildren(panelHead("Home page"),
+      el("p", { class: "panel-intro" }, "Change the wording and photos on the home page. “Upcoming events” and “Latest news” fill themselves from the Calendar and News tabs, so you only edit their headings and buttons here. Changes reach visitors within a minute or so, and a photo you add joins the rotation straight away for new visitors."),
+      el("p", null, "Loading…"));
+    Promise.all([
+      sb.from("site_settings").select("key,value").like("key", "home.%"),
+      sb.from("hero_images").select("*").order("sort_order").order("created_at")
+    ]).then(function (both) {
+      panel.lastChild.remove();
+      if (both[0].error) {
+        panel.appendChild(el("div", { class: "callout" }, el("p", { class: "callout-title" }, "One step first"),
+          el("p", { style: "margin:0;" }, "The home page settings need the latest supabase/schema.sql to be run in Supabase. Until then the home page shows its standard wording and photos.")));
+        return;
+      }
+      var saved = {};
+      ok(both[0]).forEach(function (r) { try { saved[r.key.slice(5)] = JSON.parse(r.value); } catch (e) { /* ignore */ } });
+      var cur = function (n) { return homeCurrent(n, saved); };
+      var custom = function (n) { return !!saved[n]; };
+      var resetBtn = function (n, what) { return custom(n) ? btn("Use the standard " + what, function () { homeReset(n, what); }) : null; };
+
+      // ---- headline and buttons
+      var hero = cur("hero");
+      panel.appendChild(homeCard("Headline and buttons",
+        [homeLine("Headline", hero.title), homeLine("Button 1", hero.primaryLabel + "  (" + hero.primaryUrl + ")"), homeLine("Button 2", hero.secondaryLabel + "  (" + hero.secondaryUrl + ")")],
+        [btn("Edit", function () { editHomeHero(hero); }, "btn-primary"), resetBtn("hero", "wording")]));
+
+      // ---- hero photos
+      panel.appendChild(heroPhotosCard(both[1]));
+
+      // ---- upcoming events, resources, cards, news, call to action
+      var ev = cur("events");
+      panel.appendChild(homeCard("Upcoming events",
+        [homeLine("Heading", ev.heading), homeLine("Button", ev.buttonLabel), el("p", { class: "help" }, "The events themselves come from the Calendar tab.")],
+        [btn("Edit", function () { editHomeSimple("events", "Upcoming events", ev, [{ name: "heading", label: "Heading", required: true }, { name: "buttonLabel", label: "Button text", required: true }]); }, "btn-primary"), resetBtn("events", "wording")]));
+      panel.appendChild(homeListCard("resources", "Resources", cur("resources"), custom("resources")));
+      panel.appendChild(homeListCard("cards", "Find your place", cur("cards"), custom("cards")));
+      var nw = cur("news");
+      panel.appendChild(homeCard("Latest news",
+        [homeLine("Heading", nw.heading), homeLine("Button", nw.buttonLabel), el("p", { class: "help" }, "The posts themselves come from the News tab.")],
+        [btn("Edit", function () { editHomeSimple("news", "Latest news", nw, [{ name: "heading", label: "Heading", required: true }, { name: "buttonLabel", label: "Button text", required: true }]); }, "btn-primary"), resetBtn("news", "wording")]));
+      var cta = cur("cta");
+      panel.appendChild(homeCard("Question band (bottom of the page)",
+        [homeLine("Heading", cta.heading), homeLine("Text", cta.text), homeLine("Button", cta.buttonLabel + "  (" + cta.url + ")")],
+        [btn("Edit", function () {
+          editHomeSimple("cta", "Question band", cta, [{ name: "heading", label: "Heading", required: true },
+            { name: "text", label: "Text", type: "textarea", rows: 3 }, { name: "buttonLabel", label: "Button text", required: true, half: true },
+            { name: "url", label: "Button link", required: true, half: true, help: LINK_HELP }], [["url", "The button link"]]);
+        }, "btn-primary"), resetBtn("cta", "wording")]));
+    }).catch(function (e) { panel.lastChild.textContent = friendly(e); });
+  }
+
+  function editHomeHero(hero) {
+    openForm({
+      title: "Headline and buttons", values: hero, saveLabel: "Save",
+      fields: [
+        { name: "title", label: "Headline", type: "textarea", rows: 3, required: true, help: "Put *stars* around words to highlight them in orange, like: The home of *drug tested* powerlifting." },
+        { name: "primaryLabel", label: "Button 1 text", required: true, half: true },
+        { name: "primaryUrl", label: "Button 1 link", required: true, half: true, help: LINK_HELP },
+        { name: "secondaryLabel", label: "Button 2 text", required: true, half: true },
+        { name: "secondaryUrl", label: "Button 2 link", required: true, half: true, help: LINK_HELP }
+      ],
+      validate: function (v) { return homeUrlCheck(v, [["primaryUrl", "Button 1's link"], ["secondaryUrl", "Button 2's link"]]); },
+      onSave: function (v) { return homeChange("hero", function () { return v; }).then(function () { toast("Saved."); route(); }); }
+    });
+  }
+  function editHomeSimple(name, title, current, fields, urlFields) {
+    openForm({
+      title: title, values: current, saveLabel: "Save", fields: fields,
+      validate: function (v) { return homeUrlCheck(v, urlFields || []); },
+      onSave: function (v) { return homeChange(name, function (c) { return Object.assign({}, c, v); }).then(function () { toast("Saved."); route(); }); }
+    });
+  }
+
+  // A block that is a heading plus a list of items (Resources, Find your place cards)
+  var HOME_ITEMS = {
+    resources: { word: "resource", fields: function () { return [
+      { name: "title", label: "Title", required: true }, { name: "text", label: "Short description", type: "textarea", rows: 2 },
+      { name: "url", label: "Link", required: true, help: LINK_HELP },
+      { name: "icon", label: "Icon", type: "select", half: true, options: Object.keys(HOME.ICON_NAMES).map(function (k) { return { value: k, label: HOME.ICON_NAMES[k] }; }) },
+      { name: "colour", label: "Icon colour", type: "select", half: true, options: Object.keys(HOME.COLOUR_NAMES).map(function (k) { return { value: k, label: HOME.COLOUR_NAMES[k] }; }) }]; },
+      blank: { title: "", text: "", url: "", icon: "link", colour: "navy" },
+      sub: function (i) { return i.text; } },
+    cards: { word: "card", fields: function () { return [
+      { name: "title", label: "Title", required: true }, { name: "text", label: "Short description", type: "textarea", rows: 2 },
+      { name: "linkLabel", label: "Link text", required: true, half: true }, { name: "url", label: "Link address", required: true, half: true, help: LINK_HELP },
+      { name: "style", label: "Style", type: "select", options: [{ value: "plain", label: "Plain (white)" }, { value: "inverse", label: "Highlighted (dark blue)" }] }]; },
+      blank: { title: "", text: "", linkLabel: "", url: "", style: "plain" },
+      sub: function (i) { return i.text; } }
+  };
+  function homeListCard(name, title, block, isCustom) {
+    var cfg = HOME_ITEMS[name], list = el("ul", { class: "item-list", style: "padding:0;margin:0 0 var(--space-3);" });
+    block.items.forEach(function (it, i) {
+      var up = btn("↑", function () { moveHomeItem(name, i, -1); }, "btn-ghost icon-btn", { "aria-label": "Move " + it.title + " up" });
+      var down = btn("↓", function () { moveHomeItem(name, i, 1); }, "btn-ghost icon-btn", { "aria-label": "Move " + it.title + " down" });
+      up.disabled = i === 0; down.disabled = i === block.items.length - 1;
+      var lead = null;
+      if (name === "resources") { lead = el("span", { class: "resource-icon " + (HOME.COLOUR_NAMES[it.colour] ? it.colour : "navy"), "aria-hidden": "true", style: "margin-right:var(--space-3);" });
+        var sv = document.createElementNS("http://www.w3.org/2000/svg", "svg"); sv.setAttribute("viewBox", "0 0 24 24"); sv.setAttribute("fill", "none"); sv.innerHTML = HOME.ICONS[it.icon] || HOME.ICONS.link; lead.appendChild(sv); }
+      list.appendChild(el("li", { class: "item-row" }, lead,
+        el("div", { class: "item-main" }, el("p", { class: "item-title" }, it.title + (it.style === "inverse" ? "  (highlighted)" : "")),
+          el("p", { class: "item-sub", style: "overflow-wrap:anywhere;" }, [cfg.sub(it), it.url].filter(Boolean).join(" · "))),
+        el("span", { class: "actions" }, up, down, btn("Edit", function () { editHomeItem(name, i); }),
+          btn("Delete", function () { deleteHomeItem(name, i); }, "btn-danger"))));
+    });
+    var add = btn("Add " + cfg.word, function () { editHomeItem(name, -1); });
+    if (block.items.length >= HOME_MAX[name]) { add.disabled = true; add.title = "At most " + HOME_MAX[name] + "."; }
+    return homeCard(title, [homeLine("Heading", block.heading)],
+      [btn("Edit heading", function () { editHomeSimple(name, title + ": heading", block, [{ name: "heading", label: "Heading", required: true }]); }),
+        isCustom ? btn("Use the standard wording", function () { homeReset(name, "wording and list"); }) : null],
+      el("div", { class: "home-list" }, list, add));
+  }
+  function editHomeItem(name, index) {
+    var cfg = HOME_ITEMS[name];
+    homeLoadSaved().then(function (saved) {
+      var block = homeCurrent(name, saved), it = index >= 0 ? block.items[index] : Object.assign({}, cfg.blank);
+      if (!it) return;
+      openForm({
+        title: (index >= 0 ? "Edit " : "Add ") + cfg.word, values: it, saveLabel: index >= 0 ? "Save" : "Add " + cfg.word, fields: cfg.fields(),
+        validate: function (v) { return homeUrlCheck(v, [["url", "The link"]]); },
+        onSave: function (v) {
+          return homeChange(name, function (c) {
+            var items = c.items.slice();
+            if (index >= 0) items[index] = Object.assign({}, items[index], v); else if (items.length < HOME_MAX[name]) items.push(v);
+            return Object.assign({}, c, { items: items });
+          }).then(function () { toast(index >= 0 ? "Saved." : "Added."); route(); });
+        }
+      });
+    }).catch(function (e) { toast(friendly(e), "error"); });
+  }
+  function moveHomeItem(name, index, dir) {
+    homeChange(name, function (c) {
+      var items = c.items.slice(), j = index + dir;
+      if (j < 0 || j >= items.length) return false;
+      var t = items[index]; items[index] = items[j]; items[j] = t;
+      return Object.assign({}, c, { items: items });
+    }).then(route).catch(function (e) { toast(friendly(e), "error"); });
+  }
+  function deleteHomeItem(name, index) {
+    homeLoadSaved().then(function (saved) {
+      var block = homeCurrent(name, saved), it = block.items[index];
+      if (!it) return;
+      if (block.items.length <= 1) { toast("Keep at least one " + HOME_ITEMS[name].word + ". You can edit it instead.", "error"); return; }
+      if (!window.confirm("Delete “" + it.title + "”?")) return;
+      return homeChange(name, function (c) { var items = c.items.slice(); items.splice(index, 1); return Object.assign({}, c, { items: items }); })
+        .then(function () { toast("Deleted."); route(); });
+    }).catch(function (e) { toast(friendly(e), "error"); });
+  }
+
+  // ---- hero photos
+  function heroSrc(u) { return /^assets\//.test(u) ? "../" + u : u; }   // the editor lives one folder down
+  function heroPhotosCard(res) {
+    if (res.error) {
+      return homeCard("Hero photos", null, null, el("p", null, "The photo pool needs the latest supabase/schema.sql to be run in Supabase. Until then the home page rotates the two photos that come with the site."));
+    }
+    var rows = ok(res), active = rows.filter(function (r) { return r.active; });
+    var grid = el("ul", { class: "photo-grid" }, rows.map(function (r) {
+      return el("li", { class: "photo-card" + (r.active ? "" : " is-off") },
+        el("img", { src: heroSrc(r.small_url || r.url), alt: "", loading: "lazy" }),
+        el("p", { class: "item-sub" }, r.alt),
+        el("span", { class: "tag " + (r.active ? "tag-open" : "tag-closed") }, r.active ? "In the rotation" : "Hidden"),
+        el("span", { class: "actions" },
+          btn(r.active ? "Hide" : "Show", function () { setHeroActive(r, !r.active); }),
+          btn("Edit description", function () { editHeroAlt(r); }),
+          btn("Delete", function () { deleteHero(r); }, "btn-danger")));
+    }));
+    var note = !rows.length ? "No photos yet, so the home page uses the two that come with the site."
+      : !active.length ? "Every photo is hidden, so the home page uses the two that come with the site."
+      : active.length === 1 ? "Only one photo is in the rotation, so it will not change from visit to visit. Add another to get a different one each time."
+      : active.length + " photos are in the rotation. Each visit shows one of them at random, never the same one twice in a row.";
+    return homeCard("Hero photos", [el("p", { style: "margin:0;" }, note),
+        el("p", { class: "help" }, "Tall (portrait) photos work best. The home page frame is nearly square and crops evenly from the centre, so keep the action in the middle.")],
+      [btn("Add photo", addHeroPhoto, "btn-primary")], rows.length ? grid : null);
+  }
+  function addHeroPhoto() {
+    imageDialog(null, { title: "Add a hero photo", bucket: "site-images", folder: "hero", widths: [1000, 640], frame: true }).then(function (r) {
+      if (!r) return;
+      return sb.from("hero_images").select("sort_order").order("sort_order", { ascending: false }).limit(1).then(ok).then(function (top) {
+        return sb.from("hero_images").insert({ url: r.url, small_url: r.smallUrl, alt: r.alt, active: true, sort_order: (top[0] ? top[0].sort_order : 0) + 10 }).then(ok);
+      }).then(function () { toast("Photo added to the rotation."); route(); });
+    }).catch(function (e) { toast(friendly(e), "error"); });
+  }
+  function setHeroActive(r, on) {
+    sb.from("hero_images").update({ active: on }).eq("id", r.id).then(ok)
+      .then(function () { toast(on ? "Back in the rotation." : "Hidden from the rotation."); route(); })
+      .catch(function (e) { toast(friendly(e), "error"); });
+  }
+  function editHeroAlt(r) {
+    openForm({
+      title: "Describe the photo", values: { alt: r.alt }, saveLabel: "Save",
+      fields: [{ name: "alt", label: "Description", required: true, help: "A few words for people who cannot see it, for example “A lifter pulling a deadlift, with a spotter behind the bar”." }],
+      onSave: function (v) { return sb.from("hero_images").update({ alt: v.alt }).eq("id", r.id).then(ok).then(function () { toast("Saved."); route(); }); }
+    });
+  }
+  function deleteHero(r) {
+    if (!window.confirm("Remove this photo from the rotation? The picture file itself stays in storage.")) return;
+    sb.from("hero_images").delete().eq("id", r.id).then(ok)
+      .then(function () { toast("Photo removed."); route(); })
+      .catch(function (e) { toast(friendly(e), "error"); });
+  }
+
   // ---- shell, routing, auth ---------------------------------------------------------
   function panelHead(title, action) {
     return el("div", { class: "panel-head" }, el("h1", null, title), action || null);
@@ -970,6 +1239,7 @@
   var TABS = {
     competitions: renderCompetitions,
     news: renderNews,
+    home: renderHome,
     organisation: function (p) { renderGrouped(p, ORG); },
     records: renderRecords,
     users: renderUsers,

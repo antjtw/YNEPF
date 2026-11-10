@@ -255,7 +255,11 @@ main:has(> .page-hero:first-child), main:has(> .lo-hero:first-child) { padding-t
 /* Three simple cards. The first is inverted (solid navy, white text) to lead the row;
    add "tile--iron" instead of "tile--inverse" for Iron Oxide. */
 .tiles { display: grid; gap: var(--space-4); grid-template-columns: 1fr; }
-@media (min-width: 40.0625em) { .tiles { grid-template-columns: repeat(3, 1fr); gap: var(--space-5); } }
+@media (min-width: 40.0625em) {
+  .tiles { grid-template-columns: repeat(3, 1fr); gap: var(--space-5); }
+  .tiles[data-count="1"] { grid-template-columns: 1fr; }
+  .tiles[data-count="2"], .tiles[data-count="4"] { grid-template-columns: repeat(2, 1fr); }   /* two across, or two by two, rather than a lone card on a second row */
+}
 .tile { position: relative; display: flex; flex-direction: column; justify-content: space-between; gap: var(--space-6); min-height: 14rem; padding: var(--space-6); border-radius: var(--radius-xl); background: var(--surface-raised); box-shadow: var(--shadow-sm); transition: box-shadow var(--dur) var(--ease-out); }
 .tile:hover { box-shadow: var(--shadow-md); }
 .tile h3 { margin: 0 0 var(--space-2); font-size: var(--fs-27); line-height: 1.1; color: var(--text-heading); }
