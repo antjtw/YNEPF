@@ -365,6 +365,18 @@ news, users and more) is in [`docs/editor-guide.md`](docs/editor-guide.md).
   rows and columns ignored). `docs/mockups/sample-records.csv` shows the layout. To move the
   records elsewhere, edit the entry and paste the new link; leaving the link
   blank hides that table. Google refreshes published sheets every few minutes.
+- **Address, search and sharing.** The site's one main address is `https://www.ynepf.co.uk` (the
+  plain `ynepf.co.uk` redirects to it), set as `SITE_URL` at the top of `build.js`. Running
+  `node build.js` writes each page's canonical address and link-preview tags (Open Graph and a
+  Twitter card) between `<!-- @seo start -->` and `<!-- @seo end -->`, and regenerates `robots.txt`
+  and `sitemap.xml` (every page that can be indexed: not the editor, not `noindex` pages, not the
+  pages whose content depends on the address). Commit the results. The link-preview picture is
+  `assets/img/share.jpg` (1200 x 630); `node scripts/make-share-image.js` regenerates it from
+  `scripts/share-image.html` (needs Playwright and sharp). Limits: news posts and lifting orders are
+  not in the sitemap, and a shared link to one shows the general preview (their content loads after
+  the page, which link previews do not wait for). The home page also carries `SportsOrganization`
+  structured data. The editor is `noindex` and deliberately not blocked in `robots.txt`, so crawlers
+  can see that.
 - **Home tab.** The editor's Home tab changes the home page's headline and buttons, the *Upcoming
   events* and *Latest news* headings and buttons, the *Resources* list (icon, colour, title, text,
   link; up to 8), the *Find your place* cards (up to 6), the question band, and the hero photo

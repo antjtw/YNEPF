@@ -1,0 +1,23 @@
+<!doctype html>
+<!-- The picture shown when a link to the site is shared (WhatsApp, Facebook, X, Slack...): 1200 x 630.
+     Rendered by scripts/make-share-image.js into assets/img/share.jpg. Uses the site's own fonts and colours. -->
+<meta charset="utf-8">
+<link rel="stylesheet" href="../assets/css/fonts.css">
+<style>
+  :root { --navy-950: #07121A; --navy-800: #152C41; --navy-100: #C9D4E0; --iron-300: #E09774; }
+  * { box-sizing: border-box; margin: 0; }
+  body { width: 1200px; height: 630px; overflow: hidden; background: var(--navy-950); color: #fff; font-family: "IBM Plex Sans", Arial, sans-serif; display: grid; grid-template-columns: 1fr 470px; }
+  .copy { padding: 64px 56px 56px 72px; display: flex; flex-direction: column; justify-content: space-between; }
+  .brand { display: flex; align-items: center; gap: 22px; font-weight: 700; font-size: 27px; line-height: 1.2; color: var(--navy-100); }
+  .brand img { width: 84px; height: 84px; }
+  h1 { font-family: "Cutmark", "IBM Plex Sans", sans-serif; font-weight: 800; font-size: 78px; line-height: 1.04; letter-spacing: -0.5px; }
+  h1 em { font-style: normal; color: var(--iron-300); }
+  .url { font-size: 30px; font-weight: 600; color: var(--navy-100); letter-spacing: 0.3px; }
+  .photo { background: var(--navy-800) url("../assets/img/hero-deadlift.jpg") 52% 0 / auto 116% no-repeat; }   /* a little zoomed, from the top, so the bottom edge of the photo is cropped */
+</style>
+<div class="copy">
+  <div class="brand"><img src="../assets/img/logo-white.svg" alt=""><span>Yorkshire &amp; North East<br>Powerlifting Federation</span></div>
+  <h1>The home of <em>drug tested</em> powerlifting in Yorkshire and the North East</h1>
+  <div class="url">ynepf.co.uk</div>
+</div>
+<div class="photo"></div>

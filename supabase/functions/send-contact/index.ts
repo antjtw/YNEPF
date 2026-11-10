@@ -14,7 +14,7 @@
 //   RESEND_API_KEY   required
 //   NOTIFY_TO        optional, defaults to ynepfentries@gmail.com
 //   MAIL_FROM        optional, defaults to "YNEPF website <onboarding@resend.dev>"
-//   ALLOWED_ORIGIN   optional, the website address (for example https://ynepf.vercel.app).
+//   ALLOWED_ORIGIN   optional, the website address (for example https://www.ynepf.co.uk).
 //                    Leave unset to allow any website to call it.
 // --- email helpers (unit tested; keep them free of Deno-specific code) ---
 export interface ContactRecord { name: string; email: string; subject: string; message: string; created_at?: string }

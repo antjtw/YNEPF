@@ -1,0 +1,5 @@
+# The editor (/admin) is marked noindex on the page itself, which only works if crawlers may read it.
+User-agent: *
+Allow: /
+
+Sitemap: https://www.ynepf.co.uk/sitemap.xml
