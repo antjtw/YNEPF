@@ -2,6 +2,51 @@
   "cleanUrls": true,
   "trailingSlash": false,
   "rewrites": [
-    { "source": "/lifting-order/:slug", "destination": "/lifting/index.html" }
+    {
+      "source": "/lifting-order/:slug",
+      "destination": "/lifting/index.html"
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/rules/coaches",
+      "destination": "/rules/coach-responsibilities",
+      "permanent": true
+    },
+    {
+      "source": "/rules/competition-day",
+      "destination": "/rules",
+      "permanent": true
+    },
+    {
+      "source": "/rules/equipment",
+      "destination": "/rules/equipment-check",
+      "permanent": true
+    },
+    {
+      "source": "/rules/equipped",
+      "destination": "/rules/equipped-kit",
+      "permanent": true
+    },
+    {
+      "source": "/rules/kit",
+      "destination": "/rules/general-kit-rules",
+      "permanent": true
+    },
+    {
+      "source": "/rules/records",
+      "destination": "/records",
+      "permanent": true
+    },
+    {
+      "source": "/rules/referees",
+      "destination": "/rules/referee-roles",
+      "permanent": true
+    },
+    {
+      "source": "/rules/safety",
+      "destination": "/rules/conduct-and-safety",
+      "permanent": true
+    }
   ]
 }
