@@ -12,6 +12,8 @@
   <link rel="stylesheet" href="assets/css/tokens.css">
   <link rel="stylesheet" href="assets/css/base.css">
   <link rel="stylesheet" href="assets/css/components.css">
+  <script src="assets/js/config.js"></script>
+  <script src="assets/js/home.js"></script>
 </head>
 <body data-page="home">
   <a class="skip-link" href="#main">Skip to main content</a>
@@ -88,30 +90,13 @@
           <a class="btn btn-primary" href="calendar.html">See the calendar</a>
           <a class="btn btn-secondary" href="faqs.html">New to powerlifting?</a>
         </div>
+        <script>YNEPF_HOME.apply("hero");</script>
       </div>
       <div class="hero-media">
-        <!-- The hero photo is picked at random on each visit (never the same one twice running).
-             To add photos, optimise them with scripts/optimise-image.js and add a line to PHOTOS.
-             Each entry: n = file name in assets/img (without .webp/.jpg), alt = what the photo shows. -->
+        <!-- The hero photo is a different one on each visit, picked from the pool managed in the editor's Home tab
+             (home.js has the two photos that ship with the site for before the pool loads). -->
         <figure class="hero-photo">
-          <script>
-            (function () {
-              var PHOTOS = [
-                { n: "hero", alt: "A lifter benching at a YNEPF competition, with spotters either side of the bar" }
-              ];
-              var i = Math.floor(Math.random() * PHOTOS.length);
-              try {
-                var last = parseInt(localStorage.getItem("ynepf-hero"), 10);
-                if (PHOTOS.length > 1 && last === i) i = (i + 1 + Math.floor(Math.random() * (PHOTOS.length - 1))) % PHOTOS.length;
-                localStorage.setItem("ynepf-hero", String(i));
-              } catch (e) { /* private browsing: just use the random pick */ }
-              var p = PHOTOS[i], sizes = "(min-width: 64em) 520px, calc(100vw - 2rem)", d = "assets/img/";
-              var alt = p.alt.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
-              document.currentScript.parentNode.insertAdjacentHTML("beforeend",
-                '<picture><source type="image/webp" srcset="' + d + p.n + '-640.webp 640w, ' + d + p.n + '.webp 1000w" sizes="' + sizes + '">' +
-                '<img src="' + d + p.n + '.jpg" srcset="' + d + p.n + '-640.jpg 640w, ' + d + p.n + '.jpg 1000w" sizes="' + sizes + '" alt="' + alt + '" width="1000" height="1250" fetchpriority="high"></picture>');
-            })();
-          </script>
+          <script>YNEPF_HOME.heroPhoto(document.currentScript.parentNode);</script>
           <noscript>
             <picture>
               <source type="image/webp" srcset="assets/img/hero-640.webp 640w, assets/img/hero.webp 1000w" sizes="(min-width: 64em) 520px, calc(100vw - 2rem)">
@@ -129,7 +114,8 @@
         <section aria-labelledby="events-heading" class="reveal">
           <h2 id="events-heading" style="margin-top:0;">Upcoming events</h2>
           <ul class="event-list" id="home-events" aria-live="polite"><li><p>Loading…</p></li></ul>
-          <p style="margin-top:var(--space-6);"><a class="btn btn-secondary" href="calendar.html">See the full competition calendar</a></p>
+          <p style="margin-top:var(--space-6);"><a id="events-button" class="btn btn-secondary" href="calendar.html">See the full competition calendar</a></p>
+          <script>YNEPF_HOME.apply("events");</script>
         </section>
 
         <aside aria-labelledby="resources-heading" class="reveal">
@@ -140,6 +126,7 @@
             <li><div class="resource"><span class="resource-icon rose" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M4 7h10M4 12h10M4 17h7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M16 16l2 2 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><h3><a href="https://www.powerlifting.sport/rules/codes/info/approved-list">Approved kit</a></h3><p>Only officially registered equipment may be used in the YNEPF.</p></div></div></li>
             <li><div class="resource"><span class="resource-icon grey" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="5" rx="1" stroke="currentColor" stroke-width="2"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span><div><h3><a href="records.html">Divisional records</a></h3><p>Records set by YNEPF lifters at all levels of competition.</p></div></div></li>
           </ul>
+          <script>YNEPF_HOME.apply("resources");</script>
         </aside>
       </div>
     </div>
@@ -175,6 +162,7 @@
           <a class="more" href="faqs.html">How points work</a>
         </article>
       </div>
+      <script>YNEPF_HOME.apply("cards");</script>
     </div>
   </section>
 
@@ -184,9 +172,10 @@
         <div>
           <h2 id="news-heading" style="margin-top:0;">Latest news</h2>
         </div>
-        <a class="btn btn-secondary btn-sm" href="news.html">Read all news</a>
+        <a id="news-button" class="btn btn-secondary btn-sm" href="news.html">Read all news</a>
       </div>
       <ul class="news-list" id="home-news" aria-live="polite"><li><p>Loading…</p></li></ul>
+      <script>YNEPF_HOME.apply("news");</script>
     </div>
   </section>
 
@@ -199,6 +188,7 @@
         </div>
         <a class="btn btn-primary" href="contact.html">Contact us</a>
       </div>
+      <script>YNEPF_HOME.apply("cta");</script>
     </div>
   </section>
 

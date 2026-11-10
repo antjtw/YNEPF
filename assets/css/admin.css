@@ -69,7 +69,25 @@ body.admin main { padding-block: var(--space-6) var(--space-8); }
 .img-drop { display: block; padding: var(--space-5); text-align: center; border: 2px dashed var(--border-strong); border-radius: var(--radius-lg); cursor: pointer; background: var(--surface-muted); transition: background-color var(--dur-fast) ease, border-color var(--dur-fast) ease; }
 .img-drop:hover, .img-drop.over, #img-file:focus-visible + .img-drop { background: #fff; border-color: var(--navy-800); }
 .img-preview { display: block; width: 100%; max-height: 14rem; object-fit: contain; margin-top: var(--space-3); border-radius: var(--radius); background: var(--surface-muted); }
+.img-preview[hidden] { display: none; }
+.img-preview.img-frame { aspect-ratio: 4 / 4.1; max-height: 18rem; width: auto; margin-inline: auto; object-fit: cover; object-position: center; }
 .admin-dialog .toastui-editor-contents img { display: block; max-width: 100%; max-height: 20rem; object-fit: contain; margin: var(--space-3) 0; }
+
+/* Home page tab */
+.home-card { margin-bottom: var(--space-5); padding: var(--space-5) var(--space-6); }
+.home-card-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); }
+.home-card-head h2 { margin: 0; font-size: var(--fs-27); }
+.home-summary { display: grid; gap: var(--space-1); margin-bottom: var(--space-3); }
+.home-summary p { margin: 0; max-width: none; }
+.home-line span { color: var(--text-muted); }
+.home-list .item-row { align-items: center; }
+.photo-grid { list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: var(--space-4); padding: 0; margin: var(--space-3) 0 0; max-width: none; }
+.photo-card { display: flex; flex-direction: column; gap: var(--space-2); margin: 0; padding: var(--space-3); background: var(--surface-muted); border-radius: var(--radius-lg); }
+.photo-card img { display: block; width: 100%; aspect-ratio: 4 / 4.1; object-fit: cover; border-radius: var(--radius); background: var(--navy-100); }
+.photo-card.is-off img { opacity: 0.45; }
+.photo-card .item-sub { margin: 0; font-size: var(--fs-16); color: var(--text-muted); }
+.photo-card .tag { align-self: flex-start; }
+.photo-card .actions { display: flex; flex-wrap: wrap; gap: var(--space-1); }
 
 /* Toast */
 .toast { position: fixed; left: 50%; bottom: var(--space-5); transform: translateX(-50%); z-index: 1000; display: flex; flex-direction: column; gap: var(--space-2); align-items: center; pointer-events: none; }

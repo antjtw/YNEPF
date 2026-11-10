@@ -194,6 +194,28 @@ insert into public.site_settings (key, value) values
   ('records_submit_url', 'https://docs.google.com/forms/d/e/1FAIpQLScXK1vfOAfL0xJLbhIyLrcrOh2i4tu7sm2LW8xNrDRR2yyoug/viewform')
 on conflict (key) do nothing;
 
+-- The home page. The editor's Home tab stores each block's wording as JSON in site_settings
+-- (keys home.hero, home.events, home.resources, home.cards, home.news, home.cta; a missing key
+-- means "use the standard wording"). The hero photos are rows here; the home page picks one at
+-- random on every visit.
+create table if not exists public.hero_images (
+  id uuid primary key default gen_random_uuid(),
+  url text not null,                       -- the picture (about 1000px wide)
+  small_url text not null default '',      -- a smaller copy (about 640px) for phones
+  alt text not null,                       -- what the picture shows, for screen readers
+  active boolean not null default true,    -- untick to take it out of the rotation without deleting it
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now()
+);
+-- The two photos that ship with the site, added once (only while the table is empty).
+insert into public.hero_images (url, small_url, alt, sort_order)
+select v.url, v.small_url, v.alt, v.sort_order
+from (values
+  ('assets/img/hero.webp', 'assets/img/hero-640.webp', 'A lifter benching at a YNEPF competition, with spotters either side of the bar', 10),
+  ('assets/img/hero-deadlift.webp', 'assets/img/hero-deadlift-640.webp', 'A lifter pulling a deadlift in a maroon kit, with a spotter standing behind the bar', 20)
+) as v(url, small_url, alt, sort_order)
+where not exists (select 1 from public.hero_images);
+
 -- ---------------------------------------------------------------------------
 -- Contact form: messages are emailed (see supabase/functions/send-contact), not
 -- stored. Earlier versions kept them in a table; remove it and its rules.
@@ -369,6 +391,7 @@ alter table public.faq_categories  enable row level security;
 alter table public.faqs            enable row level security;
 alter table public.record_sources  enable row level security;
 alter table public.site_settings    enable row level security;
+alter table public.hero_images      enable row level security;
 alter table public.footer_groups   enable row level security;
 alter table public.footer_links    enable row level security;
 alter table public.posts           enable row level security;
@@ -391,7 +414,7 @@ create policy "admins manage editors" on public.editors
 do $$
 declare t text;
 begin
-  foreach t in array array['org_sections','people','faq_categories','faqs','record_sources','footer_groups','footer_links','site_settings'] loop
+  foreach t in array array['org_sections','people','faq_categories','faqs','record_sources','footer_groups','footer_links','site_settings','hero_images'] loop
     execute format('drop policy if exists "public read" on public.%I', t);
     execute format('create policy "public read" on public.%I for select to anon, authenticated using (true)', t);
     execute format('drop policy if exists "editors write" on public.%I', t);
@@ -444,6 +467,34 @@ begin
     for delete to authenticated using (bucket_id = 'news-images' and public.is_editor());
 end $$;
 
+-- Home page photos: the same arrangement in a second bucket, site-images (hero photos are
+-- stored at two sizes, and are limited to WebP or JPEG up to 2 MB each).
+do $$
+begin
+  if to_regclass('storage.buckets') is null or to_regclass('storage.objects') is null then return; end if;
+  begin
+    insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+    values ('site-images', 'site-images', true, 2097152, array['image/webp', 'image/jpeg'])
+    on conflict (id) do update set public = true, file_size_limit = 2097152, allowed_mime_types = array['image/webp', 'image/jpeg'];
+  exception when undefined_column then
+    insert into storage.buckets (id, name, public) values ('site-images', 'site-images', true)
+    on conflict (id) do update set public = true;
+  end;
+  drop policy if exists "site images public read" on storage.objects;
+  create policy "site images public read" on storage.objects
+    for select to anon, authenticated using (bucket_id = 'site-images');
+  drop policy if exists "site images editors add" on storage.objects;
+  create policy "site images editors add" on storage.objects
+    for insert to authenticated with check (bucket_id = 'site-images' and public.is_editor());
+  drop policy if exists "site images editors change" on storage.objects;
+  create policy "site images editors change" on storage.objects
+    for update to authenticated using (bucket_id = 'site-images' and public.is_editor())
+    with check (bucket_id = 'site-images' and public.is_editor());
+  drop policy if exists "site images editors remove" on storage.objects;
+  create policy "site images editors remove" on storage.objects
+    for delete to authenticated using (bucket_id = 'site-images' and public.is_editor());
+end $$;
+
 -- ---------------------------------------------------------------------------
 -- Grants
 -- ---------------------------------------------------------------------------
@@ -451,13 +502,13 @@ grant usage on schema public to anon, authenticated;
 
 grant select on public.org_sections, public.people, public.faq_categories,
                 public.faqs, public.posts, public.competitions_public, public.record_sources,
-                public.footer_groups, public.footer_links, public.site_settings
+                public.footer_groups, public.footer_links, public.site_settings, public.hero_images
   to anon;
 
 grant select, insert, update, delete on
   public.org_sections, public.people, public.faq_categories, public.faqs,
   public.posts, public.competitions, public.record_sources, public.editors,
-  public.footer_groups, public.footer_links, public.site_settings
+  public.footer_groups, public.footer_links, public.site_settings, public.hero_images
   to authenticated;
 
 grant select on public.competitions_public to authenticated;

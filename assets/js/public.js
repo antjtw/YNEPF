@@ -268,6 +268,24 @@
   function home() {
     var ev = document.getElementById("home-events");
     var nw = document.getElementById("home-news");
+    // The editable wording and the hero photo pool. home.js applies them and keeps a copy for the next visit.
+    // If either table cannot be read (for example the schema has not been updated yet), the standard page stays.
+    if (window.YNEPF_HOME && Y.db()) {
+      var sb = Y.db();
+      var tolerant = function (r) { return r.error ? null : (r.data || []); };
+      Promise.all([
+        sb.from("site_settings").select("key,value").like("key", "home.%").then(tolerant, function () { return null; }),
+        sb.from("hero_images").select("url,small_url,alt,sort_order").eq("active", true).order("sort_order").then(tolerant, function () { return null; })
+      ]).then(function (res) {
+        var data = {};
+        if (res[0]) {
+          data.blocks = {};
+          res[0].forEach(function (r) { try { data.blocks[r.key.slice(5)] = JSON.parse(r.value); } catch (e) { /* ignore a damaged row */ } });
+        }
+        if (res[1]) data.pool = res[1].map(function (p) { return { url: p.url, small: p.small_url, alt: p.alt }; });
+        window.YNEPF_HOME.update(data);
+      });
+    }
     if (ev) {
       upcomingAndPast().then(function (r) {
         var next = r.upcoming.slice(0, 4);

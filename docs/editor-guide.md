@@ -12,6 +12,7 @@ It covers, in order:
 6. [Lifting orders: the full guide to the spreadsheet](#6-lifting-orders-the-full-guide-to-the-spreadsheet)
 7. [Records: the full guide to the spreadsheets](#7-records-the-full-guide-to-the-spreadsheets)
 8. [News posts](#8-news-posts)
+   - [The Home page tab](#8a-the-home-page-hero-photos-and-blocks)
 9. [Organisation (the Committee page)](#9-organisation-the-committee-page)
 10. [FAQs](#10-faqs)
 11. [Footer links](#11-footer-links)
@@ -103,6 +104,7 @@ After signing in you see a row of tabs:
 |---|---|
 | **Calendar** | Competitions and other events, shown on the Calendar page and the home page |
 | **News** | Posts on the News page |
+| **Home** | The home page: headline, buttons, hero photos, Resources, cards and the question band |
 | **Organisation** | People on the Committee page |
 | **Records** | The record tables on the Records page |
 | **FAQs** | Questions and answers on the FAQs page |
@@ -470,6 +472,58 @@ The latest three posts appear on the home page.
 
 ---
 
+## 8a. The Home page: hero, photos and blocks
+
+The **Home** tab changes the wording and photos on the home page. It has a card for each part of the page, from the top down. Everything starts as the standard wording, so nothing changes until you edit it. Each card you have changed also has a **Use the standard wording** button, which puts it back.
+
+Changes reach visitors within a minute or so.
+
+### Headline and buttons
+
+Press **Edit** on the first card to change the big headline and the two buttons under it (each has text and a link).
+
+In the headline, put **\*stars\*** around the words you want highlighted in orange. For example `The home of *drug tested* powerlifting in Yorkshire and the North East` highlights "drug tested".
+
+A button link can be a full address starting `https://`, a page on this site such as `faqs.html`, or `#` for now. Anything else is refused.
+
+### Hero photos
+
+The photo beside the headline is **a different one on each visit**. It does not slowly rotate on the screen: each time someone loads (or reloads) the page, one photo is picked at random from the pool, and it is never the same one twice in a row for the same person.
+
+In the **Hero photos** card:
+
+- **Add photo.** Choose a picture, or drop one in. It is shrunk for you (a 1000 pixel version, and a smaller one for phones), so there is no need to resize it first. The preview shows how it will be **cropped**: the frame is nearly square and crops evenly from the centre, so keep the action in the middle. Tall (portrait) photos work best. You must describe the photo in a few words (for example "A lifter pulling a deadlift, with a spotter behind the bar") for people using screen readers. Then press **Add image**.
+- **Hide / Show.** Take a photo out of the rotation without deleting it, and bring it back later.
+- **Edit description.** Change the description.
+- **Delete.** Remove it from the pool. (The picture file stays in storage, which is harmless.)
+
+The card tells you what will happen: with only one photo in the pool it will not change from visit to visit, so add at least two. If every photo is hidden, or there are none, the home page uses the two photos that come with the site.
+
+A photo you add is picked up by each visitor's browser in the background, so the very first visit after you add it may still show the older pool, and it joins the rotation from their next visit.
+
+Take care with photos of people, especially young lifters, and credit photographers where you need to. A picture that has the photographer's watermark across the bottom may be cropped, so check the preview.
+
+### Upcoming events and Latest news
+
+These two sections **fill themselves**: the events come from the **Calendar** tab and the posts from the **News** tab. In the Home tab you can only change their headings and the text of their buttons.
+
+### Resources and "Find your place"
+
+These are lists. For each item:
+
+- **Edit** changes it. **↑ ↓** reorder. **Delete** removes it (you cannot delete the last one). **Add** makes a new one.
+- A **resource** has a title, a short description, a link, an **icon** and an **icon colour**.
+- A **card** has a title, a short description, link text (like "Read the FAQs"), a link, and a **style**: plain (white) or highlighted (dark blue). Cards sit three across; two or four cards sit two across, and you can have up to six. Resources can be up to eight.
+- **Edit heading** changes the heading above the list.
+
+### The question band
+
+The dark band at the bottom ("Got a question?") has a heading, some text, and a button with a link. A button link can be `mailto:someone@example.com` to open an email.
+
+If the Home tab shows a message about running `schema.sql`, ask your technical admin: the home page settings need the latest schema before they can be saved. The home page keeps working with its standard wording and photos in the meantime.
+
+---
+
 ## 9. Organisation (the Committee page)
 
 The **Organisation** tab controls the Committee page. It has **sections** (for example Committee, Referees, Regional contacts) and **people** inside each section.
@@ -711,6 +765,7 @@ Editors do not need this section.
 - **Contact form email:** the Contact page posts to the Edge Function in `supabase/functions/send-contact`, which emails the entries inbox through Resend with the sender as reply-to. Nothing is stored. Deploy it with Verify JWT off and add `RESEND_API_KEY` as a Supabase secret (never in the repository). Steps are in `README.md` under Contact form. Re-running `schema.sql` removes the old `contact_messages` table.
 - **Rest of the site, design system, images, favicon, accessibility checks:** see `README.md`.
 - **Build step:** `node build.js` inlines the shared header and footer into each page. Run it after changing `assets/partials/` and commit the result.
+- **Home page content:** the Home tab stores each block's wording as JSON in `site_settings` (keys `home.hero`, `home.events`, `home.resources`, `home.cards`, `home.news`, `home.cta`; no row means the standard wording in `assets/js/home.js`) and the hero photos in the `hero_images` table. Uploaded hero photos live in a second public Storage bucket, `site-images`, made by `schema.sql` the same way as `news-images` (editors only can write; WebP or JPEG up to 2 MB). The first run of `schema.sql` adds the two photos that ship with the site to `hero_images`.
 - **News pictures:** stored in a public Supabase Storage bucket called `news-images`, created by `schema.sql` (re-run it; if your project has no Storage the step is skipped, and you can make a public bucket of that name in the dashboard). Only editors can add or remove files; the bucket accepts only WebP or JPEG up to 2 MB, which is what the editor produces. Storage and bandwidth use the project's plan limits.
 - **Pushing changes:** work on a branch and merge when ready. Vercel builds a preview for each branch.
 
