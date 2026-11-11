@@ -381,7 +381,7 @@
           }).catch(function (e) { toast(friendly(e), "error"); }).then(function () { button.disabled = false; });
       }, "btn-secondary");
       box.replaceChildren(el("h2", { style: "margin-top:0" }, "Club list"),
-        el("p", null, "Lifters in English divisions choose their club from this list, which is copied from the English Powerlifting Association and British Powerlifting websites every few weeks. If a club is missing, ask it to affiliate with the EPA, or press the button after the websites have been updated."),
+        el("p", null, "Lifters in English divisions can choose their club from this list, which is copied from the English Powerlifting Association\u2019s list of approved clubs every few weeks. A club that is not on the EPA list cannot be chosen. Press the button after the EPA website has been updated."),
         el("p", null, line), el("p", null, button));
     });
     return box;
@@ -702,7 +702,7 @@
   var ENTRY_STATUS = { held: "Paying", paid: "Paid", comped: "Free", cancelled: "Cancelled", refunded: "Refunded" };
   function renderEntriesTab(view, c) {
     view.replaceChildren(el("p", null, "Loading…"));
-    sb.from("entries").select("*, weight_classes(label), divisions(name)").eq("competition_id", c.id).order("created_at", { ascending: true }).then(function (res) {
+    sb.from("entries").select("*, weight_classes(label), divisions(name), entry_private(access_needs)").eq("competition_id", c.id).order("created_at", { ascending: true }).then(function (res) {
       var rows = ok(res);
       var live = rows.filter(function (e) { return e.status === "paid" || e.status === "comped"; });
       var total = live.reduce(function (n, e) { return n + e.price_pence; }, 0);
@@ -719,7 +719,8 @@
               el("th", { scope: "row" }, e.full_name, el("small", null, e.email)),
               el("td", null, [(e.sex === "M" ? "Men's " : "Women's ") + (e.weight_classes ? e.weight_classes.label + " kg" : ""), CAT_LABEL[catFor(e.date_of_birth, c.start_date)], e.event === "bench_only" ? "Bench only" : "Full power", e.equipment].join(" · "),
                 el("small", null, [e.club, e.bp_number && "BP " + e.bp_number].filter(Boolean).join(" · ")),
-                e.divisions ? el("small", null, e.divisions.name, e.is_guest ? [" ", el("span", { class: "tag tag-position" }, "Guest: check membership")] : null) : null),
+                e.divisions ? el("small", null, e.divisions.name, e.is_guest ? [" ", el("span", { class: "tag tag-position" }, "Guest: check membership")] : null) : null,
+                (Array.isArray(e.entry_private) ? e.entry_private[0] : e.entry_private) && (Array.isArray(e.entry_private) ? e.entry_private[0] : e.entry_private).access_needs ? el("small", null, el("span", { class: "tag tag-open" }, "Access needs: follow up by email")) : null),
               el("td", null, ENTRY_STATUS[e.status] || e.status),
               el("td", null, entryMoney(e.price_pence), e.paid_at ? el("small", null, new Date(e.paid_at).toLocaleString("en-GB", { timeZone: Y.TZ, dateStyle: "medium", timeStyle: "short" })) : null));
           })))) : el("p", { class: "empty" }, "No entries yet."));

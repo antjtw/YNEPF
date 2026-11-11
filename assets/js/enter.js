@@ -17,8 +17,11 @@
   var step = 1, shownKids = false, preview = false, invite = "", countdown = null;
   var v = { sex: "", event: "", equipment: "", weight_class_id: "", division_id: "", dd: "", mm: "", yyyy: "" };
   var EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
-  var EVENT_NAMES = { full_power: "Full power (squat, bench press and deadlift)", bench_only: "Bench press only" };
+  var EVENT_NAMES = { full_power: "Full power", bench_only: "Bench only" };
+  var EVENT_HINTS = { full_power: "Squat, bench press and deadlift.", bench_only: "Bench press only." };
   var EQUIP_NAMES = { classic: "Classic (raw)", equipped: "Equipped" };
+  var EQUIP_HINTS = { classic: "Knee sleeves, wrist wraps and a belt, competing in a singlet.", equipped: "Supportive equipment such as knee wraps, a squat suit, a bench shirt and a deadlift suit." };
+  var PHOTO_NAMES = { yes: "I consent", no: "I do not consent", never: "I do not wish to be photographed or filmed at all" };
 
   // ---- rules that mirror the database (the database is the one that decides) ------------------
   function ageCategory(yearOfBirth, compYear) {
@@ -115,26 +118,26 @@
     return el("div", { class: "field", "data-field": id },
       el("p", { class: "field-error", id: id + "-error", hidden: true }),
       el("div", { class: "field-check" },
-        el("input", { id: id, name: id, type: "checkbox", checked: !!v[id], onchange: function (e) { v[id] = e.target.checked; if (/^access_|guardian/.test(id)) render(true); } }),
-        el("label", { for: id }, label)),
-      help ? el("p", { class: "help" }, help) : null);
+        el("input", { id: id, name: id, type: "checkbox", checked: !!v[id], "aria-describedby": help ? id + "-hint" : false, onchange: function (e) { v[id] = e.target.checked; if (id === "guardian_consent") return; } }),
+        el("div", null, el("label", { for: id }, label), help ? el("p", { class: "help", id: id + "-hint" }, help) : null)));
   }
+  // options: [value, label, hint?]. No box around the choices, and a short hint under each if given.
   function radios(id, legend, options, help) {
     return el("div", { class: "field", "data-field": id },
-      el("fieldset", { id: id, tabindex: "-1" },
+      el("fieldset", { class: "choice", id: id, tabindex: "-1" },
         el("legend", null, legend), help ? el("p", { class: "help" }, help) : null,
         el("p", { class: "field-error", id: id + "-error", hidden: true }),
         options.map(function (o, i) {
           var rid = id + "-" + i;
           return el("div", { class: "field-check" },
-            el("input", { id: rid, type: "radio", name: id, value: o[0], checked: v[id] === o[0], onchange: function () { v[id] = o[0]; if (id === "sex") v.weight_class_id = ""; render(true); } }),
-            el("label", { for: rid }, o[1]));
+            el("input", { id: rid, type: "radio", name: id, value: o[0], checked: v[id] === o[0], "aria-describedby": o[2] ? rid + "-hint" : false, onchange: function () { v[id] = o[0]; if (id === "sex") v.weight_class_id = ""; render(true); } }),
+            el("div", null, el("label", { for: rid }, o[1]), o[2] ? el("p", { class: "help", id: rid + "-hint" }, o[2]) : null));
         })));
   }
-  function select(id, label, options, blank) {
+  function select(id, label, options, blank, help) {
     return el("div", { class: "field", "data-field": id },
-      el("label", { for: id }, label), el("p", { class: "field-error", id: id + "-error", hidden: true }),
-      el("select", { id: id, name: id, onchange: function (e) { v[id] = e.target.value; } },
+      el("label", { for: id }, label), help ? el("p", { class: "help", id: id + "-help" }, help) : null, el("p", { class: "field-error", id: id + "-error", hidden: true }),
+      el("select", { id: id, name: id, "aria-describedby": help ? id + "-help" : false, onchange: function (e) { v[id] = e.target.value; } },
         el("option", { value: "" }, blank), options.map(function (o) { return el("option", { value: o[0], selected: v[id] === o[0] }, o[1]); })));
   }
   function dobField() {
@@ -143,7 +146,7 @@
         el("input", { id: "dob-" + k, type: "text", inputmode: "numeric", maxlength: max, size: w, value: v[k], autocomplete: k === "dd" ? "bday-day" : k === "mm" ? "bday-month" : "bday-year", oninput: function (e) { v[k] = e.target.value; }, onchange: function () { var k = ageOnDay() !== null && ageOnDay() < 18; if (k !== shownKids) render(true); else updateCatNote(); } }));
     }
     return el("div", { class: "field", "data-field": "dob" },
-      el("fieldset", { id: "dob", tabindex: "-1" }, el("legend", null, "Date of birth"),
+      el("fieldset", { class: "choice", id: "dob", tabindex: "-1" }, el("legend", null, "Date of birth"),
         el("p", { class: "help" }, "For example, 27 3 1990. We use it to work out your age category. It is never published."),
         el("p", { class: "field-error", id: "dob-error", hidden: true }),
         el("div", { style: "display:flex;gap:1rem;flex-wrap:wrap" }, part("dd", "Day", 3, 2), part("mm", "Month", 3, 2), part("yyyy", "Year", 5, 4))));
@@ -160,20 +163,17 @@
         ctx.divisions.map(function (d) { return el("option", { value: d.id, selected: v.division_id === d.id }, d.name); })));
   }
   function clubField() {
-    var d = division();
-    if (!d) return null;
-    if (!pickClub()) return text("club", "Club", { optional: true, max: 120, help: "Type the name of your club, if you have one." });
+    if (!pickClub()) return null;      // outside the English divisions there is no club question
     return el("div", { class: "field", "data-field": "club" },
-      el("label", { for: "club" }, "Club"),
-      el("p", { class: "help", id: "club-help" }, "Only clubs approved or affiliated with English Powerlifting can be chosen. If your club is not listed, choose unattached and tell the entries team."),
+      el("label", { for: "club" }, "Club (optional)"),
+      el("p", { class: "help", id: "club-help" }, "Select your club from the list of English Powerlifting Association (EPA) approved clubs."),
       el("p", { class: "field-error", id: "club-error", hidden: true }),
       el("select", { id: "club", name: "club", "aria-describedby": "club-help", onchange: function (e) { v.club = e.target.value; } },
-        el("option", { value: "" }, "Choose your club"),
-        el("option", { value: "Unattached", selected: v.club === "Unattached" }, "Unattached (no club)"),
+        el("option", { value: "" }, "Select your club"),
         ctx.clubs.map(function (c) { return el("option", { value: c.name, selected: v.club === c.name }, c.name); })));
   }
   function stepAbout() {
-    var age = ageOnDay(), kids = age !== null && age < 18, wantsAccess = v.access_hearing || v.access_sight || (v.access_notes || "").trim();
+    var age = ageOnDay(), kids = age !== null && age < 18;
     shownKids = kids;
     return [
       text("full_name", "Full name", { autocomplete: "name", help: "Your name, club and weight class are shown on the entries list and the lifting order." }),
@@ -181,34 +181,24 @@
       dobField(),
       el("p", { class: "callout", id: "cat-note", role: "status", hidden: myCategory() === null }, catNote()),
       radios("sex", "Which category are you entering?", [["M", "Men's"], ["F", "Women's"]]),
-      text("bp_number", "British Powerlifting membership number", { max: 40 }),
+      check("eligibility_confirmed", "The category I am entering matches my sex at birth",
+        "If it does not, please email the entries team before entering and we will talk it through privately."),
       divisionField(),
       guestBlocked() ? el("p", { class: "callout", role: "status" }, "Entries from outside the Yorkshire & North East division open to guests on ", el("strong", null, whenText(guestOpensAt())), ". Please come back then. Members of the division can enter now.") : null,
       clubField(),
-      text("instagram", "Instagram handle", { optional: true, max: 60, help: "If you would like to be tagged." }),
-      kids ? el("div", { class: "panel" },
-        el("h2", null, "Parent or guardian"),
+      text("bp_number", "British Powerlifting membership number (optional)", { max: 40,
+        help: "This is displayed in your Sport80 profile. You may enter without a British Powerlifting membership number, but you must have a valid membership on competition day." }),
+      text("instagram", "Instagram handle (optional)", { max: 60, help: "This will be displayed next to your name on the lifting order, and will be public." }),
+      kids ? el("div", null,
+        el("h2", { class: "form-heading" }, "Parent or guardian"),
         el("p", null, "You are under 18 on the day of the competition. A parent or guardian must be with you at the competition, and we need their details. Only the entries team can see these, and we delete them 30 days after the competition."),
         text("guardian_name", "Parent or guardian's full name", { max: 120 }),
         text("guardian_phone", "Their phone number", { type: "tel", max: 30, autocomplete: "tel" }),
         text("guardian_email", "Their email address", { type: "email", max: 254 }),
         check("guardian_consent", "I am the parent or guardian, or I have their permission, and I consent to this entry and to photos being taken")) : null,
-      el("div", { class: "panel" },
-        el("h2", null, "Do you need any help on the day?"),
-        el("p", null, "Everyone is asked. Answering is optional. We use it so the team can help you, for example by using hand signals. Only the entries team sees it, we keep it for 30 days after the competition and you can ask us to delete it at any time."),
-        check("access_hearing", "I am hard of hearing"),
-        check("access_sight", "I am hard of seeing"),
-        el("div", { class: "field", "data-field": "access_notes" },
-          el("label", { for: "access_notes" }, "Anything else we should know (optional)"),
-          el("p", { class: "field-error", id: "access_notes-error", hidden: true }),
-          el("textarea", { id: "access_notes", rows: "3", maxlength: "500", oninput: function (e) { v.access_notes = e.target.value; } }, v.access_notes || "")),
-        wantsAccess ? check("access_consent", "I agree you can store what I have written here so you can help me on the day") : null),
-      el("div", { class: "panel" },
-        el("h2", null, "Photos"),
-        check("photo_ok", "You can use photos and video of me in promotional material"),
-        check("photo_opt_out", "I do not want to be photographed or filmed")),
-      check("eligibility_confirmed", "I confirm I am eligible to compete in the category I have chosen",
-        "If you need to talk to us about this, please email the entries team and we will deal with it privately.")
+      check("access_needs", "I have access needs", "Will you require any assistance on competition day? If so, tick this box and we will be in touch by email to see how we can best support you."),
+      radios("photo_choice", "Do you consent to photos or videos of you being used in YNEPF promotional material?",
+        [["yes", PHOTO_NAMES.yes], ["no", PHOTO_NAMES.no], ["never", PHOTO_NAMES.never]])
     ];
   }
   function stepLifting() {
@@ -217,9 +207,10 @@
     var classes = allowed.map(function (c) { return [c.id, c.label + " kg"]; });
     var p = priceNow();
     return [
-      radios("event", "Event", ctx.settings.events.map(function (e) { return [e, EVENT_NAMES[e] || e]; })),
-      radios("equipment", "Equipment", ctx.settings.equipment.map(function (e) { return [e, EQUIP_NAMES[e] || e]; })),
-      select("weight_class_id", "Weight class", classes, classes.length ? "Choose your class" : "Choose men's or women's first"),
+      radios("event", "Which event do you wish to compete in?", ctx.settings.events.map(function (e) { return [e, EVENT_NAMES[e] || e, EVENT_HINTS[e]]; })),
+      radios("equipment", "Equipment", ctx.settings.equipment.map(function (e) { return [e, EQUIP_NAMES[e] || e, EQUIP_HINTS[e]]; })),
+      select("weight_class_id", "Weight class", classes, classes.length ? "Choose your class" : "Choose men's or women's first",
+        "The weight class you intend to compete in on the day. If you miss weight on the day, you can still compete as a guest."),
       ctx.settings.openipf_mode === "hidden" ? null : text("openipf_url", "OpenIPF profile link", ctx.settings.openipf_mode === "required"
         ? { max: 300, help: "Entry to this competition needs a qualifying total, so we need your link from openipf.org (it looks like https://www.openipf.org/u/yourname)." }
         : { optional: true, max: 300, help: "If you have one, paste your link from openipf.org. We use it to check qualification." }),
@@ -232,18 +223,29 @@
     var d = new Date(ctx.comp.entry_closes).toLocaleString("en-GB", { timeZone: Y.TZ, dateStyle: "full", timeStyle: "short" });
     return el("p", { class: "help" }, "Refunds are available until entries close on " + d + ". After that, entries cannot be refunded.");
   }
-  function row(label, value, stepNo) {
-    return el("div", { class: "summary-row", style: "display:flex;justify-content:space-between;gap:1rem;padding:.5rem 0;border-bottom:1px solid var(--border,#ccd)" },
-      el("div", null, el("strong", null, label), el("div", null, value || "—")),
-      el("button", { class: "btn btn-secondary btn-sm", type: "button", onclick: function () { step = stepNo; render(); } }, "Change", el("span", { class: "visually-hidden" }, " " + label)));
+  // A summary list like GOV.UK's: label, answer, and a plain "Change" link on each row.
+  function row(label, value, stepNo, hideChange) {
+    return el("div", { class: "summary-row" },
+      el("dt", null, label),
+      el("dd", { class: "summary-value" }, value || "Not given"),
+      el("dd", { class: "summary-action" }, hideChange ? null : el("a", { href: "#", onclick: function (ev) { ev.preventDefault(); step = stepNo; render(); window.scrollTo(0, 0); } }, "Change", el("span", { class: "visually-hidden" }, " " + label.toLowerCase()))));
   }
   function stepCheck() {
-    var cls = ctx.classes.filter(function (c) { return c.id === v.weight_class_id; })[0], p = priceNow(), age = ageOnDay();
+    var cls = ctx.classes.filter(function (c) { return c.id === v.weight_class_id; })[0], p = priceNow(), age = ageOnDay(), d = division();
+    var rows = [
+      row("Name", v.full_name, 1), row("Email address", v.email, 1), row("Date of birth", v.dd + " " + v.mm + " " + v.yyyy, 1),
+      row("Category", (v.sex === "M" ? "Men's" : "Women's") + (myCategory() !== null ? ", " + CAT_SHORT[myCategory()] : ""), 1),
+      row("Federation or division", d ? d.name + (d.is_home ? "" : " (guest)") : "", 1)
+    ];
+    if (pickClub()) rows.push(row("Club", v.club, 1));
+    rows.push(row("Membership number", v.bp_number, 1), row("Instagram handle", trim(v.instagram) ? "@" + trim(v.instagram).replace(/^@/, "") : "", 1));
+    if (age !== null && age < 18) rows.push(row("Parent or guardian", trim(v.guardian_name), 1));
+    rows.push(row("Access needs", v.access_needs ? "Yes, we will be in touch by email" : "No", 1), row("Photos and videos", PHOTO_NAMES[v.photo_choice], 1),
+      row("Event", EVENT_NAMES[v.event], 2), row("Equipment", EQUIP_NAMES[v.equipment], 2), row("Weight class", cls ? cls.label + " kg" : "", 2));
+    if (trim(v.openipf_url)) rows.push(row("OpenIPF profile", trim(v.openipf_url), 2));
     return [
       el("h2", null, "Check your answers"),
-      row("Name", v.full_name, 1), row("Email", v.email, 1), row("Date of birth", v.dd + "/" + v.mm + "/" + v.yyyy, 1),
-      row("Category", (v.sex === "M" ? "Men's" : "Women's") + (myCategory() !== null ? ", " + CAT_SHORT[myCategory()] : ""), 1), row("Federation or division", division() ? division().name + (division().is_home ? "" : " (guest)") : "", 1), row("Membership number", v.bp_number, 1), row("Club", v.club, 1),
-      row("Event", EVENT_NAMES[v.event], 2), row("Equipment", EQUIP_NAMES[v.equipment], 2), row("Weight class", cls ? cls.label + " kg" : "", 2),
+      el("dl", { class: "summary-list" }, rows),
       age !== null && age < 18 ? el("p", { class: "help" }, "A parent or guardian must be with you at the competition.") : null,
       el("p", { class: "lede" }, "Total to pay: ", el("strong", null, p === null ? "—" : pounds(p))),
       el("p", { class: "help" }, "Pressing the button holds your place for " + ctx.settings.hold_minutes + " minutes while you pay. We never see or store your card details."),
@@ -264,19 +266,16 @@
       if (!iso) e.push(["dob", "Enter your date of birth as a real date, for example 27 3 1990"]);
       else { var age = ageOnDay(); if (age < 14 && ageCategory(+iso.slice(0, 4), +ctx.comp.start_date.slice(0, 4)) === "under14") e.push(["dob", "Lifters must be at least 14 in the year of the competition"]); }
       if (!v.sex) e.push(["sex", "Choose men's or women's"]);
+      if (!v.eligibility_confirmed) e.push(["eligibility_confirmed", "Confirm the category you are entering matches your sex at birth. If it does not, please email the entries team before entering."]);
       if (!v.division_id) e.push(["division_id", "Choose the federation or division you are part of"]);
       else if (guestBlocked()) e.push(["division_id", "Entries from outside the Yorkshire & North East division open on " + whenText(guestOpensAt())]);
-      else if (pickClub() && !v.club) e.push(["club", "Choose your club, or unattached"]);
-      if (!trim(v.bp_number)) e.push(["bp_number", "Enter your British Powerlifting membership number"]);
       if (iso && ageOnDay() < 18) {
         if (!trim(v.guardian_name)) e.push(["guardian_name", "Enter your parent or guardian's name"]);
         if (!trim(v.guardian_phone)) e.push(["guardian_phone", "Enter your parent or guardian's phone number"]);
         if (!EMAIL.test(trim(v.guardian_email))) e.push(["guardian_email", "Enter your parent or guardian's email address"]);
         if (!v.guardian_consent) e.push(["guardian_consent", "A parent or guardian must consent to this entry"]);
       }
-      if ((v.access_hearing || v.access_sight || trim(v.access_notes)) && !v.access_consent) e.push(["access_consent", "Tick the box to agree we can store this, or remove what you have written"]);
-      if (v.photo_ok && v.photo_opt_out) e.push(["photo_opt_out", "Choose either photos allowed or no photos, not both"]);
-      if (!v.eligibility_confirmed) e.push(["eligibility_confirmed", "Confirm that you are eligible to compete in this category"]);
+      if (!v.photo_choice) e.push(["photo_choice", "Choose whether you consent to photos and videos being used"]);
     }
     if (n === 2) {
       if (ctx.settings.openipf_mode === "required" && !/^https:\/\/(www\.)?openipf\.org\/.+/i.test(trim(v.openipf_url))) e.push(["openipf_url", "Enter your OpenIPF profile link, starting https://www.openipf.org/"]);
@@ -291,10 +290,10 @@
   // ---- payment ---------------------------------------------------------------------------------
   function payload() {
     var o = { competition_id: ctx.comp.id, email: trim(v.email), full_name: trim(v.full_name), date_of_birth: dobISO(), sex: v.sex,
-      bp_number: trim(v.bp_number), club: trim(v.club), division_id: v.division_id, instagram: trim(v.instagram).replace(/^@/, ""), event: v.event, equipment: v.equipment,
+      bp_number: trim(v.bp_number), club: pickClub() ? trim(v.club) : "", division_id: v.division_id, instagram: trim(v.instagram).replace(/^@/, ""), event: v.event, equipment: v.equipment,
       weight_class_id: v.weight_class_id, openipf_url: trim(v.openipf_url),
-      photo_ok: !!v.photo_ok, photo_opt_out: !!v.photo_opt_out, eligibility_confirmed: !!v.eligibility_confirmed,
-      access_hearing: !!v.access_hearing, access_sight: !!v.access_sight, access_notes: trim(v.access_notes), access_consent: !!v.access_consent };
+      photo_ok: v.photo_choice === "yes", photo_opt_out: v.photo_choice === "never", eligibility_confirmed: !!v.eligibility_confirmed,
+      access_needs: !!v.access_needs };
     if (invite) o.invite = invite;
     if (ageOnDay() < 18) { o.guardian_name = trim(v.guardian_name); o.guardian_phone = trim(v.guardian_phone); o.guardian_email = trim(v.guardian_email); o.guardian_consent = !!v.guardian_consent; }
     return o;

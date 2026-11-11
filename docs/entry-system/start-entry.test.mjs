@@ -41,11 +41,10 @@ ok((await db.query(`select guardian_name g from public.entry_private where entry
 r = await start({ email: "late@example.com" });
 ok(r.error === "full", "when the places are gone, a new entry is told 'full'");
 await db.exec(`update public.entries set hold_expires_at = now() - interval '1 minute' where status='held'`);
-r = await start({ email: "late@example.com", access_hearing: true });
-ok(r.error === "invalid:access_consent", "access needs without the agreement tick are refused");
-r = await start({ email: "late@example.com", access_hearing: true, access_consent: true });
+r = await start({ email: "late@example.com", access_needs: true });
 ok(r.entry_id, "once holds expire the places come back");
-ok((await db.query(`select guardian_name g, access_hearing h, delete_after::text d from public.entry_private where entry_id='${r.entry_id}'`)).rows[0].g === "", "adults never get guardian details stored");
+ok((await db.query(`select guardian_name g, access_needs h, delete_after::text d from public.entry_private where entry_id='${r.entry_id}'`)).rows[0].g === "", "adults never get guardian details stored");
+ok((await db.query(`select access_needs h from public.entry_private where entry_id='${r.entry_id}'`)).rows[0].h === true, "\"I have access needs\" is kept as a yes, with no details (the entries team follows up by email)");
 await db.exec(`update public.entries set status='paid' where id='${r.entry_id}'`);
 r = await start({ email: "late@example.com" });
 ok(r.error === "already_entered", "someone already entered is told so");
@@ -107,12 +106,18 @@ ok(r.entry_id && (await db.query(`select is_guest g, club c from public.entries 
 ok((await start({ email: "h1@example.com", club: "Implexus Gym" })).entry_id && (await db.query(`select is_guest g from public.entries where email='h1@example.com' and status='held'`)).rows[0].g === false, "our own division is not a guest");
 ok((await start({ email: "h2@example.com", club: "Not A Real Club" })).error === "invalid:club", "a club must be on the approved list");
 ok((await start({ email: "h2@example.com", club: "Old Club" })).error === "invalid:club", "...and a club that has dropped off the list is refused");
-ok((await start({ email: "h2@example.com", club: "" })).error === "invalid:club", "an English division must give a club, or say unattached");
+await db.exec(`update public.entries set status='cancelled' where competition_id='${C}'`);
+r = await start({ email: "h2@example.com", club: "" });
+ok(r.entry_id, "a club is optional");
+await db.exec(`update public.entries set status='cancelled' where id='${r.entry_id}'`);
+r = await start({ email: "h2@example.com", club: "Unattached" });
+ok(r.entry_id && (await db.query(`select club c from public.entries where id='${r.entry_id}'`)).rows[0].c === "", "\"Unattached\" is stored as no club");
+await db.exec(`update public.entries set status='cancelled' where id='${r.entry_id}'`);
 await db.exec(`update public.entries set status='cancelled' where competition_id='${C}'`);
 ok((await start({ email: "h3@example.com", club: "IMPLEXUS gym" })).entry_id, "club names are matched ignoring capitals");
 await db.exec(`update public.entries set status='cancelled' where competition_id='${C}'`);
 r = await start({ email: "s1@example.com", division_id: scot, club: "Edinburgh Barbell" });
-ok(r.entry_id, "from Scotland a club can be typed in (we cannot check it), once guests are allowed");
+ok(r.entry_id && (await db.query(`select club c from public.entries where id='${r.entry_id}'`)).rows[0].c === "", "from outside the English divisions there is no club: whatever is sent is dropped, and the entry still goes through");
 await db.exec(`update public.entries set status='cancelled' where competition_id='${C}'; update public.competitions set entry_opens = null where id='${C}'`);
 // ---- fairness rules: priority entry, qualification, duplicates, short holds
 await db.exec("reset role");

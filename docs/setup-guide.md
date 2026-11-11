@@ -105,13 +105,13 @@ Follow [email-setup-guide.md](email-setup-guide.md). Until then, Resend's starte
 
 ## Part 5b: The club list
 
-Lifters in English divisions choose their club from a list copied from the English Powerlifting Association (affiliated clubs) and British Powerlifting (approved clubs) websites. Only club **names** are copied, never contact details.
+Lifters in English divisions can choose their club (it is optional) from the English Powerlifting Association's list of approved clubs, copied from the EPA website. Only club **names** are copied, never contact details. Lifters from other nations have no club question, and clubs from other bodies are not included.
 
 1. In Supabase, **Edge Functions > Deploy a new function > Via editor**. Name it `sync-clubs`, paste in `supabase/functions/sync-clubs/index.ts`, switch **Verify JWT** **off**, and **Deploy**.
-2. In the site editor, **Calendar**, scroll to **Club list** (entries team and admins) and press **Refresh club list**. You should see "Club list refreshed: about 89 clubs".
+2. In the site editor, **Calendar**, scroll to **Club list** (entries team and admins) and press **Refresh club list**. You should see "Club list refreshed: 64 clubs" (the number changes as the EPA adds clubs).
 3. Optional, to keep it fresh: run `docs/entry-system/schedule-club-sync.sql` once in the Supabase SQL editor. It refreshes on the 1st and 15th of each month.
 
-If a website changes shape, the import stops and leaves the list as it was, and the Club list box says the last check did not work. Tell me and I will adjust it. A club that is missing from both websites can only be chosen as "Unattached" until it is added to one of them.
+If the EPA website changes shape, the import stops and leaves the list as it was, and the Club list box says the last check did not work. Tell me and I will adjust it. A club that is not on the EPA list cannot be chosen: the lifter simply leaves the club blank.
 
 ---
 

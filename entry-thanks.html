@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="robots" content="noindex">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Thank you — YNEPF</title>
+  <title>You’re in — YNEPF</title>
   <meta name="description" content="Your entry payment is being confirmed.">
   <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
   <link rel="icon" href="assets/img/favicon-48.png" type="image/png" sizes="48x48">
@@ -82,19 +82,26 @@
 <!-- @partial:header end -->
 
   <main id="main">
-  <section class="page-hero">
     <div class="container">
-      <h1>Thank you</h1>
-      <p class="lede">Your payment is being confirmed.</p>
-    </div>
-  </section>
-    <div class="container">
-      <div class="success-panel" tabindex="-1">
-        <div class="tick" aria-hidden="true">&#10003;</div>
-        <h2 style="margin-top:0;">Nearly done</h2>
-        <p>We are confirming your payment with the bank. You will get a confirmation email within a few minutes. If it does not arrive, check your junk folder, then <a href="contact.html">contact the entries team</a>.</p>
-        <p><a href="calendar.html">Back to the calendar</a></p>
+      <div class="success-panel confirm-panel">
+        <h1>You&rsquo;re in</h1>
+        <p>See you on the platform.</p>
       </div>
+
+      <p>Your payment has gone through and your entry is confirmed. A confirmation email is on its way and should reach you within a few minutes. If it has not arrived, check your junk folder, or <a href="contact.html">contact the entries team</a>.</p>
+
+      <div class="event-actions" style="margin-bottom:var(--space-7)">
+        <a class="btn btn-secondary" id="view-entries" href="calendar.html" hidden>View entries</a>
+        <a class="btn btn-ghost" href="calendar.html">Back to the calendar</a>
+      </div>
+
+      <h2>What happens next</h2>
+      <ol class="steps">
+        <li>You will receive a confirmation email with the details of your entry.</li>
+        <li>Your name will appear on the entries list, which anyone can look at.</li>
+        <li>Our team will be hard at work putting together the lifting order. You will get an email once it is ready.</li>
+        <li>If you need to withdraw, email <a href="mailto:ynepfentries@gmail.com?subject=Withdrawing%20my%20entry">ynepfentries@gmail.com</a>.</li>
+      </ol>
     </div>
   </main>
 
@@ -161,6 +168,7 @@
 </footer>
 <!-- @partial:footer end -->
   
+  <script src="assets/js/entry-thanks.js"></script>
   <script src="assets/js/nav.js" defer></script>
 </body>
 </html>

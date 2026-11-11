@@ -20,8 +20,8 @@ The entry system collects far more personal information than the site does today
 | Payment amount, Stripe fee, last four card digits, receipt link | Accounts and refunds | Entries team. **No card details are ever stored by us** | 6 years |
 | Photo permission and "do not photograph me" | To respect their wishes | Entries team, and the photographer (names only, for the do-not-photograph list) | Until they change their mind, or one season |
 | Parent or guardian name, phone, email, consent (**only** for lifters under 18 on the day) | They must be reachable, and a parent must consent | **Entries team only** | **30 days after the competition** |
-| Access needs (**everyone is asked**: hearing, sight, anything else) | So we can help on the day, for example hand signals for someone hard of hearing | **Entries team only**, and a printable list for the day | **30 days after the competition**, unless the committee agrees a longer period and says so in the privacy notice |
-| Eligibility note (if someone tells us something about their category) | To handle it privately | **Entries team only** | **30 days after the competition** |
+| Access needs (**everyone is asked** with a tick-box: yes or no, **no details on the form**) | So we can contact them and help on the day | **Entries team only** | **30 days after the competition** |
+| Eligibility note (not collected by the form) | To handle it privately | **Entries team only** | **30 days after the competition** |
 | Waiting list name and email | To offer a place | Entries team. Name and position are public | Until the competition has happened |
 | Emails we sent | To show what was sent and resend | Entries team | 12 months |
 | Audit log (who changed what) | To prove what happened and when | Entries team | 6 years |
@@ -42,13 +42,8 @@ The entry system collects far more personal information than the site does today
 
 Two questions touch sensitive ground, and I recommend we handle them carefully:
 
-- **Access needs.** You have decided that **every lifter is asked**, and that we store the answers so we can help on the day. That is a good reason, and it is allowed, but because it can reveal health information (which the law calls "special category" data) it needs a little more:
-  - The question is asked of everyone, but **answering is optional** ("nothing needed" is fine).
-  - It carries a short explanation: why we ask, that the entries team can see it, how long we keep it, and that they can ask us to delete it.
-  - When someone does enter something, a **tick-box** asks them to agree that we store it for this reason. That is the "explicit consent" the law expects for health information.
-  - It goes in the **privacy policy**, as you suggested.
-  - It is only ever seen by the entries team, and the **printable list for the day** is for the people who need it to help on the platform. It is never in a public list, an email or an export for others.
-- **Eligibility for a category.** I recommend we do **not** have a free-text box for this. Instead the form says "if you need to talk to us about this, email us and we'll deal with it privately". That avoids us collecting sensitive details in a form, and avoids them being stored and exported by accident. (The design has a private place for a note in case the committee wants the box; my advice is to start without it.)
+- **Access needs.** Everyone sees a single tick-box, "I have access needs", with a line saying we will be in touch by email to see how we can best support them. **No details are collected on the form**, which keeps health information out of the database: we only store whether the box was ticked, visible only to the entries team, and delete it 30 days after the competition. Any detail the lifter gives us by email stays in the entries inbox, so the committee should agree how long those emails are kept. It goes in the **privacy policy**.
+- **Category and sex at birth.** The form asks which category (men's or women's) the lifter is entering and has them confirm it matches their sex at birth. Anyone it does not match is told to email the entries team before entering, so we deal with it privately and no sensitive detail is collected or stored in the form. I recommend we do **not** have a free-text box for this. Instead the form says "if you need to talk to us about this, email us and we'll deal with it privately". That avoids us collecting sensitive details in a form, and avoids them being stored and exported by accident. (The design has a private place for a note in case the committee wants the box; my advice is to start without it.)
 - Never collect medical details for the eligibility declaration. That goes to the IPF, not us.
 
 ### Photos and the photographer

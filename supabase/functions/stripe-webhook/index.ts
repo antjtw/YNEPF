@@ -38,13 +38,14 @@ export function exactAge(dob: string, on: string): number {
 }
 export function pounds(pence: number): string { return "£" + (pence / 100).toFixed(2); }
 
-export function confirmationEmail(e: { name: string; competition: string; date: string; event: string; equipment: string; pence: number; under18: boolean; entriesEmail: string; refundsUntil?: string; category?: string; division?: string; club?: string }) {
+export function confirmationEmail(e: { name: string; competition: string; date: string; event: string; equipment: string; pence: number; under18: boolean; entriesEmail: string; refundsUntil?: string; category?: string; division?: string; club?: string; accessNeeds?: boolean }) {
   const lines = [
     `Hi ${e.name},`, "",
     `You are entered in ${e.competition} (${e.date}). Thank you!`, "",
     `Event: ${e.event}`, `Equipment: ${e.equipment}`, ...(e.category ? [`Category: ${e.category}`] : []), ...(e.division ? [`Federation or division: ${e.division}`] : []), ...(e.club ? [`Club: ${e.club}`] : []), `Paid: ${pounds(e.pence)}`, "",
   ];
   if (e.under18) lines.push("Because you are under 18 on the day, a parent or guardian must be with you at the competition.", "");
+  if (e.accessNeeds) lines.push("You said you have access needs, so we will be in touch by email to see how we can best support you on the day.", "");
   if (e.refundsUntil) lines.push(`Refunds are available until entries close on ${e.refundsUntil}. After that, entries cannot be refunded.`, "");
   lines.push(
     "Your name, club and weight class will be shown on the entries list and the lifting order. Your date of birth is never published.", "",
@@ -98,7 +99,7 @@ if (typeof Deno !== "undefined") {
             card_last4: charge.payment_method_details?.card?.last4 ?? "", receipt_url: charge.receipt_url ?? "",
           }),
         });
-        const [row] = await (await db(`entries?id=eq.${entryId}&select=email,full_name,event,equipment,price_pence,date_of_birth,club,divisions(name,is_home),competitions(name,start_date,entry_closes)`)).json();
+        const [row] = await (await db(`entries?id=eq.${entryId}&select=email,full_name,event,equipment,price_pence,date_of_birth,club,divisions(name,is_home),entry_private(access_needs),competitions(name,start_date,entry_closes)`)).json();
         const from = Deno.env.get("MAIL_FROM") ?? "YNEPF <onboarding@resend.dev>";
         const copy = Deno.env.get("NOTIFY_TO") ?? "ynepfentries@gmail.com";
         const send = (to: string[], subject: string, text: string) => fetch("https://api.resend.com/emails", {
@@ -112,6 +113,7 @@ if (typeof Deno !== "undefined") {
             name: row.full_name, competition: row.competitions.name, date: row.competitions.start_date,
             event: row.event === "bench_only" ? "Bench only" : "Full power", equipment: row.equipment === "equipped" ? "Equipped" : "Classic",
             pence: row.price_pence, under18: age < 18, entriesEmail: copy, category: ageCategory(new Date(row.date_of_birth).getFullYear(), compYear), division: row.divisions ? row.divisions.name + (row.divisions.is_home ? "" : " (guest)") : undefined, club: row.club || undefined,
+            accessNeeds: (Array.isArray(row.entry_private) ? row.entry_private[0] : row.entry_private)?.access_needs === true,
             refundsUntil: row.competitions.entry_closes ? new Date(row.competitions.entry_closes).toLocaleString("en-GB", { timeZone: "Europe/London", dateStyle: "full", timeStyle: "short" }) : undefined,
           }));
         } else if (state === "no_place" && row && session.payment_intent) {

@@ -52,13 +52,13 @@ export function formEncode(obj: Record<string, string | number>): string {
   return Object.entries(obj).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`).join("&");
 }
 
-export function sessionParams(o: { entryId: string; email: string; name: string; pence: number; competition: string; siteUrl: string; expiresAt: number }) {
+export function sessionParams(o: { entryId: string; email: string; name: string; pence: number; competition: string; siteUrl: string; expiresAt: number; slug?: string }) {
   return {
     ui_mode: "embedded",
     mode: "payment",
     customer_email: o.email,
     client_reference_id: o.entryId,
-    return_url: `${o.siteUrl}/entry-thanks?session_id={CHECKOUT_SESSION_ID}`,
+    return_url: `${o.siteUrl}/entry-thanks?${o.slug ? `c=${encodeURIComponent(o.slug)}&` : ""}session_id={CHECKOUT_SESSION_ID}`,
     expires_at: o.expiresAt,
     "line_items[0][quantity]": 1,
     "line_items[0][price_data][currency]": "gbp",
@@ -119,7 +119,7 @@ if (typeof Deno !== "undefined") {
       if (code === "unknown") { console.error("start_entry failed", JSON.stringify(out)); return reply(500, { error: "failed" }); }
       return reply(422, { error: code, message: MESSAGES[code] });
     }
-    const { entry_id, price_pence, competition } = out as { entry_id: string; price_pence: number; competition: string };
+    const { entry_id, price_pence, competition, slug } = out as { entry_id: string; price_pence: number; competition: string; slug?: string };
 
     // 2. A free entry (price 0) needs no payment.
     if (price_pence === 0) {
@@ -135,7 +135,7 @@ if (typeof Deno !== "undefined") {
     //    and is what decides whether the place is still ours (the webhook handles a late payment).
     const params = sessionParams({
       entryId: entry_id, email: String(body.email ?? "").trim().toLowerCase(), name: String(body.full_name ?? "").trim(),
-      pence: price_pence, competition, siteUrl, expiresAt: Math.floor(Date.now() / 1000) + 31 * 60,
+      pence: price_pence, competition, slug, siteUrl, expiresAt: Math.floor(Date.now() / 1000) + 31 * 60,
     });
     const res = await fetch("https://api.stripe.com/v1/checkout/sessions", {
       method: "POST",

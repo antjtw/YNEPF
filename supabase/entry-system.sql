@@ -96,8 +96,8 @@ insert into public.divisions (name, is_home, kind, sort_order) values
   ('Other (another country)', false, 'other', 90)
 on conflict (name) do update set kind = excluded.kind, is_home = excluded.is_home;
 
--- Approved and affiliated clubs, imported every few weeks from the English Powerlifting Association and British
--- Powerlifting websites (the sync-clubs function). Names only: no contact details are stored.
+-- The English Powerlifting Association's approved (affiliated) clubs, imported every few weeks from its website (the
+-- sync-clubs function). Names only: no contact details are stored.
 create table if not exists public.clubs (
   id uuid primary key default gen_random_uuid(),
   name text not null,
@@ -297,6 +297,10 @@ create table if not exists public.entry_private (
   eligibility_note text not null default '',               -- kept only in case the committee wants the box; the plan starts without it
   delete_after date                                        -- when this row is removed automatically (see plan, privacy)
 );
+
+-- Whether the lifter says they have access needs. No details are collected on the form: the entries team follows up
+-- by email, so health information is not stored here.
+alter table public.entry_private add column if not exists access_needs boolean not null default false;
 
 create table if not exists public.entry_addons (
   id uuid primary key default gen_random_uuid(),
@@ -816,14 +820,13 @@ begin
   if not found then raise exception 'invalid:division'; end if;
   v_guest := not v_d.is_home;
   if v_guest and c.entry_opens is not null and now() < c.entry_opens + make_interval(days => s.guest_delay_days) then raise exception 'guest_not_open'; end if;
+  -- Club: optional, and only ever one from the EPA list. Lifters from outside the English divisions have no club here.
   v_club := btrim(coalesce(p->>'club', ''));
-  if v_d.kind in ('home', 'english') then
-    -- English divisions: a club from the approved list, or unattached.
-    if v_club = '' then raise exception 'invalid:club'; end if;
-    if lower(v_club) <> 'unattached' and not exists (select 1 from public.clubs where name_key = lower(v_club) and active) then raise exception 'invalid:club'; end if;
-    if lower(v_club) = 'unattached' then v_club := 'Unattached'; end if;
-  elsif char_length(v_club) > 120 then
-    raise exception 'invalid:club';
+  if v_d.kind not in ('home', 'english') or lower(v_club) = 'unattached' then
+    v_club := '';
+  elsif v_club <> '' then
+    select name into v_club from public.clubs where name_key = lower(v_club) and active;
+    if not found then raise exception 'invalid:club'; end if;
   end if;
 
   -- Under 18 on the day: a named parent or guardian and their consent are required. Adults are never asked.
@@ -831,10 +834,7 @@ begin
        or coalesce(trim(p->>'guardian_email'), '') = '' or not coalesce((p->>'guardian_consent')::boolean, false)) then
     raise exception 'invalid:guardian';
   end if;
-  -- Anything entered under access needs needs the lifter's agreement to store it.
-  v_access := coalesce((p->>'access_hearing')::boolean, false) or coalesce((p->>'access_sight')::boolean, false)
-              or coalesce(trim(p->>'access_notes'), '') <> '';
-  if v_access and not coalesce((p->>'access_consent')::boolean, false) then raise exception 'invalid:access_consent'; end if;
+  v_access := coalesce((p->>'access_needs')::boolean, false);
 
   -- Not already in. A lifter who comes back mid-payment simply replaces their earlier hold.
   if exists (select 1 from public.entries where competition_id = c.id and email = v_email and status in ('paid', 'comped')) then
@@ -869,15 +869,12 @@ begin
       coalesce((p->>'photo_ok')::boolean, false), coalesce((p->>'photo_opt_out')::boolean, false), true, v_class, v_equip, v_event,
       trim(coalesce(p->>'openipf_url', '')), v_price, v_expires, v_guest)
     returning id into v_entry;
-  insert into public.entry_private (entry_id, guardian_name, guardian_phone, guardian_email, guardian_consent,
-      access_hearing, access_sight, access_notes, access_consent, delete_after)
+  insert into public.entry_private (entry_id, guardian_name, guardian_phone, guardian_email, guardian_consent, access_needs, delete_after)
     values (v_entry,
       case when v_age < 18 then trim(p->>'guardian_name') else '' end, case when v_age < 18 then trim(p->>'guardian_phone') else '' end,
-      case when v_age < 18 then trim(p->>'guardian_email') else '' end, v_age < 18,
-      coalesce((p->>'access_hearing')::boolean, false), coalesce((p->>'access_sight')::boolean, false),
-      trim(coalesce(p->>'access_notes', '')), v_access, coalesce(c.end_date, c.start_date) + 30);
+      case when v_age < 18 then trim(p->>'guardian_email') else '' end, v_age < 18, v_access, coalesce(c.end_date, c.start_date) + 30);
   if v_invite is not null then update public.invites set entry_id = v_entry where id = v_invite; end if;
-  return jsonb_build_object('entry_id', v_entry, 'price_pence', v_price, 'hold_expires_at', v_expires, 'competition', c.name);
+  return jsonb_build_object('entry_id', v_entry, 'price_pence', v_price, 'hold_expires_at', v_expires, 'competition', c.name, 'slug', c.slug);
 end
 $$;
 revoke all on function public.start_entry(jsonb) from public, anon, authenticated;
