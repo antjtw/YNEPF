@@ -40,6 +40,31 @@ These services process information on our behalf:
 
 We do not sell your information. [Confirm where each service stores data and whether any of it is outside the UK.]
 
+## Entering a competition (added with the entry system, still a draft)
+
+*These paragraphs are for the committee and whoever looks after data protection to review. They are not legal advice. Brackets mark decisions that are still open. See `docs/entry-system/privacy-guidance.md`.*
+
+**What we collect when you enter.** Your name, email address, date of birth, men's or women's category, British Powerlifting membership number, club, Instagram handle (optional), your event, equipment and weight class, any OpenIPF link you give us, and your photo permissions. We record what you paid and the last four digits of your card. We never see or store your full card details: Stripe takes the payment.
+
+**Lifters under 18.** If you are under 18 on the day of the competition we also ask for a parent or guardian's name, phone number and email address, and their consent. A parent or guardian must be with you on the day.
+
+**Access needs.** We ask everyone whether they need any help on the day, for example if they are hard of hearing or hard of seeing. Answering is optional. If you answer, we ask you to agree that we can store it. This can be information about your health, so only the entries team can see it, and we use it only to help you on the day.
+
+**Why we use it.** To run your entry, take payment, contact you, build the lifting order and run a safe competition. Parent or guardian details are used because we need a responsible adult to be reachable. Access needs are used with your consent, which you can withdraw at any time.
+
+**What is public.** Your name, club and weight class appear on the entries list and the lifting order. Your date of birth, email address and any access needs are never published.
+
+**Who sees it.** The entries team. If you tick a photo option we share your name with White Lights Media, who take photographs, so they can respect your wishes. [Agree wording with White Lights Media.]
+
+**How long we keep it.**
+- Entry and payment records: [6 years], because we need them for our accounts.
+- Parent or guardian details, access needs: [30 days after the competition], then they are deleted.
+- Emails we sent you about your entry: [12 months].
+
+**Who else handles it.** Stripe (payments), Resend (emails), Supabase (our database, [region to be confirmed, expected West EU]), Vercel (the website), and White Lights Media (see above). [Confirm where each stores data.]
+
+**Your rights.** You can ask what we hold about you, ask us to correct or delete it (we can keep payment records we are required to keep), or withdraw your consent for access needs. Email ynepfentries@gmail.com and we will reply within one month.
+
 ## Your rights
 
 You can ask us for a copy of the information we hold about you, ask us to correct it, or ask us to delete it. You can also object to how we use it. Email ynepfentries@gmail.com.
