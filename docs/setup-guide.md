@@ -122,6 +122,8 @@ Everything for a competition is set up once, on one page in the **Calendar** tab
 
 **Why unpublished works:** an unpublished competition is hidden from the public, but you can still open its entry form **if you are signed in to the site editor on the same address**. Everyone else gets "Competition not found".
 
+**Clearing a test competition:** the editor will not delete a competition that has entries, because the payment records must be kept. For a TEST competition, an administrator opens `docs/entry-system/clear-test-competition.sql`, changes the name on the marked line, and runs it in the Supabase SQL editor. It only accepts names containing the word TEST. To simply take a competition off the website, untick **Show on the website**.
+
 **Who can change what:** editors change the competition itself (details, places, entry times, links). The entries team changes the online entry settings (how entries are taken, events, prices) and sees the Entries tab. Admins do both.
 
 ---

@@ -17,6 +17,8 @@
   function ok(res) { if (res.error) throw res.error; return res.data; }
   function friendly(err) {
     if (err && err.code === "23505") return "That value is already used somewhere else (for example a web address or an email). Change it and try again.";
+    if (err && /entries_competition_id_fkey|violates foreign key constraint/i.test(err.message || ""))
+      return "This competition has entries, so it cannot be deleted: we have to keep payment records. To take it off the website, open it and untick “Show on the website”. (A TEST competition can be cleared by an administrator in the database.)";
     if (err && /row-level security|permission denied/i.test(err.message || "")) return "You do not have permission to do that. Try signing out and in again.";
     return (err && err.message) || "Something went wrong. Please try again.";
   }
