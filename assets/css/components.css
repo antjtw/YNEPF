@@ -704,3 +704,5 @@ table.lifters thead th { overflow-wrap: normal; }
   background-repeat: no-repeat; background-position: right 1rem center; background-size: 1.25rem;
 }
 .field select:disabled { cursor: not-allowed; }
+/* The entry fee line on the lifting step always takes the same room, so the buttons never jump when it fills in. */
+#fee-line { min-height: 2.7em; }

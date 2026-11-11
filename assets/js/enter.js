@@ -14,7 +14,7 @@
   var summary = document.getElementById("error-summary"), list = document.getElementById("error-list");
   var lede = document.getElementById("enter-lede"), title = document.getElementById("enter-title");
   var ctx = null;                               // competition, settings, price rules, classes, divisions
-  var step = 1, shownKids = false, preview = false, invite = "", countdown = null;
+  var step = "about", preview = false, invite = "", countdown = null;
   var v = { sex: "", event: "", equipment: "", weight_class_id: "", division_id: "", dd: "", mm: "", yyyy: "" };
   var EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
   var EVENT_NAMES = { full_power: "Full power", bench_only: "Bench only" };
@@ -33,16 +33,6 @@
   // "You are an M2 lifter", "a sub-junior lifter", "an open lifter" (the year they turn the age decides, not the day).
   var CAT_NAMES = { SJ: "a sub-junior lifter", J: "a junior lifter", "": "an open lifter", M1: "an M1 lifter (Masters 1)", M2: "an M2 lifter (Masters 2)", M3: "an M3 lifter (Masters 3)", M4: "an M4 lifter (Masters 4)" };
   var CAT_SHORT = { SJ: "Sub-junior", J: "Junior", "": "Open", M1: "Masters 1 (M1)", M2: "Masters 2 (M2)", M3: "Masters 3 (M3)", M4: "Masters 4 (M4)" };
-  function catNote() {
-    var c = myCategory();
-    return c === null ? "" : ["For this competition ", el("strong", null, "you are " + CAT_NAMES[c] + "."), " We work this out from the year you were born."];
-  }
-  function updateCatNote() {
-    var n = document.getElementById("cat-note"); if (!n) return;
-    n.replaceChildren(); var c = catNote();
-    if (c) c.forEach(function (x) { n.appendChild(typeof x === "string" ? document.createTextNode(x) : x); });
-    n.hidden = !c;
-  }
   function myCategory() {
     var iso = dobISO(); if (!iso) return null;
     var c = ageCategory(+iso.slice(0, 4), +ctx.comp.start_date.slice(0, 4));
@@ -103,6 +93,13 @@
     summary.hidden = false; summary.focus();
   }
 
+  // ---- the steps. A lifter under 18 on the day gets an extra "Parent or guardian" step, so nothing is added into a page
+  // while it is being filled in.
+  var STEP_NAMES = { about: "About you", guardian: "Parent or guardian", lifting: "Your lifting", check: "Check your answers" };
+  function needGuardian() { var a = ageOnDay(); return a !== null && a < 18; }
+  function stepList() { return needGuardian() ? ["about", "guardian", "lifting", "check"] : ["about", "lifting", "check"]; }
+  function goStep(key) { step = key; render(); window.scrollTo(0, 0); }
+
   // ---- little form builders --------------------------------------------------------------------
   function text(id, label, opts) {
     opts = opts || {};
@@ -129,7 +126,7 @@
         options.map(function (o, i) {
           var rid = id + "-" + i;
           return el("div", { class: "field-check" },
-            el("input", { id: rid, type: "radio", name: id, value: o[0], checked: v[id] === o[0], "aria-describedby": o[2] ? rid + "-hint" : false, onchange: function () { v[id] = o[0]; if (id === "sex") v.weight_class_id = ""; render(true); } }),
+            el("input", { id: rid, type: "radio", name: id, value: o[0], checked: v[id] === o[0], "aria-describedby": o[2] ? rid + "-hint" : false, onchange: function () { v[id] = o[0]; if (id === "sex") v.weight_class_id = ""; if (id === "event" || id === "equipment") updateFee(); } }),
             el("div", null, el("label", { for: rid }, o[1]), o[2] ? el("p", { class: "help", id: rid + "-hint" }, o[2]) : null));
         })));
   }
@@ -142,7 +139,7 @@
   function dobField() {
     function part(k, label, w, max) {
       return el("div", { class: "date-part" }, el("label", { for: "dob-" + k }, label),
-        el("input", { id: "dob-" + k, type: "text", inputmode: "numeric", maxlength: max, size: w, value: v[k], autocomplete: k === "dd" ? "bday-day" : k === "mm" ? "bday-month" : "bday-year", oninput: function (e) { v[k] = e.target.value; }, onchange: function () { var k = ageOnDay() !== null && ageOnDay() < 18; if (k !== shownKids) render(true); else updateCatNote(); } }));
+        el("input", { id: "dob-" + k, type: "text", inputmode: "numeric", maxlength: max, size: w, value: v[k], autocomplete: k === "dd" ? "bday-day" : k === "mm" ? "bday-month" : "bday-year", oninput: function (e) { v[k] = e.target.value; }}));
     }
     return el("div", { class: "field", "data-field": "dob" },
       el("fieldset", { class: "choice", id: "dob", tabindex: "-1" }, el("legend", null, "Date of birth"),
@@ -152,12 +149,19 @@
   }
 
   // ---- steps -----------------------------------------------------------------------------------
+  // Always shown with the question (so nothing appears when a division is picked): when guests can start entering.
+  function guestNote() {
+    var days = ctx.settings.guest_delay_days || 0;
+    if (!ctx.comp.entry_opens || !days) return "";
+    var t = new Date(new Date(ctx.comp.entry_opens).getTime() + days * 86400000);
+    return t > new Date() ? " Guests can enter from " + whenText(t) + "." : "";
+  }
   function divisionField() {
     return el("div", { class: "field", "data-field": "division_id" },
       el("label", { for: "division_id" }, "Which federation or division are you part of?"),
-      el("p", { class: "help", id: "division_id-help" }, "Choose the one you are registered with. If it is not the Yorkshire & North East division, you enter as a guest."),
+      el("p", { class: "help", id: "division_id-help" }, "Choose the one you are registered with. If it is not the Yorkshire & North East division, you enter as a guest." + guestNote()),
       el("p", { class: "field-error", id: "division_id-error", hidden: true }),
-      el("select", { id: "division_id", name: "division_id", "aria-describedby": "division_id-help", onchange: function (e) { v.division_id = e.target.value; render(true); } },
+      el("select", { id: "division_id", name: "division_id", "aria-describedby": "division_id-help", onchange: function (e) { v.division_id = e.target.value; } },
         el("option", { value: "" }, "Choose your federation or division"),
         ctx.divisions.map(function (d) { return el("option", { value: d.id, selected: v.division_id === d.id }, d.name); })));
   }
@@ -172,37 +176,41 @@
         ctx.clubs.map(function (c) { return el("option", { value: c.name, selected: v.club === c.name }, c.name); })));
   }
   function stepAbout() {
-    var age = ageOnDay(), kids = age !== null && age < 18;
-    shownKids = kids;
     return [
       text("full_name", "Full name", { autocomplete: "name", help: "Your name, club and weight class are shown on the entries list and the lifting order." }),
       text("email", "Email address", { type: "email", autocomplete: "email", max: 254, help: "We send your confirmation here." }),
       dobField(),
-      el("p", { class: "callout", id: "cat-note", role: "status", hidden: myCategory() === null }, catNote()),
       radios("sex", "Which category are you entering?", [["M", "Men's"], ["F", "Women's"]],
         ["This should usually match your sex at birth. If you are a transgender athlete, please ", el("a", { href: "contact.html", target: "_blank", rel: "noopener" }, "contact us", el("span", { class: "visually-hidden" }, " (opens in a new tab)")), " before you enter and we will talk it through."]),
       divisionField(),
-      guestBlocked() ? el("p", { class: "callout", role: "status" }, "Entries from outside the Yorkshire & North East division open to guests on ", el("strong", null, whenText(guestOpensAt())), ". Please come back then. Members of the division can enter now.") : null,
       clubField(),
       text("bp_number", "British Powerlifting membership number", { max: 40, help: "This is displayed in your Sport80 profile." }),
       text("instagram", "Instagram handle (optional)", { max: 60, help: "This will be displayed next to your name on the lifting order, and will be public." }),
-      kids ? el("div", null,
-        el("h2", { class: "form-heading" }, "Parent or guardian"),
-        el("p", null, "You are under 18 on the day of the competition. A parent or guardian must be with you at the competition, and we need their details. Only the entries team can see these, and we delete them 30 days after the competition."),
-        text("guardian_name", "Parent or guardian's full name", { max: 120 }),
-        text("guardian_phone", "Their phone number", { type: "tel", max: 30, autocomplete: "tel" }),
-        text("guardian_email", "Their email address", { type: "email", max: 254 }),
-        check("guardian_consent", "I am the parent or guardian, or I have their permission, and I consent to this entry and to photos being taken")) : null,
       radios("photo_choice", "Do you consent to photos or videos of you being used in YNEPF promotional material?",
         [["yes", PHOTO_NAMES.yes], ["no", PHOTO_NAMES.no], ["never", PHOTO_NAMES.never]])
     ];
   }
+  function stepGuardian() {
+    return [
+      el("h2", { class: "form-heading", style: "margin-top:0" }, "Parent or guardian"),
+      el("p", null, "You are under 18 on the day of the competition, so we need you to name a parent or guardian who will be with you."),
+      el("p", null, "They will need to be with you for weigh-in and on hand throughout the rest of the day. Please give their contact details. We will only use them as an emergency contact, or if we have a question about your entry. Only the entries team can see them, and we delete them 30 days after the competition."),
+      text("guardian_name", "Parent or guardian's full name", { max: 120, autocomplete: "off" }),
+      text("guardian_phone", "Their phone number", { type: "tel", max: 30, autocomplete: "off" }),
+      text("guardian_email", "Their email address", { type: "email", max: 254, autocomplete: "off" }),
+      check("guardian_consent", "I am the parent or guardian, or I have their permission, and I consent to this entry and to photos being taken")
+    ];
+  }
+  // The fee line is always on the page; only its words change when the event and equipment are chosen.
+  function feeText() { var p = priceNow(); return p === null ? "Your entry fee: choose an event and equipment." : "Your entry fee: " + pounds(p); }
+  function updateFee() { var n = document.getElementById("fee-line"); if (n) n.textContent = feeText(); }
   function stepLifting() {
     var allowed = allowedClasses();
     if (v.weight_class_id && !allowed.some(function (c) { return c.id === v.weight_class_id; })) v.weight_class_id = "";
     var classes = allowed.map(function (c) { return [c.id, c.label + " kg"]; });
-    var p = priceNow();
+    var cat = myCategory();
     return [
+      cat !== null ? el("p", { class: "callout", style: "margin-top:0" }, "For this competition ", el("strong", null, "you are " + CAT_NAMES[cat] + "."), " We work this out from the year you were born.") : null,
       radios("event", "Which event do you wish to compete in?", ctx.settings.events.map(function (e) { return [e, EVENT_NAMES[e] || e, EVENT_HINTS[e]]; })),
       radios("equipment", "Equipment", ctx.settings.equipment.map(function (e) { return [e, EQUIP_NAMES[e] || e, EQUIP_HINTS[e]]; })),
       select("weight_class_id", "Weight class", classes, classes.length ? "Choose your class" : "Choose men's or women's first",
@@ -210,7 +218,7 @@
       ctx.settings.openipf_mode === "hidden" ? null : text("openipf_url", "OpenIPF profile link", ctx.settings.openipf_mode === "required"
         ? { max: 300, help: "Entry to this competition needs a qualifying total, so we need your link from openipf.org (it looks like https://www.openipf.org/u/yourname)." }
         : { optional: true, max: 300, help: "If you have one, paste your link from openipf.org. We use it to check qualification." }),
-      p !== null ? el("p", { class: "lede" }, "Your entry fee: ", el("strong", null, pounds(p))) : null
+      el("p", { class: "lede", id: "fee-line", role: "status" }, feeText())
     ];
   }
   // Refunds stop when entries close: the same rule for everyone.
@@ -220,25 +228,25 @@
     return el("p", { class: "help" }, "Refunds are available until entries close on " + d + ". After that, entries cannot be refunded.");
   }
   // A summary list like GOV.UK's: label, answer, and a plain "Change" link on each row.
-  function row(label, value, stepNo, hideChange) {
+  function row(label, value, stepKey, hideChange) {
     return el("div", { class: "summary-row" },
       el("dt", null, label),
       el("dd", { class: "summary-value" }, value || "Not given"),
-      el("dd", { class: "summary-action" }, hideChange ? null : el("a", { href: "#", onclick: function (ev) { ev.preventDefault(); step = stepNo; render(); window.scrollTo(0, 0); } }, "Change", el("span", { class: "visually-hidden" }, " " + label.toLowerCase()))));
+      el("dd", { class: "summary-action" }, hideChange ? null : el("a", { href: "#", onclick: function (ev) { ev.preventDefault(); goStep(stepKey); } }, "Change", el("span", { class: "visually-hidden" }, " " + label.toLowerCase()))));
   }
   function stepCheck() {
     var cls = ctx.classes.filter(function (c) { return c.id === v.weight_class_id; })[0], p = priceNow(), age = ageOnDay(), d = division();
     var rows = [
-      row("Name", v.full_name, 1), row("Email address", v.email, 1), row("Date of birth", v.dd + " " + v.mm + " " + v.yyyy, 1),
-      row("Category", (v.sex === "M" ? "Men's" : "Women's") + (myCategory() !== null ? ", " + CAT_SHORT[myCategory()] : ""), 1),
-      row("Federation or division", d ? d.name + (d.is_home ? "" : " (guest)") : "", 1)
+      row("Name", v.full_name, "about"), row("Email address", v.email, "about"), row("Date of birth", v.dd + " " + v.mm + " " + v.yyyy, "about"),
+      row("Category", (v.sex === "M" ? "Men's" : "Women's") + (myCategory() !== null ? ", " + CAT_SHORT[myCategory()] : ""), "about"),
+      row("Federation or division", d ? d.name + (d.is_home ? "" : " (guest)") : "", "about")
     ];
-    if (ctx.clubs.length) rows.push(row("Club", v.club, 1));
-    rows.push(row("Membership number", v.bp_number, 1), row("Instagram handle", trim(v.instagram) ? "@" + trim(v.instagram).replace(/^@/, "") : "", 1));
-    if (age !== null && age < 18) rows.push(row("Parent or guardian", trim(v.guardian_name), 1));
-    rows.push(row("Photos and videos", PHOTO_NAMES[v.photo_choice], 1),
-      row("Event", EVENT_NAMES[v.event], 2), row("Equipment", EQUIP_NAMES[v.equipment], 2), row("Weight class", cls ? cls.label + " kg" : "", 2));
-    if (trim(v.openipf_url)) rows.push(row("OpenIPF profile", trim(v.openipf_url), 2));
+    if (ctx.clubs.length) rows.push(row("Club", v.club, "about"));
+    rows.push(row("Membership number", v.bp_number, "about"), row("Instagram handle", trim(v.instagram) ? "@" + trim(v.instagram).replace(/^@/, "") : "", "about"));
+    if (age !== null && age < 18) rows.push(row("Parent or guardian", trim(v.guardian_name), "guardian"), row("Their phone number", trim(v.guardian_phone), "guardian"), row("Their email address", trim(v.guardian_email), "guardian"));
+    rows.push(row("Photos and videos", PHOTO_NAMES[v.photo_choice], "about"),
+      row("Event", EVENT_NAMES[v.event], "lifting"), row("Equipment", EQUIP_NAMES[v.equipment], "lifting"), row("Weight class", cls ? cls.label + " kg" : "", "lifting"));
+    if (trim(v.openipf_url)) rows.push(row("OpenIPF profile", trim(v.openipf_url), "lifting"));
     return [
       el("h2", null, "Check your answers"),
       el("dl", { class: "summary-list" }, rows),
@@ -254,7 +262,7 @@
   function trim(s) { return (s || "").replace(/^\s+|\s+$/g, ""); }
   function validate(n) {
     var e = [];
-    if (n === 1) {
+    if (n === "about") {
       if (!trim(v.full_name)) e.push(["full_name", "Enter your full name"]);
       if (!trim(v.email)) e.push(["email", "Enter your email address"]);
       else if (!EMAIL.test(trim(v.email))) e.push(["email", "Enter an email address in the correct format, like name@example.com"]);
@@ -265,15 +273,15 @@
       if (!trim(v.bp_number)) e.push(["bp_number", "Enter your British Powerlifting membership number from your Sport80 profile, or TBC if you do not have it yet"]);
       if (!v.division_id) e.push(["division_id", "Choose the federation or division you are part of"]);
       else if (guestBlocked()) e.push(["division_id", "Entries from outside the Yorkshire & North East division open on " + whenText(guestOpensAt())]);
-      if (iso && ageOnDay() < 18) {
-        if (!trim(v.guardian_name)) e.push(["guardian_name", "Enter your parent or guardian's name"]);
-        if (!trim(v.guardian_phone)) e.push(["guardian_phone", "Enter your parent or guardian's phone number"]);
-        if (!EMAIL.test(trim(v.guardian_email))) e.push(["guardian_email", "Enter your parent or guardian's email address"]);
-        if (!v.guardian_consent) e.push(["guardian_consent", "A parent or guardian must consent to this entry"]);
-      }
       if (!v.photo_choice) e.push(["photo_choice", "Choose whether you consent to photos and videos being used"]);
     }
-    if (n === 2) {
+    if (n === "guardian") {
+      if (!trim(v.guardian_name)) e.push(["guardian_name", "Enter your parent or guardian's name"]);
+      if (!trim(v.guardian_phone)) e.push(["guardian_phone", "Enter your parent or guardian's phone number"]);
+      if (!EMAIL.test(trim(v.guardian_email))) e.push(["guardian_email", "Enter your parent or guardian's email address"]);
+      if (!v.guardian_consent) e.push(["guardian_consent", "A parent or guardian must consent to this entry"]);
+    }
+    if (n === "lifting") {
       if (ctx.settings.openipf_mode === "required" && !/^https:\/\/(www\.)?openipf\.org\/.+/i.test(trim(v.openipf_url))) e.push(["openipf_url", "Enter your OpenIPF profile link, starting https://www.openipf.org/"]);
       if (!v.event) e.push(["event", "Choose an event"]);
       if (!v.equipment) e.push(["equipment", "Choose your equipment"]);
@@ -342,17 +350,20 @@
   function render(keepFocus) {
     var active = keepFocus && document.activeElement && document.activeElement.id;
     clearErrors(); app.innerHTML = "";
-    var names = ["About you", "Your lifting", "Check your answers"];
-    app.appendChild(el("p", { class: "help" }, "Step " + step + " of 3: " + names[step - 1]));
+    var list = stepList(), at = list.indexOf(step);
+    if (at < 0) { step = "about"; at = 0; }
+    app.appendChild(el("p", { class: "help" }, "Step " + (at + 1) + ": " + STEP_NAMES[step]));
+    var last = step === "check";
+    var body = step === "about" ? stepAbout() : step === "guardian" ? stepGuardian() : step === "lifting" ? stepLifting() : stepCheck();
     var form = el("form", { novalidate: true, onsubmit: function (ev) {
       ev.preventDefault();
-      if (step === 3) return pay(form.querySelector("button[type=submit]"));
+      if (last) return pay(form.querySelector("button[type=submit]"));
       var errs = validate(step); if (errs.length) return showErrors(errs);
-      step++; render(); window.scrollTo(0, 0);
-    } }, step === 1 ? stepAbout() : step === 2 ? stepLifting() : stepCheck(),
+      goStep(stepList()[stepList().indexOf(step) + 1]);
+    } }, body,
       el("div", { class: "form-actions" },
-        step > 1 ? el("button", { class: "btn btn-secondary", type: "button", onclick: function () { step--; render(); window.scrollTo(0, 0); } }, "Back") : null,
-        el("button", { class: "btn btn-primary", type: "submit" }, step === 3 ? "Continue to payment" : "Continue")));
+        at > 0 ? el("button", { class: "btn btn-secondary", type: "button", onclick: function () { goStep(stepList()[stepList().indexOf(step) - 1]); } }, "Back") : null,
+        el("button", { class: "btn btn-primary", type: "submit" }, last ? "Continue to payment" : "Continue")));
     app.appendChild(form);
     if (active) { var a = document.getElementById(active); if (a) a.focus(); }
   }
