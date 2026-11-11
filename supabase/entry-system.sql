@@ -698,3 +698,111 @@ grant select, insert, update, delete on
 grant select on public.audit_log to authenticated;
 -- The audit log and points ledger are append only: nobody gets update or delete on them.
 revoke update, delete on public.audit_log, public.points_ledger from authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 16. Starting an entry (phase 1A)
+--     Called only by the payment function (service role), never by the browser.
+--     In one step it checks the rules, works out the price and holds a place, so two
+--     people can never take the last place. Errors carry a short code the form turns
+--     into plain words: closed, not_open, full, already_entered, invalid:<what>, no_price.
+-- ---------------------------------------------------------------------------
+create or replace function public.start_entry(p jsonb) returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare
+  c public.competitions%rowtype;
+  s public.entry_settings%rowtype;
+  v_email text := lower(trim(coalesce(p->>'email', '')));
+  v_name text := trim(coalesce(p->>'full_name', ''));
+  v_dob date;
+  v_sex text := p->>'sex';
+  v_event text := p->>'event';
+  v_equip text := p->>'equipment';
+  v_class uuid := nullif(p->>'weight_class_id', '')::uuid;
+  v_stage uuid;
+  v_price integer;
+  v_cat text;
+  v_age integer;
+  v_entry uuid;
+  v_expires timestamptz;
+  v_access boolean;
+begin
+  select * into c from public.competitions where id = (p->>'competition_id')::uuid for update;   -- one at a time per competition
+  if not found or not c.published or c.entry_method <> 'yne' then raise exception 'closed'; end if;
+  select * into s from public.entry_settings where competition_id = c.id;
+  if not found then raise exception 'closed'; end if;
+  if c.entries_closed_manually or coalesce(s.entries_close_at, c.entry_closes, 'infinity') <= now() then raise exception 'closed'; end if;
+
+  select id into v_stage from public.entry_stages
+    where competition_id = c.id and kind = 'general' and opens_at <= now() order by opens_at desc limit 1;
+  if v_stage is null then raise exception 'not_open'; end if;
+
+  -- The person
+  if v_name = '' then raise exception 'invalid:full_name'; end if;
+  if v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then raise exception 'invalid:email'; end if;
+  begin v_dob := (p->>'date_of_birth')::date; exception when others then raise exception 'invalid:date_of_birth'; end;
+  if v_dob is null or v_dob > c.start_date or v_dob < date '1900-01-01' then raise exception 'invalid:date_of_birth'; end if;
+  v_age := public.age_on(v_dob, c.start_date);
+  if v_age < 14 then raise exception 'invalid:too_young'; end if;
+  if v_sex not in ('M', 'F') then raise exception 'invalid:sex'; end if;
+  if not coalesce((p->>'eligibility_confirmed')::boolean, false) then raise exception 'invalid:eligibility'; end if;
+  if not (v_event = any (s.events)) then raise exception 'invalid:event'; end if;
+  if not (v_equip = any (s.equipment)) then raise exception 'invalid:equipment'; end if;
+  if v_class is null or not exists (select 1 from public.weight_classes w where w.id = v_class and w.sex = v_sex and w.active) then
+    raise exception 'invalid:weight_class';
+  end if;
+
+  -- Under 18 on the day: a named parent or guardian and their consent are required. Adults are never asked.
+  if v_age < 18 and (coalesce(trim(p->>'guardian_name'), '') = '' or coalesce(trim(p->>'guardian_phone'), '') = ''
+       or coalesce(trim(p->>'guardian_email'), '') = '' or not coalesce((p->>'guardian_consent')::boolean, false)) then
+    raise exception 'invalid:guardian';
+  end if;
+  -- Anything entered under access needs needs the lifter's agreement to store it.
+  v_access := coalesce((p->>'access_hearing')::boolean, false) or coalesce((p->>'access_sight')::boolean, false)
+              or coalesce(trim(p->>'access_notes'), '') <> '';
+  if v_access and not coalesce((p->>'access_consent')::boolean, false) then raise exception 'invalid:access_consent'; end if;
+
+  -- Not already in. A lifter who comes back mid-payment simply replaces their earlier hold.
+  if exists (select 1 from public.entries where competition_id = c.id and email = v_email and status in ('paid', 'comped')) then
+    raise exception 'already_entered';
+  end if;
+  update public.entries set status = 'cancelled', cancelled_at = now(), cancel_reason = 'replaced by a new attempt'
+    where competition_id = c.id and email = v_email and status = 'held';
+
+  if public.places_left(c.id) < 1 then raise exception 'full'; end if;
+
+  -- Price: first matching rule wins.
+  v_cat := public.age_category_on(v_dob, c.start_date);
+  select r.price_pence into v_price from public.price_rules r
+    where r.competition_id = c.id
+      and (r.event is null or r.event = v_event)
+      and (r.equipment is null or r.equipment = v_equip)
+      and (r.age_category is null or r.age_category = v_cat)
+    order by r.sort_order, r.label limit 1;
+  if v_price is null then raise exception 'no_price'; end if;
+
+  v_expires := now() + make_interval(mins => s.hold_minutes);
+  insert into public.entries (competition_id, status, source, stage_id, email, full_name, display_name, bp_number, date_of_birth, sex,
+      division_id, club, instagram, photo_ok, photo_opt_out, eligibility_confirmed, weight_class_id, equipment, event,
+      openipf_url, price_pence, hold_expires_at)
+    values (c.id, 'held', 'web', v_stage, v_email, v_name, trim(coalesce(p->>'display_name', '')), trim(coalesce(p->>'bp_number', '')), v_dob, v_sex,
+      nullif(p->>'division_id', '')::uuid, trim(coalesce(p->>'club', '')), trim(coalesce(p->>'instagram', '')),
+      coalesce((p->>'photo_ok')::boolean, false), coalesce((p->>'photo_opt_out')::boolean, false), true, v_class, v_equip, v_event,
+      trim(coalesce(p->>'openipf_url', '')), v_price, v_expires)
+    returning id into v_entry;
+  insert into public.entry_private (entry_id, guardian_name, guardian_phone, guardian_email, guardian_consent,
+      access_hearing, access_sight, access_notes, access_consent, delete_after)
+    values (v_entry,
+      case when v_age < 18 then trim(p->>'guardian_name') else '' end, case when v_age < 18 then trim(p->>'guardian_phone') else '' end,
+      case when v_age < 18 then trim(p->>'guardian_email') else '' end, v_age < 18,
+      coalesce((p->>'access_hearing')::boolean, false), coalesce((p->>'access_sight')::boolean, false),
+      trim(coalesce(p->>'access_notes', '')), v_access, coalesce(c.end_date, c.start_date) + 30);
+  return jsonb_build_object('entry_id', v_entry, 'price_pence', v_price, 'hold_expires_at', v_expires, 'competition', c.name);
+end
+$$;
+revoke all on function public.start_entry(jsonb) from public, anon, authenticated;
+do $$ begin
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    grant execute on function public.start_entry(jsonb) to service_role;
+  end if;
+end $$;
