@@ -729,7 +729,10 @@ declare
   v_access boolean;
 begin
   select * into c from public.competitions where id = (p->>'competition_id')::uuid for update;   -- one at a time per competition
-  if not found or not c.published or c.entry_method <> 'yne' then raise exception 'closed'; end if;
+  if not found or c.entry_method <> 'yne' then raise exception 'closed'; end if;
+  -- Unpublished (test) competitions can only be entered by the entries team, previewing: the payment function
+  -- sets allow_unpublished after checking the caller's login. It is never taken from the browser.
+  if not c.published and not coalesce((p->>'allow_unpublished')::boolean, false) then raise exception 'closed'; end if;
   select * into s from public.entry_settings where competition_id = c.id;
   if not found then raise exception 'closed'; end if;
   if c.entries_closed_manually or coalesce(s.entries_close_at, c.entry_closes, 'infinity') <= now() then raise exception 'closed'; end if;

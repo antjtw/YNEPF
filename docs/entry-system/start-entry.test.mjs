@@ -88,6 +88,11 @@ ok((await save("entries", { hold_minutes: 90 })) === "invalid:hold_minutes", "a 
 ok((await save("entries", { prices: { bench_only: 2000 } })) === "invalid:price_full_power", "a missing price for an offered event is refused");
 ok((await save("entries", { general_opens_at: null })) === "invalid:general_opens_at", "an opening time is required");
 await db.exec("reset role");
+await db.exec("reset role");
+await db.exec(`update public.competitions set published = false where id = '${C}'; update public.entry_stages set opens_at = now() - interval '1 day' where competition_id='${C}'; update public.entries set status='cancelled' where competition_id='${C}'`);
+ok((await start({ email: "t1@example.com" })).error === "closed", "an unpublished (test) competition cannot be entered by the public");
+ok((await start({ email: "t1@example.com", allow_unpublished: true })).entry_id, "...but the entries team can preview it");
+await db.exec(`update public.competitions set published = true where id = '${C}'`);
 await db.exec("set role anon");
 try { await db.query(`select public.start_entry('{}'::jsonb)`); ok(false, "the browser cannot call it"); } catch { ok(true, "the browser (anon) cannot call start_entry"); }
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

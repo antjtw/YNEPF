@@ -14,7 +14,7 @@
   var summary = document.getElementById("error-summary"), list = document.getElementById("error-list");
   var lede = document.getElementById("enter-lede"), title = document.getElementById("enter-title");
   var ctx = null;                               // competition, settings, price rules, classes, divisions
-  var step = 1, shownKids = false;
+  var step = 1, shownKids = false, preview = false;
   var v = { sex: "", event: "", equipment: "", weight_class_id: "", division_id: "", dd: "", mm: "", yyyy: "" };
   var EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
   var EVENT_NAMES = { full_power: "Full power (squat, bench press and deadlift)", bench_only: "Bench press only" };
@@ -236,8 +236,11 @@
   function pay(btn) {
     var err = document.getElementById("submit-error");
     err.hidden = true; btn.disabled = true; btn.textContent = "Holding your place…";
-    fetch(CFG.supabaseUrl.replace(/\/$/, "") + "/functions/v1/entry-checkout", {
-      method: "POST", headers: { "Content-Type": "application/json", apikey: CFG.supabaseAnonKey || "" }, body: JSON.stringify(payload())
+    Y.db().auth.getSession().then(function (s) {
+      var token = s && s.data && s.data.session && s.data.session.access_token, body = payload();
+      var headers = { "Content-Type": "application/json", apikey: CFG.supabaseAnonKey || "" };
+      if (preview && token) { headers.Authorization = "Bearer " + token; body.preview = true; }
+      return fetch(CFG.supabaseUrl.replace(/\/$/, "") + "/functions/v1/entry-checkout", { method: "POST", headers: headers, body: JSON.stringify(body) });
     }).then(function (res) { return res.json().catch(function () { return {}; }).then(function (b) { return { ok: res.ok, b: b }; }); })
       .then(function (r) {
         if (!r.ok) throw new Error(r.b.message || "Sorry, something went wrong. Please try again.");
@@ -286,18 +289,29 @@
     var slug = new URLSearchParams(location.search).get("c") || "";
     var db = Y.db();
     if (!db || !slug) return stop("Enter a competition", "<p>Choose a competition from the <a href='calendar.html'>calendar</a> to enter.</p>");
-    db.from("competitions_public").select("id,name,start_date,end_date,venue_name,slug,entry_url,waitlist_url").eq("slug", slug).maybeSingle().then(function (r) {
-      var comp = r.data;
+    var cols = "id,name,start_date,end_date,venue_name,slug,entry_url,waitlist_url";
+    // The public sees published competitions only. A signed-in entries team member can also open an unpublished one
+    // (a TEST competition) to try it. The payment function re-checks their login before allowing it.
+    db.from("competitions_public").select(cols).eq("slug", slug).maybeSingle().then(function (r) {
+      if (r.data) return { comp: r.data, preview: false };
+      return db.from("competitions").select(cols + ",entry_method,entries_closed_manually").eq("slug", slug).maybeSingle().then(function (r2) {
+        return r2.data ? { comp: r2.data, preview: true } : { comp: null };
+      });
+    }).then(function (found) {
+      var comp = found.comp;
       if (!comp) return stop("Competition not found", "<p>We could not find that competition. Try the <a href='calendar.html'>calendar</a>.</p>");
       return Promise.all([
-        db.from("competition_entry_state").select("*").eq("competition_id", comp.id).maybeSingle(),
+        found.preview ? Promise.resolve({ data: { entry_method: comp.entry_method, entries_closed_manually: comp.entries_closed_manually } }) : db.from("competition_entry_state").select("*").eq("competition_id", comp.id).maybeSingle(),
         db.from("entry_settings").select("*").eq("competition_id", comp.id).maybeSingle(),
         db.from("entry_stages").select("*").eq("competition_id", comp.id).order("opens_at"),
         db.from("price_rules").select("*").eq("competition_id", comp.id).order("sort_order"),
         db.from("weight_classes").select("*").eq("active", true).order("sort_order"),
-        db.from("divisions").select("*").order("sort_order")
+        db.from("divisions").select("*").order("sort_order"),
+        db.rpc("places_left", { c: comp.id })
       ]).then(function (a) {
         var st = a[0].data, settings = a[1].data, stages = a[2].data || [];
+        if (st) { st.places_left = a[6].data; st.entries_close_at = settings && settings.entries_close_at; }
+        preview = found.preview;
         title.textContent = "Enter " + comp.name;
         lede.textContent = Y.dateRange(comp.start_date, comp.end_date) + (comp.venue_name ? " at " + comp.venue_name : "");
         if (!st || !settings || st.entry_method !== "yne")
@@ -310,6 +324,7 @@
         ctx = { comp: comp, settings: settings, rules: a[3].data || [], classes: a[4].data || [], divisions: a[5].data || [] };
         document.getElementById("hold-minutes").textContent = settings.hold_minutes;
         lede.textContent += ". " + st.places_left + (st.places_left === 1 ? " place" : " places") + " left.";
+        if (preview) status.hidden = false, status.innerHTML = "<p><strong>Preview.</strong> This competition is not published. You can enter it because you are signed in to the site editor. Use Stripe test cards only.</p>";
         app.hidden = false; render();
       });
     }).catch(function (e) { if (window.console) console.error(e); stop("Something went wrong", "<p>We could not load this page. Please try again or <a href='contact.html'>contact us</a>.</p>"); });

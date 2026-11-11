@@ -87,6 +87,18 @@ if (typeof Deno !== "undefined") {
     const siteUrl = (Deno.env.get("SITE_URL") ?? "").replace(/\/$/, "");
     if (!siteUrl) { console.error("SITE_URL is not set"); return reply(500, { error: "not_configured" }); }
 
+    // A signed-in entries team member may preview an unpublished (test) competition. This is decided here from
+    // their login, never from anything the browser says about itself.
+    delete body.allow_unpublished;
+    const token = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
+    if (token && token !== Deno.env.get("SUPABASE_ANON_KEY") && body.preview === true) {
+      const who = await fetch(`${url}/rest/v1/rpc/is_entries`, {
+        method: "POST", headers: { apikey: Deno.env.get("SUPABASE_ANON_KEY") ?? svc, authorization: `Bearer ${token}`, "content-type": "application/json" }, body: "{}",
+      });
+      if (who.ok && (await who.json()) === true) body.allow_unpublished = true;
+    }
+    delete body.preview;
+
     // 1. Rules, price and a held place, all in one database step.
     const rpc = await fetch(`${url}/rest/v1/rpc/start_entry`, {
       method: "POST",
