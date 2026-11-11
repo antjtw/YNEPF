@@ -26,6 +26,16 @@
     return load("competitions_public", function (t) {
       return t.select("*").order("start_date", { ascending: true });
     }).then(function (rows) {
+      // Which competitions have entries to look at (names only, from the public entries list). Quietly skipped if
+      // that list is not there.
+      var db = Y.db();
+      return db.from("entries_public").select("competition_id").then(function (r) {
+        var have = {};
+        (r.data || []).forEach(function (e) { have[e.competition_id] = true; });
+        rows.forEach(function (c) { c.has_entries = !!have[c.id]; });
+        return rows;
+      }, function () { return rows; });
+    }).then(function (rows) {
       return {
         upcoming: rows.filter(function (c) { return Y.compState(c) !== "archived"; }),
         past: rows.filter(function (c) { return Y.compState(c) === "archived"; }).reverse()

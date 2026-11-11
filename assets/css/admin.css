@@ -103,3 +103,12 @@ body.admin main { padding-block: var(--space-6) var(--space-8); }
 #noaccess[hidden], #signup-form[hidden] { display: none; }
 .tag-you { margin-left: var(--space-2); }
 .admin-tabs a[hidden] { display: none; }
+
+/* Calendar pages: a full page per competition or event, in sections, with a save bar that stays in reach. */
+.form-section { font-size: 1.25rem; margin: var(--space-7, 2.5rem) 0 var(--space-2); padding-top: var(--space-4); border-top: 1px solid var(--navy-50, #dde3ec); }
+.form-section:first-child { margin-top: var(--space-3); border-top: 0; padding-top: 0; }
+.admin-tabs.subtabs { margin: 0 0 var(--space-5); }
+.save-bar { position: sticky; bottom: 0; margin-top: var(--space-6); padding: var(--space-4) 0; background: var(--surface-page); border-top: 1px solid var(--navy-50, #dde3ec); z-index: 2; }
+.save-bar .actions { display: flex; gap: var(--space-3); flex-wrap: wrap; }
+input:disabled, select:disabled, textarea:disabled { background: var(--navy-10, #eef1f6); color: var(--text-muted, #5b6677); cursor: not-allowed; }
+.callout { margin: 0 0 var(--space-4); }

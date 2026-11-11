@@ -193,7 +193,7 @@
     if (opens || closes || c.entry_url) return "open";
     return "none";
   }
-  function entryLine(c) {
+  function entryWindow(c) {
     if (c.kind === "event") return "";
     var o = c.entry_opens ? new Date(c.entry_opens) : null;
     var cl = c.entry_closes ? new Date(c.entry_closes) : null;
@@ -205,6 +205,25 @@
     }
     if (o) return "Entry opens " + dayMonth(o, true) + " at " + clock(o);
     if (cl) return "Entry closes " + dayMonth(cl, true) + " at " + clock(cl);
+    return "";
+  }
+  // Public wording. Before entry opens it says when it opens (and not when it closes). Once open it says when it closes.
+  function daysUntil(date) {
+    var a = parts(date, { year: "numeric", month: "2-digit", day: "2-digit" }), t = parts(new Date(), { year: "numeric", month: "2-digit", day: "2-digit" });
+    return Math.round((Date.UTC(+a.year, +a.month - 1, +a.day) - Date.UTC(+t.year, +t.month - 1, +t.day)) / 86400000);
+  }
+  function entryLine(c, now) {
+    if (c.kind === "event") return "";
+    var st = compState(c, now), o = c.entry_opens ? new Date(c.entry_opens) : null, cl = c.entry_closes ? new Date(c.entry_closes) : null;
+    if (st === "soon" && o) {
+      var n = daysUntil(o), at = " at " + clock(o);
+      if (n <= 0) return "Entry opens today" + at;
+      if (n === 1) return "Entry opens tomorrow" + at;
+      if (n <= 60) return "Entry opens in " + n + " days (" + dayMonth(o, false) + ")";
+      return "Entry opens " + dayMonth(o, true) + at;
+    }
+    if (st === "open") return "Entry open" + (cl ? ". Closes " + dayMonth(cl, false) + " at " + clock(cl) : "");
+    if (st === "closed") return "Entry closed";
     return "";
   }
   // "10:00:00" -> "10am", "13:30" -> "1:30pm"
@@ -285,25 +304,33 @@
         card.appendChild(el("p", { style: "margin:var(--space-3) 0 0;" },
           c.waitlist_url ? "All places have been taken. You can join the waiting list in case one comes up." : "All places have been taken."));
       }
-      // One row of actions: Enter now (while entry is open), the waiting list (when
-      // full) and the lifting order (once its sheet has been added).
-      var actions = [];
-      if (c.entry_url && state === "open") {
-        var inSite = c.entry_url.charAt(0) === "/";      // our own entry form opens in the same tab
-        actions.push(el("a", inSite ? { class: "btn btn-primary", href: c.entry_url, "aria-label": "Enter now: " + c.name }
-          : { class: "btn btn-primary", href: c.entry_url, target: "_blank", rel: "noopener", "aria-label": "Enter now: " + c.name + " (opens in a new tab)" }, "Enter now"));
-      }
-      if (state === "full" && c.waitlist_url) {
-        actions.push(el("a", { class: "btn btn-ghost", href: c.waitlist_url, target: "_blank", rel: "noopener",
-          "aria-label": "Join the waiting list for " + c.name + " (opens in a new tab)" }, "Join the waiting list ", Y_EXT()));
-      }
-      if (c.lifting_order_url) {
-        actions.push(el("a", { class: "btn btn-secondary", href: liftingHref(c) }, "View lifting order"));
-      }
-      if (c.openipf_url) {
-        actions.push(el("a", { class: "btn btn-ghost", href: c.openipf_url, target: "_blank", rel: "noopener",
-          "aria-label": "View results on OpenIPF for " + c.name + " (opens in a new tab)" }, "View results on OpenIPF ", Y_EXT()));
-      }
+      // One row of actions. The main (primary) action follows the stage of the competition and the others sit
+      // beside it as quieter ghost buttons:
+      //   entry open    Enter now           | View entries, View lifting order
+      //   entry full    Join waiting list   | View entries, View lifting order
+      //   entry closed  View lifting order  | View entries            (or View entries, if there is no order yet)
+      //   past          View results        | View entries, View lifting order
+      var inSite = c.entry_url && c.entry_url.charAt(0) === "/";      // our own entry form opens in the same tab
+      var A = {
+        enter: c.entry_url && state === "open" ? el("a", inSite ? { href: c.entry_url, "aria-label": "Enter now: " + c.name }
+          : { href: c.entry_url, target: "_blank", rel: "noopener", "aria-label": "Enter now: " + c.name + " (opens in a new tab)" }, "Enter now") : null,
+        waitlist: state === "full" && c.waitlist_url ? el("a", { href: c.waitlist_url, target: "_blank", rel: "noopener",
+          "aria-label": "Join the waiting list for " + c.name + " (opens in a new tab)" }, "Join the waiting list ", Y_EXT()) : null,
+        order: c.lifting_order_url ? el("a", { href: liftingHref(c) }, "View lifting order") : null,
+        entries: c.has_entries && c.slug ? el("a", { href: "/entries?c=" + encodeURIComponent(c.slug) }, "View entries") : null,
+        results: c.openipf_url ? el("a", { href: c.openipf_url, target: "_blank", rel: "noopener",
+          "aria-label": "View results on OpenIPF for " + c.name + " (opens in a new tab)" }, "View results on OpenIPF ", Y_EXT()) : null
+      };
+      var order = state === "archived" ? ["results", "order", "entries"]
+        : state === "closed" ? ["order", "entries", "results"]
+        : state === "full" ? ["waitlist", "entries", "order", "results"]
+        : ["enter", "entries", "order", "results"];
+      var actions = [], first = true;
+      order.forEach(function (k) {
+        if (!A[k]) return;
+        A[k].className = "btn " + (first ? "btn-primary" : "btn-ghost");
+        first = false; actions.push(A[k]);
+      });
       if (actions.length) card.appendChild(el("div", { class: "event-actions" }, actions));
     }
     card.appendChild(meta);
@@ -521,7 +548,7 @@
     markdown: markdown, excerpt: excerpt, anchorSlug: anchorSlug,
     toLondonInput: toLondonInput, fromLondonInput: fromLondonInput,
     todayLondon: todayLondon, yearOf: function (c) { return c.start_date.slice(0, 4); }, addDays: addDays, dateRange: dateRange, longDate: longDate,
-    compState: compState, timeRange: timeRange, entryLine: entryLine, mapsUrl: mapsUrl, competitionCard: competitionCard,
+    compState: compState, timeRange: timeRange, entryLine: entryLine, entryWindow: entryWindow, mapsUrl: mapsUrl, competitionCard: competitionCard,
     parseLiftingOrder: parseLiftingOrder, parseRecords: parseRecords, RECORDS_FORM_DEFAULT: RECORDS_FORM_DEFAULT, AGE_NAMES: AGE_NAMES, liftingHref: liftingHref, longDay: longDay, igHandle: igHandle,
     extIcon: Y_EXT, sheetCsvUrl: sheetCsvUrl, parseCsv: parseCsv, loadSheet: loadSheet,
     notice: notice, guard: guard

@@ -104,18 +104,25 @@ Follow [email-setup-guide.md](email-setup-guide.md). Until then, Resend's starte
 
 ## Part 6: Making a TEST competition and entering it
 
-Everything about **when and how many** is set once, on the **Calendar**. The **Entries** tab only holds what is specific to online entry (the events, equipment, prices and the hold time).
+Everything for a competition is set up once, on one page in the **Calendar** tab. There is no separate Entries tab: a competition's page has **Details** (everything you set up) and **Entries** (who has entered).
 
-1. In the editor, **Calendar > Add competition**. Name it `TEST Spring Open`, pick a date in the future, set **Number of spaces** (for example 10), and check the entry opening and closing times. Leave **Entry link** empty. **Untick Published** so the public cannot see it. Save.
-2. Open **Entries**, press **Entry settings** for it. Choose **Online on this website**, set the prices (for example 60 and 25), and Save.
+1. In the editor, **Calendar > Add competition**. A full page opens. Fill in:
+   - **The competition:** name (for example `TEST Spring Open`), description.
+   - **When and where:** the dates and venue.
+   - **Entry:** choose **On this website, paid by card**, set the **Number of spaces**, and leave **Entry opens** and **Entry closes** on the usual settings (8 weeks before at 9am, 3 weeks before at noon) or choose your own. A line under each shows exactly when it will happen, and when priority entry opens (a day earlier).
+   - **Online entry:** the events and equipment you offer, and the prices.
+   - Leave **Show on the website** unticked while you test. New items start as drafts.
+2. Press **Add competition**. You stay on the page, which now also has an **Entries** tab.
 3. Enter it:
-   - **Unpublished (testing):** sign in at `/admin` on the test address first, then go to `/enter?c=` followed by the competition's web address ending including the year, for example `2027-test-spring-open`. The Entries tab shows it under the competition name. You will see a "Preview" notice.
-   - **Published:** the competition's card on the Calendar gets an **Enter now** button that opens the same form.
+   - **Unpublished (testing):** sign in at `/admin` on the test address first, then go to `/enter?c=` followed by the web address ending, for example `2027-test-spring-open` (shown on the page under "Web address ending"). You will see a "Preview" notice.
+   - **Published:** the competition's card on the public Calendar gets an **Enter now** button.
 4. Fill in the form. Pay with the test card `4242 4242 4242 4242`.
 
-**What you should see:** a thank-you page, the entry in **Entries > View entries** marked **Paid**, and a confirmation email.
+**What you should see:** a thank-you page, the entry in the competition's **Entries** tab marked **Paid**, and a confirmation email.
 
 **Why unpublished works:** an unpublished competition is hidden from the public, but you can still open its entry form **if you are signed in to the site editor on the same address**. Everyone else gets "Competition not found".
+
+**Who can change what:** editors change the competition itself (details, places, entry times, links). The entries team changes the online entry settings (how entries are taken, events, prices) and sees the Entries tab. Admins do both.
 
 ---
 

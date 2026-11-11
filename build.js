@@ -52,6 +52,7 @@ const pages = [
   "rules.html",
   "contact.html",
   "enter.html",
+  "entries.html",
   "entry-thanks.html",
   "glp-calculator.html",
   "rules/the-lifts.html",

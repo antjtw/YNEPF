@@ -293,206 +293,437 @@
     };
   }
 
-  // ---- competitions ---------------------------------------------------------------
+  // ---- calendar: competitions, events and their entries in one place --------------------
+  // The list, then a full page for each item (no pop-ups). A competition page has two tabs: Details (everything,
+  // entered once) and Entries (who has entered). Routes: #competitions, #competitions/new, #competitions/new-event,
+  // #competitions/<id>, #competitions/<id>/entries.
   var STATE_LABEL = { archived: "Past", open: "Entry open", closed: "Entry closed", full: "Entries full", soon: "Entry not open yet", none: "No entry set" };
+  var ENTRY_ERRORS = {
+    "invalid:events": "Choose at least one event.", "invalid:equipment": "Choose at least one kind of equipment.",
+    "invalid:hold_minutes": "The hold must be between 5 and 30 minutes.",
+    "invalid:price_full_power": "Set a full power price of more than £0.", "invalid:price_bench_only": "Set a bench only price of more than £0.",
+    "invalid:price_sub_junior": "The sub-junior price must be more than £0, or left empty.", "invalid:capacity": "Set the number of spaces first.",
+    forbidden: "You do not have permission to change entry settings."
+  };
+  function pence(v) { return v === null || v === "" || v === undefined ? null : Math.round(Number(v) * 100); }
+  function poundsInput(p) { return p === null || p === undefined ? "" : (p / 100).toFixed(2); }
+  function entryMoney(p) { return "£" + (p / 100).toFixed(p % 100 ? 2 : 0); }
+  function canComp() { return state.role === "admin" || state.role === "editor"; }      // the competition itself
+  function canEntry() { return state.role === "admin" || state.role === "entries"; }    // online entry settings and entries
+  function go(hash) { location.hash = hash; }
+  function backLink() { return el("p", null, el("a", { href: "#competitions" }, "← Back to the calendar")); }
 
-  function renderCompetitions(panel) {
-    panel.replaceChildren(panelHead("Calendar", el("span", { class: "actions" },
-        btn("Add competition", function () { editCompetition(); }, "btn-primary"),
-        btn("Add another event", function () { editCompetition(null, "event"); }, "btn-secondary"))),
-      el("p", { class: "panel-intro" }, "Competitions and other events (AGMs, referee courses and so on) all show on the Calendar. For competitions, entry opens and closes at the UK times you set (GMT in winter, BST in summer), and the entry link only appears on the website while entry is open."),
+  function renderCompetitions(panel, args) {
+    args = args || [];
+    if (!args[0]) return renderCalendarList(panel);
+    if (args[0] === "new" || args[0] === "new-event") {
+      if (!canComp()) return panel.replaceChildren(panelHead("Calendar"), el("p", null, "You do not have permission to add to the calendar."), backLink());
+      return renderEditor(panel, null, args[0] === "new-event" ? "event" : "competition", "details");
+    }
+    panel.replaceChildren(el("p", null, "Loading…"));
+    sb.from("competitions").select("*").eq("id", args[0]).maybeSingle().then(function (res) {
+      var c = ok(res);
+      if (!c) return panel.replaceChildren(panelHead("Not found"), el("p", null, "That item no longer exists."), backLink());
+      renderEditor(panel, c, c.kind === "event" ? "event" : "competition", args[1] === "entries" ? "entries" : "details");
+    }).catch(function (e) { panel.replaceChildren(el("p", { class: "form-error" }, friendly(e)), backLink()); });
+  }
+
+  function renderCalendarList(panel) {
+    panel.replaceChildren(panelHead("Calendar", canComp() ? el("span", { class: "actions" },
+        btn("Add competition", function () { go("#competitions/new"); }, "btn-primary"),
+        btn("Add another event", function () { go("#competitions/new-event"); }, "btn-secondary")) : null),
+      el("p", { class: "panel-intro" }, "Competitions and other events (AGMs, referee courses and so on) all show on the Calendar. Open a competition to set it up once: details, places, when entry opens and closes, prices, and who has entered."),
       el("p", null, "Loading…"));
-    sb.from("competitions").select("*").order("start_date", { ascending: true }).then(function (res) {
-      var rows = ok(res);
+    Promise.all([
+      sb.from("competitions").select("*").order("start_date", { ascending: true }),
+      sb.from("entries").select("competition_id,status,hold_expires_at").then(function (r) { return r.error ? [] : r.data || []; }, function () { return []; })
+    ]).then(function (res) {
+      var rows = ok(res[0]), entries = res[1], now = Date.now();
+      function taken(c) {
+        return entries.filter(function (e) { return e.competition_id === c.id && (e.status === "paid" || e.status === "comped" || (e.status === "held" && new Date(e.hold_expires_at) > now)); }).length;
+      }
       var current = rows.filter(function (c) { return Y.compState(c) !== "archived"; });
       var past = rows.filter(function (c) { return Y.compState(c) === "archived"; }).reverse();
       panel.lastChild.remove();
       panel.appendChild(el("h2", null, "Upcoming"));
-      panel.appendChild(current.length ? compTable(current) : el("p", { class: "empty" }, "Nothing upcoming."));
-      if (past.length) {
-        panel.appendChild(el("h2", null, "Past"));
-        panel.appendChild(compTable(past));
-      }
+      panel.appendChild(current.length ? compTable(current, taken) : el("p", { class: "empty" }, "Nothing upcoming."));
+      if (past.length) { panel.appendChild(el("h2", null, "Past")); panel.appendChild(compTable(past, taken)); }
     }).catch(function (e) { panel.lastChild.textContent = friendly(e); });
   }
 
-  function compTable(rows) {
+  function compTable(rows, taken) {
     return el("div", { class: "table-scroll" }, el("table", { class: "admin-table" },
       el("thead", null, el("tr", null, ["Name", "Date", "Entry", "Actions"].map(function (h) { return el("th", { scope: "col" }, h); }))),
       el("tbody", null, rows.map(function (c) {
-        var st = Y.compState(c);
-        var actions = el("span", { class: "actions" }, btn("Edit", function () { editCompetition(c); }));
-        if (c.kind === "event") {
-          // events have no entry window, so no "entries full" switch
-        } else if (st === "open" || st === "soon" || st === "none") {
-          actions.appendChild(btn("Mark entries full", function () { setFull(c, true); }));
-        } else if (c.entries_full && st !== "archived") {
-          actions.appendChild(btn("Entries not full", function () { setFull(c, false); }));
-        }
-        actions.appendChild(btn("Delete", function () { removeCompetition(c); }, "btn-danger"));
+        var st = Y.compState(c), online = c.entry_method === "yne";
+        var actions = el("span", { class: "actions" }, el("a", { class: "btn btn-secondary btn-sm", href: "#competitions/" + c.id }, "Edit", el("span", { class: "visually-hidden" }, " " + c.name)));
+        if (canComp()) actions.appendChild(btn("Delete", function () { removeCompetition(c); }, "btn-danger"));
         return el("tr", null,
-          el("th", { scope: "row" }, c.name, c.kind === "event" ? [" ", el("span", { class: "tag tag-event" }, "Event")] : null, !c.published ? [" ", el("span", { class: "tag tag-position" }, "Draft")] : null,
+          el("th", { scope: "row" }, el("a", { href: "#competitions/" + c.id }, c.name), c.kind === "event" ? [" ", el("span", { class: "tag tag-event" }, "Event")] : null, !c.published ? [" ", el("span", { class: "tag tag-position" }, "Draft")] : null,
             c.venue_name ? el("small", null, c.venue_name) : null),
           el("td", null, Y.dateRange(c.start_date, c.end_date), Y.timeRange(c) ? el("small", null, Y.timeRange(c)) : null),
           el("td", null, c.kind === "event" ? "—" : STATE_LABEL[st],
-            Y.entryLine(c) ? el("small", null, Y.entryLine(c)) : null),
+            Y.entryWindow(c) ? el("small", null, Y.entryWindow(c)) : null,
+            online ? el("small", null, taken(c) + " of " + (c.capacity || "?") + " places taken (online entry)") : null),
           el("td", null, actions));
       }))));
   }
 
-  function setFull(c, full) {
-    sb.from("competitions").update({ entries_full: full }).eq("id", c.id)
-      .then(ok).then(function () { toast(full ? "Marked as full." + (c.waitlist_url ? "" : " Add a waiting list link by editing it, if you have one.") : "Entries reopened."); route(); })
-      .catch(function (e) { toast(friendly(e), "error"); });
-  }
   function removeCompetition(c) {
     if (!window.confirm("Delete “" + c.name + "”? This cannot be undone.")) return;
     sb.from("competitions").delete().eq("id", c.id).then(ok)
-      .then(function () { toast(c.kind === "event" ? "Event deleted." : "Competition deleted."); route(); })
+      .then(function () { toast(c.kind === "event" ? "Event deleted." : "Competition deleted."); if (/#competitions\//.test(location.hash)) go("#competitions"); else route(); })
       .catch(function (e) { toast(friendly(e), "error"); });
   }
 
-  function editCompetition(c, kind) {
-    var isNew = !c;
-    c = c || {};
-    var isEvent = (c.kind || kind) === "event";
-    if (isEvent) return editEvent(c, isNew);
-    var values = Object.assign({}, c, {
-      entry_opens: Y.toLondonInput(c.entry_opens),
-      entry_closes: Y.toLondonInput(c.entry_closes),
-      published: isNew ? true : c.published
+  // A form drawn straight onto the page from a list of fields. Fields may have a `heading` (a section), `show(values)`
+  // (hide unless true) and `info(values)` (a line of live text). Returns accessors like openForm does.
+  function pageForm(fields, values) {
+    var controls = {}, editors = [], wrap = el("div"), grid = null, rules = [];
+    fields.forEach(function (f) {
+      if (f.heading) { grid = null; wrap.appendChild(el("h2", { class: "form-section" }, f.heading)); if (f.note) wrap.appendChild(el("p", { class: "help" }, f.note)); return; }
+      var node;
+      if (f.info) {
+        node = el("p", { class: "help", role: "status" });
+        rules.push({ f: f, node: node });
+        grid = null; wrap.appendChild(node); return;
+      }
+      var c = makeControl(f, values[f.name], editors);
+      controls[f.name] = c; node = c.wrap;
+      if (f.show) rules.push({ f: f, node: node });
+      if (f.half) { if (!grid || !grid.parentNode) { grid = el("div", { class: "form-grid" }); wrap.appendChild(grid); } grid.appendChild(node); }
+      else { grid = null; wrap.appendChild(node); }
     });
-    var api = openForm({
-      title: isNew ? "Add competition" : "Edit competition",
-      values: values,
-      saveLabel: isNew ? "Add competition" : "Save changes",
-      fields: [
-        { name: "name", label: "Name", required: true },
-        { name: "slug", label: "Web address ending", help: "Used for the lifting order link: /lifting-order/… Made from the year and name if you leave it blank. Lower case letters, numbers and hyphens only." },
-        { name: "label", label: "Tag (optional)", help: "A small label next to the name, for example “Sponsor TBD”.", half: true },
-        { name: "capacity", label: "Number of spaces (optional)", type: "number", min: "0", half: true },
-        { name: "description", label: "Description", type: "textarea", rows: 5, help: "Plain text. Start lines with “- ” for bullet points. Links look like [text](https://…)." },
-        { name: "start_date", label: "First day", type: "date", required: true, half: true },
-        { name: "end_date", label: "Last day (if more than one day)", type: "date", half: true },
-        { name: "venue_name", label: "Venue", help: "Shown on the page and linked to Google Maps.", half: true },
-        { name: "venue_address", label: "Address or postcode (optional)", help: "Makes the Maps link more accurate.", half: true },
-        { name: "map_url", label: "Custom map link (optional)", type: "url", help: "Only needed if the automatic Google Maps link is wrong." },
-        { name: "openipf_url", label: "OpenIPF results link (optional)", type: "url", placeholder: "https://www.openipf.org/…",
-          help: "Add this after the competition, once results are on OpenIPF. It shows as a link on the Calendar that opens in a new tab." },
-        { name: "entry_url", label: "Entry link", type: "url", placeholder: "https://…", help: "For entry taken somewhere else. Goes live on the website at the time entry opens, and is hidden when entry closes. Not needed if entry is taken on this website: switch that on under Entries." },
-        { name: "entry_opens", label: "Entry opens (UK time)", type: "datetime", half: true, help: "Filled in as 8 weeks before, at 9am. Change it if you need to." },
-        { name: "entry_closes", label: "Entry closes (UK time)", type: "datetime", half: true, help: "Filled in as 3 weeks before, at noon." },
-        { name: "entries_full", label: "Entries full", type: "checkbox", help: "Tick this when the competition fills up before entry closes. The entry link is replaced by a “Join the waiting list” link (if you add one below)." },
-        { name: "waitlist_url", label: "Waiting list link (Google Form)", type: "url", placeholder: "https://forms.gle/…", help: "Only shown on the website while entries are marked full." },
-        { name: "lifting_order_url", label: "Lifting order sheet (optional)", type: "url", placeholder: "https://docs.google.com/spreadsheets/d/e/…/pub?output=csv",
-          help: "Add it a few days after entries open: a “View lifting order” button appears next to “Enter now” once it is here, and the page follows the sheet as you edit it. Use a published Google Sheet (File > Share > Publish to web > CSV), one row per lifter. Needs columns Day, Session, Flight and Name. Optional: Club, Instagram, Age class (blank = Open, otherwise J, SJ, M1, M2, M3 or M4), Class (for example M66), GLP, Total, Open IPF (links the name to their profile), and per session Weigh-in, Lift off and Session name. Only columns with something in them are shown." },
-        { name: "published", label: "Show on the website", type: "checkbox", help: "Untick to keep it as a draft." }
-      ],
-      validate: function (v) {
-        if (v.slug && !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(v.slug)) return "The web address can only use lower case letters, numbers and hyphens.";
-        if (v.end_date && v.end_date < v.start_date) return "The last day cannot be before the first day.";
-        if (v.entry_opens && v.entry_closes && v.entry_closes <= v.entry_opens) return "Entry must close after it opens.";
-        if (v.entry_url && !/^https?:\/\//i.test(v.entry_url)) return "The entry link must start with https://";
-        if (v.map_url && !/^https?:\/\//i.test(v.map_url)) return "The map link must start with https://";
-        if (v.openipf_url && !/^https:\/\//i.test(v.openipf_url)) return "The OpenIPF link must start with https://";
-        if (v.waitlist_url && !/^https:\/\//i.test(v.waitlist_url)) return "The waiting list link must start with https://";
-        if (v.lifting_order_url && !Y.sheetCsvUrl(v.lifting_order_url)) return "The lifting order link does not look usable. It must start with https://";
-        return null;
-      },
-      onSave: function (v) {
+    function get(n) { return controls[n].get(); }
+    function all() { var o = {}; Object.keys(controls).forEach(function (k) { o[k] = controls[k].get(); }); return o; }
+    function refresh() {
+      var v = all();
+      rules.forEach(function (r) {
+        if (r.f.info) { var t = r.f.info(v); r.node.textContent = t || ""; r.node.hidden = !t || (r.f.show && !r.f.show(v)); }
+        else r.node.hidden = !r.f.show(v);
+      });
+    }
+    wrap.addEventListener("input", refresh); wrap.addEventListener("change", refresh);
+    refresh();
+    return { el: wrap, controls: controls, get: get, set: function (n, x) { controls[n].set(x); refresh(); }, input: function (n) { return controls[n].input; }, values: all, refresh: refresh };
+  }
+
+  // Entry opens/closes: "the usual", "so many days before", or an exact date and time. Stored as exact times.
+  var USUAL = { open: { days: 56, time: "09:00", label: "8 weeks before, at 9am (the usual)" }, close: { days: 21, time: "12:00", label: "3 weeks before, at noon (the usual)" } };
+  function windowTime(v, which) {
+    var m = v[which + "_mode"], start = v.start_date;
+    if (m === "date") return v["entry_" + which + "s"] || "";
+    if (!start) return "";
+    if (m === "usual") return Y.addDays(start, -USUAL[which].days) + "T" + USUAL[which].time;
+    var n = Number(v[which + "_days"]);
+    return isNaN(n) || v[which + "_days"] === null ? "" : Y.addDays(start, -n) + "T" + (v[which + "_time"] || USUAL[which].time);
+  }
+  function whenText(local) {
+    if (!local) return "";
+    return new Date(Y.fromLondonInput(local)).toLocaleString("en-GB", { timeZone: Y.TZ, weekday: "long", day: "numeric", month: "long", year: "numeric", hour: "numeric", minute: "2-digit" });
+  }
+
+  function renderEditor(panel, c, kind, tab) {
+    var isNew = !c, isEvent = kind === "event";
+    c = c || {};
+    var role = state.role;
+    var online = c.entry_method === "yne";
+    var title = isNew ? (isEvent ? "Add another event" : "Add competition") : c.name;
+    var head = panelHead(title, !isNew && canComp() ? btn("Delete", function () { removeCompetition(c); }, "btn-danger") : null);
+    var view = el("div");
+    panel.replaceChildren(backLink(), head);
+    if (!isNew && !isEvent) {
+      var tabs = el("nav", { class: "admin-tabs subtabs", "aria-label": c.name }, el("a", { href: "#competitions/" + c.id, "aria-current": tab === "details" ? "page" : null }, "Details"));
+      if (canEntry()) tabs.appendChild(el("a", { href: "#competitions/" + c.id + "/entries", "aria-current": tab === "entries" ? "page" : null }, "Entries"));
+      panel.appendChild(tabs);
+    }
+    panel.appendChild(view);
+    if (tab === "entries" && !isNew && !isEvent) return renderEntriesTab(view, c);
+    return isEvent ? renderEventForm(view, c, isNew) : renderCompetitionForm(view, c, isNew);
+  }
+
+  function saveBar(onSave, label) {
+    var errBox = el("p", { class: "form-error", role: "alert", hidden: true });
+    var save = el("button", { class: "btn btn-primary", type: "submit" }, label);
+    var bar = el("div", { class: "save-bar" }, errBox, el("div", { class: "actions" }, save,
+      el("a", { class: "btn btn-secondary", href: "#competitions" }, "Cancel")));
+    return {
+      el: bar,
+      fail: function (m, focusEl) { errBox.textContent = m; errBox.hidden = false; errBox.scrollIntoView({ block: "nearest" }); if (focusEl && focusEl.focus) focusEl.focus(); },
+      clear: function () { errBox.hidden = true; },
+      busy: function (b) { save.disabled = b; }
+    };
+  }
+
+  function renderCompetitionForm(view, c, isNew) {
+    var onlyEntry = !canComp() && canEntry();
+    var usualOpen = c.start_date && Y.toLondonInput(c.entry_opens) === Y.addDays(c.start_date, -56) + "T09:00";
+    var usualClose = c.start_date && Y.toLondonInput(c.entry_closes) === Y.addDays(c.start_date, -21) + "T12:00";
+    var rules = [];
+    var settings = {}, prices = [];
+    function fields() {
+      var E = function (o) { return Object.assign({ owner: "entry" }, o); }, C = function (o) { return Object.assign({ owner: "comp" }, o); };
+      var isOnline = function (v) { return v.method === "online"; };
+      var windowFields = function (which, noun) {
+        return [
+          C({ name: which + "_mode", label: "Entry " + (which === "open" ? "opens" : "closes"), type: "select", options: [
+            { value: "usual", label: USUAL[which].label }, { value: "days", label: "A number of days before the competition" }, { value: "date", label: "On a date and time I choose" }] }),
+          C({ name: which + "_days", label: "Days before the first day", type: "number", min: "0", half: true, show: function (v) { return v[which + "_mode"] === "days"; } }),
+          C({ name: which + "_time", label: "At (UK time)", type: "time", half: true, show: function (v) { return v[which + "_mode"] === "days"; } }),
+          C({ name: "entry_" + which + "s", label: "Date and time (UK time)", type: "datetime", show: function (v) { return v[which + "_mode"] === "date"; } }),
+          { info: function (v) { var t = windowTime(v, which); return t ? "Entry " + (which === "open" ? "opens " : "closes ") + whenText(t) + (which === "open" ? ". Priority entry opens one day earlier, on " + whenText(Y.addDays(t.slice(0, 10), -1) + t.slice(10)) + "." : ".") : "Set the first day to see the " + noun + " time."; } }
+        ];
+      };
+      return [].concat([
+        { heading: "The competition" },
+        C({ name: "name", label: "Name", required: true }),
+        C({ name: "label", label: "Tag (optional)", help: "A small label next to the name, for example “Sponsor TBD”.", half: true }),
+        C({ name: "slug", label: "Web address ending", help: "Made from the year and name if you leave it blank. Lower case letters, numbers and hyphens only. It is also the end of the entry and lifting order addresses.", half: true }),
+        C({ name: "description", label: "Description", type: "textarea", rows: 5, help: "Plain text. Start lines with “- ” for bullet points. Links look like [text](https://…)." }),
+        { heading: "When and where" },
+        C({ name: "start_date", label: "First day", type: "date", required: true, half: true }),
+        C({ name: "end_date", label: "Last day (if more than one day)", type: "date", half: true }),
+        C({ name: "venue_name", label: "Venue", help: "Shown on the page and linked to Google Maps.", half: true }),
+        C({ name: "venue_address", label: "Address or postcode (optional)", help: "Makes the Maps link more accurate.", half: true }),
+        C({ name: "map_url", label: "Custom map link (optional)", type: "url", help: "Only needed if the automatic Google Maps link is wrong." }),
+        { heading: "Entry", note: "Set the places, when entry opens and closes, and how people enter, all here." },
+        E({ name: "method", label: "How are entries taken?", type: "select", options: [
+          { value: "online", label: "On this website, paid by card" }, { value: "link", label: "Somewhere else (a link)" }, { value: "none", label: "Not taking entries yet" }] }),
+        C({ name: "capacity", label: "Number of spaces", type: "number", min: "0", help: "This is the stock: online entry stops when they are gone." })
+      ], windowFields("open", "opening"), windowFields("close", "closing"), [
+        C({ name: "entry_url", label: "Entry link", type: "url", placeholder: "https://…", show: function (v) { return v.method === "link"; }, help: "Goes live on the website when entry opens and is hidden when entry closes." }),
+        { heading: "Online entry", note: "Only for entry taken on this website.", show: isOnline },
+        E({ name: "ev_full", label: "Offer full power", type: "checkbox", half: true, show: isOnline }),
+        E({ name: "ev_bench", label: "Offer bench only", type: "checkbox", half: true, show: isOnline }),
+        E({ name: "eq_classic", label: "Offer classic", type: "checkbox", half: true, show: isOnline }),
+        E({ name: "eq_equipped", label: "Offer equipped", type: "checkbox", half: true, show: isOnline }),
+        E({ name: "p_full", label: "Full power price (£)", type: "number", min: "0", half: true, show: isOnline }),
+        E({ name: "p_bench", label: "Bench only price (£)", type: "number", min: "0", half: true, show: isOnline }),
+        E({ name: "p_sj", label: "Sub-junior price, any event (£, optional)", type: "number", min: "0", show: isOnline, help: "If set, sub-juniors pay this whatever they lift." }),
+        E({ name: "openipf_required", label: "Entry needs a qualifying total (the OpenIPF link becomes mandatory)", type: "checkbox", show: isOnline }),
+        E({ name: "hold_minutes", label: "Minutes a place is held while paying", type: "number", min: "5", show: isOnline, help: "Between 5 and 30. A short hold stops places being parked." }),
+        { heading: "Full, closed and waiting list" },
+        C({ name: "entries_full", label: "Entries full", type: "checkbox", help: "Tick when the competition fills up. The main button becomes “Join the waiting list” (if you add a link below)." }),
+        E({ name: "entries_closed_manually", label: "Close entries now", type: "checkbox", show: isOnline, help: "Stops new online entries straight away. Untick to reopen." }),
+        C({ name: "waitlist_url", label: "Waiting list link (Google Form)", type: "url", placeholder: "https://forms.gle/…", help: "Only shown on the website while entries are marked full." }),
+        { heading: "Lifting order and results" },
+        C({ name: "lifting_order_url", label: "Lifting order sheet (optional)", type: "url", placeholder: "https://docs.google.com/spreadsheets/d/e/…/pub?output=csv",
+          help: "Add it a few days after entries open: a “View lifting order” button appears once it is here, and the page follows the sheet as you edit it. Use a published Google Sheet (File > Share > Publish to web > CSV), one row per lifter. Needs columns Day, Session, Flight and Name. Optional: Club, Instagram, Age class (blank = Open, otherwise J, SJ, M1, M2, M3 or M4), Class (for example M66), GLP, Total, Open IPF, and per session Weigh-in, Lift off and Session name. Only columns with something in them are shown." }),
+        C({ name: "openipf_url", label: "OpenIPF results link (optional)", type: "url", placeholder: "https://www.openipf.org/…", help: "Add this after the competition, once results are on OpenIPF." }),
+        { heading: "On the website" },
+        C({ name: "published", label: "Show on the website", type: "checkbox", help: "Untick to keep it as a draft. A draft can still be tried by signed-in entries staff." })
+      ]);
+    }
+    function load() {
+      if (isNew) return Promise.resolve();
+      return Promise.all([
+        sb.from("entry_settings").select("*").eq("competition_id", c.id).maybeSingle().then(function (r) { return r.error ? null : r.data; }, function () { return null; }),
+        sb.from("price_rules").select("*").eq("competition_id", c.id).then(function (r) { return r.error ? [] : r.data || []; }, function () { return []; })
+      ]).then(function (r) { settings = r[0] || {}; prices = r[1] || []; });
+    }
+    view.replaceChildren(el("p", null, "Loading…"));
+    load().then(function () {
+      function price(match) { var r = prices.filter(match)[0]; return r ? poundsInput(r.price_pence) : ""; }
+      var events = settings.events || ["full_power", "bench_only"], equip = settings.equipment || ["classic", "equipped"];
+      var values = Object.assign({}, c, {
+        published: isNew ? false : c.published,
+        method: c.entry_method === "yne" ? "online" : c.entry_url ? "link" : "none",
+        open_mode: isNew || usualOpen ? "usual" : c.entry_opens ? "date" : "usual", open_days: 56, open_time: "09:00", entry_opens: Y.toLondonInput(c.entry_opens),
+        close_mode: isNew || usualClose ? "usual" : c.entry_closes ? "date" : "usual", close_days: 21, close_time: "12:00", entry_closes: Y.toLondonInput(c.entry_closes),
+        ev_full: events.indexOf("full_power") >= 0, ev_bench: events.indexOf("bench_only") >= 0,
+        eq_classic: equip.indexOf("classic") >= 0, eq_equipped: equip.indexOf("equipped") >= 0,
+        p_full: price(function (r) { return r.event === "full_power" && !r.age_category; }), p_bench: price(function (r) { return r.event === "bench_only" && !r.age_category; }),
+        p_sj: price(function (r) { return r.age_category === "SJ"; }),
+        openipf_required: settings.openipf_mode === "required", hold_minutes: settings.hold_minutes || 5,
+        entries_closed_manually: !!c.entries_closed_manually
+      });
+      var F = fields();
+      var form = pageForm(F, values);
+      var bar = saveBar(null, isNew ? "Add competition" : "Save changes");
+      // Each person can change only their part: editors the competition, the entries team the online entry settings.
+      F.forEach(function (f) {
+        if (!f.name || !form.controls[f.name]) return;
+        var allowed = f.owner === "comp" ? canComp() : canEntry();
+        if (!allowed) form.controls[f.name].input.disabled = true;
+      });
+      var note = null;
+      if (onlyEntry) note = "You can change the online entry settings (how entries are taken, events, prices, closing entries). The rest is looked after by the editors.";
+      else if (!canEntry()) note = "You can change the competition details. The online entry settings (how entries are taken, prices) are looked after by the entries team.";
+      var formEl = el("form", { novalidate: true }, note ? el("p", { class: "callout" }, note) : null, form.el, bar.el);
+      view.replaceChildren(formEl);
+
+      // New competition: suggest the web address from the year and name.
+      if (isNew) {
+        var slugTouched = false;
+        form.input("slug").addEventListener("input", function () { slugTouched = true; });
+        var suggest = function () { if (slugTouched) return; var d = form.get("start_date"), n = form.get("name"); form.set("slug", n ? slugify((d ? d.slice(0, 4) + " " : "") + n) : ""); };
+        form.input("name").addEventListener("input", suggest); form.input("start_date").addEventListener("change", suggest);
+      }
+
+      formEl.addEventListener("submit", function (e) {
+        e.preventDefault(); bar.clear();
+        var v = form.values();
+        var opens = windowTime(v, "open"), closes = windowTime(v, "close");
+        var problem = null;
+        if (canComp()) {
+          if (v.slug && !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(v.slug)) problem = "The web address can only use lower case letters, numbers and hyphens.";
+          else if (v.end_date && v.end_date < v.start_date) problem = "The last day cannot be before the first day.";
+          else if (opens && closes && closes <= opens) problem = "Entry must close after it opens.";
+          else if (v.method === "link" && !v.entry_url) problem = "Add the entry link, or choose another way of taking entries.";
+          else if (v.entry_url && !/^https?:\/\//i.test(v.entry_url)) problem = "The entry link must start with https://";
+          else if (v.map_url && !/^https?:\/\//i.test(v.map_url)) problem = "The map link must start with https://";
+          else if (v.openipf_url && !/^https:\/\//i.test(v.openipf_url)) problem = "The OpenIPF link must start with https://";
+          else if (v.waitlist_url && !/^https:\/\//i.test(v.waitlist_url)) problem = "The waiting list link must start with https://";
+          else if (v.lifting_order_url && !Y.sheetCsvUrl(v.lifting_order_url)) problem = "The lifting order link does not look usable. It must start with https://";
+          else if (!v.name) problem = "Name is required.";
+          else if (!v.start_date) problem = "The first day is required.";
+        }
+        if (problem) return bar.fail(problem);
+        bar.busy(true);
         var row = {
-          name: v.name, slug: v.slug, description: v.description, label: v.label,
-          start_date: v.start_date, end_date: v.end_date || null,
+          name: v.name, slug: v.slug, description: v.description, label: v.label, start_date: v.start_date, end_date: v.end_date || null,
           venue_name: v.venue_name, venue_address: v.venue_address, map_url: v.map_url, openipf_url: v.openipf_url,
-          capacity: v.capacity, entry_url: v.entry_url,
-          entry_opens: Y.fromLondonInput(v.entry_opens), entry_closes: Y.fromLondonInput(v.entry_closes),
+          capacity: v.capacity, entry_url: v.method === "link" ? v.entry_url : "",
+          entry_opens: opens ? Y.fromLondonInput(opens) : null, entry_closes: closes ? Y.fromLondonInput(closes) : null,
           entries_full: v.entries_full, waitlist_url: v.waitlist_url, lifting_order_url: v.lifting_order_url, published: v.published
         };
-        var q = isNew ? sb.from("competitions").insert(row) : sb.from("competitions").update(row).eq("id", c.id);
-        return q.then(ok).then(function () {
-          toast(isNew ? "Competition added." : "Competition saved.");
-          route();
+        var step = Promise.resolve(c.id);
+        if (canComp()) {
+          var q = isNew ? sb.from("competitions").insert(row).select("id").single() : sb.from("competitions").update(row).eq("id", c.id);
+          step = q.then(ok).then(function (d) { return isNew ? (Array.isArray(d) ? d[0] : d).id : c.id; });
+        }
+        step.then(function (id) {
+          if (!canEntry()) return id;
+          var p = {
+            entry_method: v.method === "online" ? "yne" : "external", hold_minutes: v.hold_minutes || 5, entries_closed_manually: !!v.entries_closed_manually,
+            openipf_required: !!v.openipf_required,
+            events: [v.ev_full && "full_power", v.ev_bench && "bench_only"].filter(Boolean), equipment: [v.eq_classic && "classic", v.eq_equipped && "equipped"].filter(Boolean),
+            prices: { full_power: pence(v.p_full), bench_only: pence(v.p_bench), sub_junior: pence(v.p_sj) }
+          };
+          return sb.rpc("save_entry_settings", { c: id, p: p }).then(function (r) {
+            if (r.error) { var m = (r.error.message || "").trim(); throw new Error(ENTRY_ERRORS[m] || friendly(r.error)); }
+            return id;
+          });
+        }).then(function (id) {
+          toast(isNew ? "Competition added." : "Saved.");
           if (v.lifting_order_url && v.lifting_order_url !== c.lifting_order_url) {
-            // Check the sheet really works, and say so straight away.
             Y.loadSheet(v.lifting_order_url).then(function (s) {
               var r = Y.parseLiftingOrder(s);
               toast("Lifting order read fine: " + r.lifters.length + " lifters in " + r.flightCount + " flights." +
-                (r.warnings.length ? " Check: " + r.warnings.slice(0, 3).join("; ") + (r.warnings.length > 3 ? " (and " + (r.warnings.length - 3) + " more)" : "") + "." : ""),
-                r.warnings.length ? "error" : undefined);
-            }).catch(function (e) { toast("Saved, but the lifting order could not be read: " + e.message, "error"); });
+                (r.warnings.length ? " Check: " + r.warnings.slice(0, 3).join("; ") + (r.warnings.length > 3 ? " (and " + (r.warnings.length - 3) + " more)" : "") + "." : ""), r.warnings.length ? "error" : undefined);
+            }).catch(function (er) { toast("Saved, but the lifting order could not be read: " + er.message, "error"); });
           }
-        });
-      }
-    });
-
-    // For a new competition, suggest the web address from the year and name.
-    if (isNew) {
-      var slugTouched = false;
-      api.input("slug").addEventListener("input", function () { slugTouched = true; });
-      var suggest = function () {
-        if (slugTouched) return;
-        var d = api.get("start_date"), n = api.get("name");
-        api.set("slug", n ? slugify((d ? d.slice(0, 4) + " " : "") + n) : "");
-      };
-      api.input("name").addEventListener("input", suggest);
-      api.input("start_date").addEventListener("change", suggest);
-    }
-
-    // Suggest the standard entry window from the competition date, unless the
-    // editor has typed their own times.
-    var touched = { entry_opens: !!values.entry_opens, entry_closes: !!values.entry_closes };
-    ["entry_opens", "entry_closes"].forEach(function (n) {
-      api.input(n).addEventListener("input", function () { touched[n] = true; });
-    });
-    api.input("start_date").addEventListener("change", function () {
-      var d = api.get("start_date");
-      if (!d) return;
-      if (!touched.entry_opens) api.set("entry_opens", Y.addDays(d, -56) + "T09:00");
-      if (!touched.entry_closes) api.set("entry_closes", Y.addDays(d, -21) + "T12:00");
-    });
+          if (isNew) go("#competitions/" + id); else route();
+        }).catch(function (err) { bar.busy(false); bar.fail(friendly(err)); });
+      });
+    }).catch(function (e) { view.replaceChildren(el("p", { class: "form-error" }, friendly(e))); });
   }
 
   // Other calendar events: AGMs, EGMs, referee courses... No entry, waiting list or results.
-  function editEvent(c, isNew) {
+  function renderEventForm(view, c, isNew) {
     var values = Object.assign({}, c, {
-      start_time: c.start_time ? String(c.start_time).slice(0, 5) : "",
-      end_time: c.end_time ? String(c.end_time).slice(0, 5) : "",
-      published: isNew ? true : c.published
+      start_time: c.start_time ? String(c.start_time).slice(0, 5) : "", end_time: c.end_time ? String(c.end_time).slice(0, 5) : "", published: isNew ? false : c.published
     });
+    var form = pageForm([
+      { heading: "The event" },
+      { name: "name", label: "Title", required: true, help: "For example “AGM 2027” or “Referee course”." },
+      { name: "label", label: "Tag (optional)", help: "A small label next to the title, for example “Members only”." },
+      { name: "description", label: "Description", type: "textarea", rows: 5, help: "Plain text. Start lines with “- ” for bullet points. Links look like [text](https://…)." },
+      { heading: "When and where" },
+      { name: "start_date", label: "Date", type: "date", required: true, half: true },
+      { name: "end_date", label: "Last day (if more than one day)", type: "date", half: true },
+      { name: "start_time", label: "Start time (UK time)", type: "time", half: true },
+      { name: "end_time", label: "End time (optional)", type: "time", half: true, help: "Leave blank if it is open ended or the same as the start." },
+      { name: "venue_name", label: "Location", help: "Shown on the page and linked to Google Maps. Use “Online” for a video call.", half: true },
+      { name: "venue_address", label: "Address or postcode (optional)", help: "Makes the Maps link more accurate.", half: true },
+      { name: "map_url", label: "Custom map link (optional)", type: "url", help: "Only needed if the automatic Google Maps link is wrong." },
+      { heading: "On the website" },
+      { name: "published", label: "Show on the website", type: "checkbox", help: "Untick to keep it as a draft." }
+    ], values);
+    var bar = saveBar(null, isNew ? "Add event" : "Save changes");
+    var formEl = el("form", { novalidate: true }, form.el, bar.el);
+    view.replaceChildren(formEl);
+    formEl.addEventListener("submit", function (e) {
+      e.preventDefault(); bar.clear();
+      var v = form.values(), problem = null;
+      if (!v.name) problem = "Title is required."; else if (!v.start_date) problem = "The date is required.";
+      else if (v.end_date && v.end_date < v.start_date) problem = "The last day cannot be before the first day.";
+      else if (v.end_time && !v.start_time) problem = "Add a start time as well, or clear the end time.";
+      else if (v.end_time && (!v.end_date || v.end_date === v.start_date) && v.end_time <= v.start_time) problem = "The end time must be after the start time.";
+      else if (v.map_url && !/^https?:\/\//i.test(v.map_url)) problem = "The map link must start with https://";
+      if (problem) return bar.fail(problem);
+      bar.busy(true);
+      var row = { kind: "event", name: v.name, description: v.description, label: v.label, start_date: v.start_date, end_date: v.end_date || null,
+        start_time: v.start_time || null, end_time: v.end_time || null, venue_name: v.venue_name, venue_address: v.venue_address, map_url: v.map_url, published: v.published };
+      var q = isNew ? sb.from("competitions").insert(row).select("id").single() : sb.from("competitions").update(row).eq("id", c.id);
+      q.then(ok).then(function (d) { toast(isNew ? "Event added." : "Event saved."); if (isNew) go("#competitions/" + (Array.isArray(d) ? d[0] : d).id); else route(); })
+        .catch(function (err) { bar.busy(false); bar.fail(friendly(err)); });
+    });
+  }
+
+  // ---- entries tab ------------------------------------------------------------------
+  var ENTRY_STATUS = { held: "Paying", paid: "Paid", comped: "Free", cancelled: "Cancelled", refunded: "Refunded" };
+  function renderEntriesTab(view, c) {
+    view.replaceChildren(el("p", null, "Loading…"));
+    sb.from("entries").select("*, weight_classes(label)").eq("competition_id", c.id).order("created_at", { ascending: true }).then(function (res) {
+      var rows = ok(res);
+      var live = rows.filter(function (e) { return e.status === "paid" || e.status === "comped"; });
+      var total = live.reduce(function (n, e) { return n + e.price_pence; }, 0);
+      view.replaceChildren(
+        el("div", { class: "actions", style: "margin-bottom:var(--space-3)" },
+          btn("Download CSV", function () { downloadEntries(c); }, "btn-secondary"),
+          c.entry_method === "yne" ? btn("Priority entry", function () { editPriority(c); }) : null,
+          c.slug ? el("a", { class: "btn btn-secondary", href: "../entries?c=" + encodeURIComponent(c.slug), target: "_blank", rel: "noopener" }, "Public list") : null),
+        el("p", { class: "panel-intro" }, live.length + " entered of " + (c.capacity || "?") + " places. Entry money taken: " + entryMoney(total) + "."),
+        rows.length ? el("div", { class: "table-scroll" }, el("table", { class: "admin-table" },
+          el("thead", null, el("tr", null, ["Name", "Details", "Status", "Paid"].map(function (h) { return el("th", { scope: "col" }, h); }))),
+          el("tbody", null, rows.map(function (e) {
+            return el("tr", null,
+              el("th", { scope: "row" }, e.full_name, el("small", null, e.email)),
+              el("td", null, [(e.sex === "M" ? "Men's " : "Women's ") + (e.weight_classes ? e.weight_classes.label + " kg" : ""), e.event === "bench_only" ? "Bench only" : "Full power", e.equipment].join(" · "),
+                el("small", null, [e.club, e.bp_number && "BP " + e.bp_number].filter(Boolean).join(" · "))),
+              el("td", null, ENTRY_STATUS[e.status] || e.status),
+              el("td", null, entryMoney(e.price_pence), e.paid_at ? el("small", null, new Date(e.paid_at).toLocaleString("en-GB", { timeZone: Y.TZ, dateStyle: "medium", timeStyle: "short" })) : null));
+          })))) : el("p", { class: "empty" }, "No entries yet."));
+    }).catch(function (e) { view.replaceChildren(el("p", { class: "form-error" }, friendly(e))); });
+  }
+
+  function csvCell(v) { v = v === null || v === undefined ? "" : String(v); if (/^[=+\-@\t\r]/.test(v)) v = "'" + v; return '"' + v.replace(/"/g, '""') + '"'; }
+  function downloadEntries(c) {
+    sb.from("entries").select("*, weight_classes(label)").eq("competition_id", c.id).in("status", ["paid", "comped"]).order("created_at").then(ok).then(function (rows) {
+      var head = ["Name", "Email", "BP number", "Sex", "Weight class", "Event", "Equipment", "Club", "Instagram", "Paid (GBP)", "Paid at"];
+      var lines = [head.map(csvCell).join(",")].concat(rows.map(function (e) {
+        return [e.full_name, e.email, e.bp_number, e.sex, e.weight_classes && e.weight_classes.label, e.event, e.equipment, e.club, e.instagram, (e.price_pence / 100).toFixed(2), e.paid_at].map(csvCell).join(",");
+      }));
+      var a = el("a", { href: URL.createObjectURL(new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv" })), download: (c.slug || "entries") + "-entries.csv" });
+      document.body.appendChild(a); a.click(); a.remove();
+    }).catch(function (e) { toast(friendly(e), "error"); });
+  }
+
+  // Priority entry opens one day before general entry. Each email gets a personal, single-use link. Only a
+  // fingerprint is stored, so the links are shown once, here.
+  function editPriority(c) {
     openForm({
-      title: isNew ? "Add another event" : "Edit event",
-      values: values,
-      saveLabel: isNew ? "Add event" : "Save changes",
-      fields: [
-        { name: "name", label: "Title", required: true, help: "For example “AGM 2027” or “Referee course”." },
-        { name: "label", label: "Tag (optional)", help: "A small label next to the title, for example “Members only”." },
-        { name: "description", label: "Description", type: "textarea", rows: 5, help: "Plain text. Start lines with “- ” for bullet points. Links look like [text](https://…)." },
-        { name: "start_date", label: "Date", type: "date", required: true, half: true },
-        { name: "end_date", label: "Last day (if more than one day)", type: "date", half: true },
-        { name: "start_time", label: "Start time (UK time)", type: "time", half: true },
-        { name: "end_time", label: "End time (optional)", type: "time", half: true, help: "Leave blank if it is open ended or the same as the start." },
-        { name: "venue_name", label: "Location", help: "Shown on the page and linked to Google Maps. Use “Online” for a video call.", half: true },
-        { name: "venue_address", label: "Address or postcode (optional)", help: "Makes the Maps link more accurate.", half: true },
-        { name: "map_url", label: "Custom map link (optional)", type: "url", help: "Only needed if the automatic Google Maps link is wrong." },
-        { name: "published", label: "Show on the website", type: "checkbox", help: "Untick to keep it as a draft." }
-      ],
-      validate: function (v) {
-        if (v.end_date && v.end_date < v.start_date) return "The last day cannot be before the first day.";
-        if (v.end_time && !v.start_time) return "Add a start time as well, or clear the end time.";
-        if (v.end_time && (!v.end_date || v.end_date === v.start_date) && v.end_time <= v.start_time) return "The end time must be after the start time.";
-        if (v.map_url && !/^https?:\/\//i.test(v.map_url)) return "The map link must start with https://";
-        return null;
-      },
+      title: "Priority entry: " + c.name, saveLabel: "Make links",
+      intro: "Priority entry opens one day before general entry" + (c.entry_opens ? " (" + whenText(Y.toLondonInput(new Date(new Date(c.entry_opens).getTime() - 86400000).toISOString())) + ")" : " (set the opening time first)") + ". Enter one email address per line. Each person gets a personal link that only works with their own email address. Making a new link for someone replaces their old unused one.",
+      fields: [{ name: "emails", label: "Email addresses (one per line)", type: "textarea", required: true }],
       onSave: function (v) {
-        var row = {
-          kind: "event", name: v.name, description: v.description, label: v.label,
-          start_date: v.start_date, end_date: v.end_date || null,
-          start_time: v.start_time || null, end_time: v.end_time || null,
-          venue_name: v.venue_name, venue_address: v.venue_address, map_url: v.map_url, published: v.published
-        };
-        var q = isNew ? sb.from("competitions").insert(row) : sb.from("competitions").update(row).eq("id", c.id);
-        return q.then(ok).then(function () { toast(isNew ? "Event added." : "Event saved."); route(); });
+        var list = v.emails.split(/[\s,;]+/).filter(Boolean);
+        if (!list.length) return Promise.reject(new Error("Enter at least one email address."));
+        return sb.rpc("create_priority_invites", { c: c.id, emails: list }).then(function (r) {
+          if (r.error) { var m = (r.error.message || "").trim(); throw new Error(/^invalid:email/.test(m) ? "That does not look like an email address: " + m.replace(/^invalid:email:/, "") : friendly(r.error)); }
+          setTimeout(function () { showPriorityLinks(c, r.data); }, 80);
+        });
       }
+    });
+  }
+  function showPriorityLinks(c, rows) {
+    var text = rows.map(function (r) { return r.email + "  " + location.origin + "/enter?c=" + c.slug + "&invite=" + r.token; }).join("\n");
+    openForm({
+      title: "Priority links", saveLabel: "Done", values: { links: text },
+      intro: "Copy these now. They cannot be shown again. Send each person only their own link.",
+      fields: [{ name: "links", label: "One link per person", type: "textarea", rows: Math.min(14, rows.length + 2) }],
+      onSave: function () { return Promise.resolve(); }
     });
   }
 
@@ -1244,172 +1475,12 @@
   }
 
   // ---- shell, routing, auth ---------------------------------------------------------
-  // ---- entries (phase 1A): settings per competition, and a basic list --------------
-  // Who sees what: the entries team and admins run entries; editors and contributors never see this tab.
-  var ENTRY_ERRORS = {
-    "invalid:events": "Choose at least one event.", "invalid:equipment": "Choose at least one kind of equipment.",
-    "invalid:hold_minutes": "The hold must be between 5 and 30 minutes.",
-    "invalid:price_full_power": "Set a full power price of more than £0.", "invalid:price_bench_only": "Set a bench only price of more than £0.",
-    "invalid:price_sub_junior": "The sub-junior price must be more than £0, or left empty.", "invalid:capacity": "Set the number of places first, under Edit on the Calendar tab.",
-    forbidden: "You do not have permission to change entry settings."
-  };
-  function pence(v) { return v === null || v === "" || v === undefined ? null : Math.round(Number(v) * 100); }
-  function poundsInput(p) { return p === null || p === undefined ? "" : (p / 100).toFixed(2); }
-  function entryMoney(p) { return "£" + (p / 100).toFixed(p % 100 ? 2 : 0); }
-
-  function renderEntries(panel) {
-    panel.replaceChildren(panelHead("Entries"),
-      el("p", { class: "panel-intro" }, "Set up online entry for a competition, then watch the entries come in. Entries are taken on the website and paid for by card. While you are testing, use Stripe test cards and name the competition TEST."),
-      el("p", null, "Loading…"));
-    Promise.all([
-      sb.from("competitions").select("id,name,start_date,end_date,capacity,slug,published,entry_method,entries_closed_manually,kind").order("start_date", { ascending: false }),
-      sb.from("entries").select("competition_id,status,hold_expires_at")
-    ]).then(function (res) {
-      var comps = ok(res[0]).filter(function (c) { return c.kind !== "event"; }), entries = ok(res[1]), now = Date.now();
-      function count(c) {
-        return entries.filter(function (e) { return e.competition_id === c.id && (e.status === "paid" || e.status === "comped" || (e.status === "held" && new Date(e.hold_expires_at) > now)); }).length;
-      }
-      panel.lastChild.remove();
-      panel.appendChild(comps.length ? el("div", { class: "table-scroll" }, el("table", { class: "admin-table" },
-        el("thead", null, el("tr", null, ["Competition", "Entry", "Places", "Actions"].map(function (h) { return el("th", { scope: "col" }, h); }))),
-        el("tbody", null, comps.map(function (c) {
-          var online = c.entry_method === "yne";
-          return el("tr", null,
-            el("th", { scope: "row" }, c.name, !c.published ? [" ", el("span", { class: "tag tag-position" }, "Draft")] : null, el("small", null, Y.dateRange(c.start_date, c.end_date))),
-            el("td", null, online ? (c.entries_closed_manually ? "Online (closed by hand)" : "Online") : "Not set up", online && c.slug ? el("small", null, "enter?c=" + c.slug) : null),
-            el("td", null, online ? count(c) + " of " + (c.capacity || "?") : "—"),
-            el("td", null, el("span", { class: "actions" },
-              btn("Entry settings", function () { editEntrySettings(c); }),
-              online ? btn("Priority entry", function () { editPriority(c); }) : null,
-              online ? btn("View entries", function () { viewEntries(c, panel); }, "btn-primary") : null)));
-        })))) : el("p", { class: "empty" }, "No competitions yet. Add one on the Calendar tab first."));
-    }).catch(function (e) { panel.lastChild.textContent = friendly(e); });
-  }
-
-  function editEntrySettings(c) {
-    Promise.all([
-      sb.from("entry_settings").select("*").eq("competition_id", c.id).maybeSingle(),
-      sb.from("price_rules").select("*").eq("competition_id", c.id)
-    ]).then(function (res) {
-      var s = ok(res[0]) || {}, rules = ok(res[1]) || [];
-      function price(match) { var r = rules.filter(match)[0]; return r ? poundsInput(r.price_pence) : ""; }
-      var events = s.events || ["full_power", "bench_only"], equip = s.equipment || ["classic", "equipped"];
-      openForm({
-        title: "Entry settings: " + c.name, saveLabel: "Save entry settings",
-        intro: "Places, and when entry opens and closes, are set once, under Edit on the Calendar tab. Currently: " + (c.capacity ? c.capacity + " places" : "no places set") + "; " + (Y.entryLine(c) || "no opening or closing time set") + ".",
-        values: {
-          entry_method: c.entry_method === "yne" ? "yne" : "external", entries_closed_manually: !!c.entries_closed_manually,
-          hold_minutes: s.hold_minutes || 5, openipf_required: s.openipf_mode === "required",
-          ev_full: events.indexOf("full_power") >= 0, ev_bench: events.indexOf("bench_only") >= 0,
-          eq_classic: equip.indexOf("classic") >= 0, eq_equipped: equip.indexOf("equipped") >= 0,
-          p_full: price(function (r) { return r.event === "full_power" && !r.age_category; }),
-          p_bench: price(function (r) { return r.event === "bench_only" && !r.age_category; }),
-          p_sj: price(function (r) { return r.age_category === "SJ"; })
-        },
-        fields: [
-          { name: "entry_method", label: "How are entries taken?", type: "select", options: [{ value: "external", label: "Not on this website (use the entry link on the calendar)" }, { value: "yne", label: "Online on this website, paid by card" }] },
-          { name: "hold_minutes", label: "Minutes a place is held while paying", type: "number", min: "5", help: "Between 5 and 30. A short hold stops places being parked." },
-          { name: "openipf_required", label: "Entry needs a qualifying total (the OpenIPF link becomes mandatory)", type: "checkbox" },
-          { name: "ev_full", label: "Offer full power", type: "checkbox", half: true },
-          { name: "ev_bench", label: "Offer bench only", type: "checkbox", half: true },
-          { name: "eq_classic", label: "Offer classic", type: "checkbox", half: true },
-          { name: "eq_equipped", label: "Offer equipped", type: "checkbox", half: true },
-          { name: "p_full", label: "Full power price (£)", type: "number", min: "0", half: true },
-          { name: "p_bench", label: "Bench only price (£)", type: "number", min: "0", half: true },
-          { name: "p_sj", label: "Sub-junior price, any event (£, optional)", type: "number", min: "0", help: "If set, sub-juniors pay this whatever they lift." },
-          { name: "entries_closed_manually", label: "Close entries now", type: "checkbox", help: "Stops new entries straight away. Untick to reopen." }
-        ],
-        onSave: function (v) {
-          var o = {
-            entry_method: v.entry_method, hold_minutes: v.hold_minutes || 5, openipf_required: v.openipf_required, entries_closed_manually: v.entries_closed_manually,
-            events: [v.ev_full && "full_power", v.ev_bench && "bench_only"].filter(Boolean),
-            equipment: [v.eq_classic && "classic", v.eq_equipped && "equipped"].filter(Boolean),
-            prices: { full_power: pence(v.p_full), bench_only: pence(v.p_bench), sub_junior: pence(v.p_sj) }
-          };
-          return sb.rpc("save_entry_settings", { c: c.id, p: o }).then(function (r) {
-            if (r.error) { var m = (r.error.message || "").trim(); throw new Error(ENTRY_ERRORS[m] || friendly(r.error)); }
-            toast("Entry settings saved."); route();
-          });
-        }
-      });
-    }).catch(function (e) { toast(friendly(e), "error"); });
-  }
-
-  // Priority entry opens one day before general entry. Each email gets a personal, single-use link. Only a
-  // fingerprint is stored, so the links are shown once, here.
-  function editPriority(c) {
-    var made = null;
-    openForm({
-      title: "Priority entry: " + c.name, saveLabel: "Make links",
-      intro: "Priority entry opens one day before general entry (" + (c.entry_opens ? Y.entryLine(c).replace(/ and closes.*/, "") : "set the opening time on the Calendar first") + "). Enter one email address per line. Each person gets a personal link that only works with their own email address. Making a new link for someone replaces their old unused one.",
-      fields: [{ name: "emails", label: "Email addresses (one per line)", type: "textarea", required: true }],
-      onSave: function (v) {
-        var list = v.emails.split(/[\s,;]+/).filter(Boolean);
-        if (!list.length) return Promise.reject(new Error("Enter at least one email address."));
-        return sb.rpc("create_priority_invites", { c: c.id, emails: list }).then(function (r) {
-          if (r.error) { var m = (r.error.message || "").trim(); throw new Error(/^invalid:email/.test(m) ? "That does not look like an email address: " + m.replace(/^invalid:email:/, "") : friendly(r.error)); }
-          made = r.data;
-          setTimeout(function () { showPriorityLinks(c, made); }, 80);
-        });
-      }
-    });
-  }
-  function showPriorityLinks(c, rows) {
-    var text = rows.map(function (r) { return r.email + "  " + location.origin + "/enter?c=" + c.slug + "&invite=" + r.token; }).join("\n");
-    openForm({
-      title: "Priority links", saveLabel: "Done", values: { links: text },
-      intro: "Copy these now. They cannot be shown again. Send each person only their own link.",
-      fields: [{ name: "links", label: "One link per person", type: "textarea", rows: Math.min(14, rows.length + 2) }],
-      onSave: function () { return Promise.resolve(); }
-    });
-  }
-
-  var ENTRY_STATUS = { held: "Paying", paid: "Paid", comped: "Free", cancelled: "Cancelled", refunded: "Refunded" };
-  function viewEntries(c, panel) {
-    var view = el("div");
-    panel.replaceChildren(view);
-    view.appendChild(panelHead(c.name + ": entries", el("span", { class: "actions" },
-      btn("Back to competitions", function () { route(); }),
-      btn("Download CSV", function () { downloadEntries(c); }, "btn-secondary"))));
-    view.appendChild(el("p", null, "Loading…"));
-    sb.from("entries").select("*, weight_classes(label)").eq("competition_id", c.id).order("created_at", { ascending: true }).then(function (res) {
-      var rows = ok(res);
-      view.lastChild.remove();
-      var live = rows.filter(function (e) { return e.status === "paid" || e.status === "comped"; });
-      var total = live.reduce(function (n, e) { return n + e.price_pence; }, 0);
-      view.appendChild(el("p", { class: "panel-intro" }, live.length + " entered of " + (c.capacity || "?") + " places. Entry money taken: " + entryMoney(total) + "."));
-      view.appendChild(rows.length ? el("div", { class: "table-scroll" }, el("table", { class: "admin-table" },
-        el("thead", null, el("tr", null, ["Name", "Details", "Status", "Paid"].map(function (h) { return el("th", { scope: "col" }, h); }))),
-        el("tbody", null, rows.map(function (e) {
-          return el("tr", null,
-            el("th", { scope: "row" }, e.full_name, el("small", null, e.email)),
-            el("td", null, [(e.sex === "M" ? "Men's " : "Women's ") + (e.weight_classes ? e.weight_classes.label + " kg" : ""), e.event === "bench_only" ? "Bench only" : "Full power", e.equipment].join(" · "),
-              el("small", null, [e.club, e.bp_number && "BP " + e.bp_number].filter(Boolean).join(" · "))),
-            el("td", null, ENTRY_STATUS[e.status] || e.status),
-            el("td", null, entryMoney(e.price_pence), e.paid_at ? el("small", null, new Date(e.paid_at).toLocaleString("en-GB", { timeZone: Y.TZ, dateStyle: "medium", timeStyle: "short" })) : null));
-        })))) : el("p", { class: "empty" }, "No entries yet."));
-    }).catch(function (e) { view.lastChild.textContent = friendly(e); });
-  }
-
-  function csvCell(v) { v = v === null || v === undefined ? "" : String(v); if (/^[=+\-@\t\r]/.test(v)) v = "'" + v; return '"' + v.replace(/"/g, '""') + '"'; }
-  function downloadEntries(c) {
-    sb.from("entries").select("*, weight_classes(label)").eq("competition_id", c.id).in("status", ["paid", "comped"]).order("created_at").then(ok).then(function (rows) {
-      var head = ["Name", "Email", "BP number", "Sex", "Weight class", "Event", "Equipment", "Club", "Instagram", "Paid (GBP)", "Paid at"];
-      var lines = [head.map(csvCell).join(",")].concat(rows.map(function (e) {
-        return [e.full_name, e.email, e.bp_number, e.sex, e.weight_classes && e.weight_classes.label, e.event, e.equipment, e.club, e.instagram, (e.price_pence / 100).toFixed(2), e.paid_at].map(csvCell).join(",");
-      }));
-      var a = el("a", { href: URL.createObjectURL(new Blob(["\ufeff" + lines.join("\r\n")], { type: "text/csv" })), download: (c.slug || "entries") + "-entries.csv" });
-      document.body.appendChild(a); a.click(); a.remove();
-    }).catch(function (e) { toast(friendly(e), "error"); });
-  }
-
   function panelHead(title, action) {
     return el("div", { class: "panel-head" }, el("h1", null, title), action || null);
   }
 
   var TABS = {
     competitions: renderCompetitions,
-    entries: renderEntries,
     news: renderNews,
     home: renderHome,
     organisation: function (p) { renderGrouped(p, ORG); },
@@ -1422,14 +1493,15 @@
 
   // Which roles see which tab. contributor: news only. entries: the entries desk. editor: site content.
   var TAB_ROLES = {
-    competitions: ["admin", "editor"], entries: ["admin", "entries"], news: ["admin", "editor", "contributor"], home: ["admin", "editor"],
+    competitions: ["admin", "editor", "entries"], news: ["admin", "editor", "contributor"], home: ["admin", "editor"],
     organisation: ["admin", "editor"], records: ["admin", "editor"], faqs: ["admin", "editor"], footer: ["admin", "editor"], users: ["admin"],
     account: ["admin", "entries", "editor", "contributor"]
   };
   function canSee(tab) { return (TAB_ROLES[tab] || []).indexOf(state.role) >= 0; }
   function route() {
-    var tab = (location.hash || "").replace("#", "");
-    if (!TABS[tab] || !canSee(tab)) tab = state.role === "entries" ? "entries" : state.role === "contributor" ? "news" : "competitions";
+    var parts = (location.hash || "").replace("#", "").split("/");
+    var tab = parts[0];
+    if (!TABS[tab] || !canSee(tab)) { tab = state.role === "contributor" ? "news" : "competitions"; parts = [tab]; }
     Array.prototype.forEach.call(document.querySelectorAll(".admin-tabs a"), function (a) {
       if (a.getAttribute("data-tab") === tab) a.setAttribute("aria-current", "page");
       else a.removeAttribute("aria-current");
@@ -1439,7 +1511,7 @@
     // surface that is no longer on the page, so sections can never appear twice.
     var view = el("div");
     $("panel").replaceChildren(view);
-    TABS[tab](view);
+    TABS[tab](view, parts.slice(1));
   }
   window.addEventListener("hashchange", function () { if (state.user && state.role) route(); });
 
