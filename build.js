@@ -51,6 +51,8 @@ const pages = [
   "chairperson.html",
   "rules.html",
   "contact.html",
+  "enter.html",
+  "entry-thanks.html",
   "glp-calculator.html",
   "rules/the-lifts.html",
   "rules/categories.html",

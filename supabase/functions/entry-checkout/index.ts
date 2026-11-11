@@ -50,7 +50,7 @@ export function sessionParams(o: { entryId: string; email: string; name: string;
     mode: "payment",
     customer_email: o.email,
     client_reference_id: o.entryId,
-    return_url: `${o.siteUrl}/entry/thanks?session_id={CHECKOUT_SESSION_ID}`,
+    return_url: `${o.siteUrl}/entry-thanks?session_id={CHECKOUT_SESSION_ID}`,
     expires_at: o.expiresAt,
     "line_items[0][quantity]": 1,
     "line_items[0][price_data][currency]": "gbp",

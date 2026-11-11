@@ -646,7 +646,7 @@ declare t text;
 begin
   -- Settings that the public competition page needs to read: public read, admins and the entries team write.
   foreach t in array array['entry_settings', 'entry_stages', 'price_rules', 'addons', 'addon_options', 'addon_images',
-                           'qualifying_totals', 'weight_classes', 'divisions', 'payees', 'hosts', 'volunteer_roles'] loop
+                           'qualifying_totals', 'weight_classes', 'divisions', 'volunteer_roles'] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('drop policy if exists "public read" on public.%I', t);
     execute format('create policy "public read" on public.%I for select to anon, authenticated using (true)', t);
@@ -654,7 +654,8 @@ begin
     execute format('create policy "entries write" on public.%I for all to authenticated using (public.is_entries()) with check (public.is_entries())', t);
   end loop;
   -- Everything about people and money: the entries team only (admins included).
-  foreach t in array array['entries', 'entry_private', 'entry_addons', 'payments', 'refunds', 'stripe_events', 'waiting_list', 'offers',
+  -- payees and hosts are here because they hold contact emails and our commercial split.
+  foreach t in array array['payees', 'hosts', 'entries', 'entry_private', 'entry_addons', 'payments', 'refunds', 'stripe_events', 'waiting_list', 'offers',
                            'invites', 'email_log', 'payout_rules', 'payouts', 'lifting_orders', 'lo_sessions', 'lo_flights',
                            'lo_assignments', 'competition_redirects', 'rota_slots', 'rota_signups', 'points_ledger'] loop
     execute format('alter table public.%I enable row level security', t);
@@ -835,3 +836,11 @@ do $$ begin
     grant execute on function public.confirm_entry_payment(uuid) to service_role;
   end if;
 end $$;
+
+-- Weight classes (IPF). Men's 53 and women's 43 are the sub-junior and junior classes. Admins can change these.
+insert into public.weight_classes (sex, label, upper_kg, sort_order, min_age_category) values
+  ('M', '53', 53, 1, 'SJ'), ('M', '59', 59, 2, ''), ('M', '66', 66, 3, ''), ('M', '74', 74, 4, ''), ('M', '83', 83, 5, ''),
+  ('M', '93', 93, 6, ''), ('M', '105', 105, 7, ''), ('M', '120', 120, 8, ''), ('M', '120+', null, 9, ''),
+  ('F', '43', 43, 1, 'SJ'), ('F', '47', 47, 2, ''), ('F', '52', 52, 3, ''), ('F', '57', 57, 4, ''), ('F', '63', 63, 5, ''),
+  ('F', '69', 69, 6, ''), ('F', '76', 76, 7, ''), ('F', '84', 84, 8, ''), ('F', '84+', null, 9, '')
+on conflict (sex, label) do nothing;
