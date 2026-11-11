@@ -83,25 +83,68 @@
 
   <main id="main">
     <div class="container">
-      <div class="success-panel confirm-panel">
-        <h1>You&rsquo;re in</h1>
-        <p>See you on the platform.</p>
-      </div>
 
-      <p>Your payment has gone through and your entry is confirmed. A confirmation email is on its way and should reach you within a few minutes. If it has not arrived, check your junk folder, or <a href="contact.html">contact the entries team</a>.</p>
+      <!-- Shown while we check the payment -->
+      <section id="state-pending" aria-live="polite">
+        <div class="confirm-panel is-neutral">
+          <h1>Confirming your payment</h1>
+          <p>This only takes a moment.</p>
+        </div>
+      </section>
 
-      <div class="event-actions" style="margin-bottom:var(--space-7)">
-        <a class="btn btn-secondary" id="view-entries" href="calendar.html" hidden>View entries</a>
-        <a class="btn btn-ghost" href="calendar.html">Back to the calendar</a>
-      </div>
+      <!-- The payment is confirmed -->
+      <section id="state-paid" hidden>
+        <div class="success-panel confirm-panel">
+          <h1>You&rsquo;re in</h1>
+          <p>Your entry has been confirmed. See you on the platform.</p>
+        </div>
 
-      <h2>What happens next</h2>
-      <ol class="steps">
-        <li>You will receive a confirmation email with the details of your entry.</li>
-        <li>Your name will appear on the entries list, which anyone can look at.</li>
-        <li>Our team will be hard at work putting together the lifting order. You will get an email once it is ready.</li>
-        <li>If you need to withdraw, email <a href="mailto:ynepfentries@gmail.com?subject=Withdrawing%20my%20entry">ynepfentries@gmail.com</a>.</li>
-      </ol>
+        <p>Your payment has gone through and it&rsquo;s confirmed. A confirmation email is on its way and should reach you within a few minutes. If it has not arrived, check your junk folder, or <a href="contact.html">contact the entries team</a>.</p>
+
+        <div class="event-actions" style="margin-bottom:var(--space-7)">
+          <a class="btn btn-secondary" id="view-entries" href="calendar.html" hidden>View entries</a>
+          <a class="btn btn-ghost" href="calendar.html">Back to the calendar</a>
+        </div>
+
+        <h2>What happens next</h2>
+        <ol class="steps">
+          <li>You will receive a confirmation email with the details of your entry.</li>
+          <li>Your name will appear on the entries list, which anyone can look at.</li>
+          <li>Our team will be hard at work putting together the lifting order. You will get an email once it is ready.</li>
+          <li>If you need to withdraw, email <a href="mailto:ynepfentries@gmail.com?subject=Withdrawing%20my%20entry">ynepfentries@gmail.com</a>.</li>
+        </ol>
+      </section>
+
+      <!-- It is taking longer than usual -->
+      <section id="state-slow" hidden>
+        <div class="confirm-panel is-neutral">
+          <h1>Still confirming</h1>
+          <p>Your payment is taking longer than usual to confirm.</p>
+        </div>
+        <p>You do not need to pay again. We will email you as soon as it goes through. If you have not heard from us within the hour, please <a href="contact.html">contact the entries team</a> and tell them the email address you entered with.</p>
+        <div class="event-actions"><a class="btn btn-ghost" href="calendar.html">Back to the calendar</a></div>
+      </section>
+
+      <!-- This page was opened without a payment, or the payment cannot be found -->
+      <section id="state-unknown" hidden>
+        <div class="confirm-panel is-neutral">
+          <h1>We could not find that payment</h1>
+          <p>There is nothing to confirm on this page.</p>
+        </div>
+        <p>If you have just paid, you will get a confirmation email shortly. If you are not sure whether your entry went through, please <a href="contact.html">contact the entries team</a>.</p>
+        <div class="event-actions"><a class="btn btn-ghost" href="calendar.html">Back to the calendar</a></div>
+      </section>
+
+      <!-- The payment was refunded -->
+      <section id="state-refunded" hidden>
+        <div class="confirm-panel is-neutral">
+          <h1>This entry has been refunded</h1>
+          <p>Your payment was returned in full.</p>
+        </div>
+        <p>It can take a few days to reach your account. If you did not expect this, please <a href="contact.html">contact the entries team</a>.</p>
+        <div class="event-actions"><a class="btn btn-ghost" href="calendar.html">Back to the calendar</a></div>
+      </section>
+
     </div>
   </main>
 

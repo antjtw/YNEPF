@@ -685,8 +685,13 @@ table.lifters thead th { overflow-wrap: normal; }
 .form-touch .field-check input:checked::before, .form-touch .field-check input:checked::after { opacity: 1; }
 .form-touch .field-check input:hover { border-color: var(--accent-ink); }
 .form-touch .field-check input:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; box-shadow: 0 0 0 3px var(--focus-text); }
-.form-touch .field-check label { display: block; min-height: 2.75rem; padding: 0.6rem 0; margin: 0; cursor: pointer; }
+.form-touch .field-check label { display: block; margin: 0; cursor: pointer; padding: 0.5rem 0 0.1rem; }
+.form-touch .field-check label:only-child { min-height: 2.75rem; padding: 0.6rem 0; }     /* no hint under it: the whole row is a 44px target */
+.form-touch .field-check label + .help { margin-top: 0; }
 .form-touch .field-check input[type="checkbox"], .form-touch .field-check input[type="radio"] { margin-top: 0.125rem; }
-.form-touch .field-check .help { margin: 0 0 0.35rem; }
+.form-touch .field-check .help { margin: 0 0 0.5rem; }
 .form-touch .field.has-error .field-check input { border-color: var(--error-border); border-width: 3px; }
 .form-touch .form-actions { display: flex; gap: var(--space-3); flex-wrap: wrap; margin-top: 2.5rem; }
+.confirm-panel.is-neutral { background: var(--navy-50); color: var(--text-heading); }
+.confirm-panel.is-neutral h1 { color: var(--text-heading); }
+.confirm-panel.is-neutral p { color: var(--text-default); }

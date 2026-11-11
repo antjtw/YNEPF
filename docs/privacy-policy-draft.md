@@ -48,9 +48,7 @@ We do not sell your information. [Confirm where each service stores data and whe
 
 **Lifters under 18.** If you are under 18 on the day of the competition we also ask for a parent or guardian's name, phone number and email address, and their consent. A parent or guardian must be with you on the day.
 
-**Access needs.** We ask everyone whether they have access needs, with a tick-box. We do not ask for any details on the form. If you tick it, we keep that you ticked it and contact you by email to see how we can best support you. Only the entries team can see this, and we delete it [30 days after the competition].
-
-**Why we use it.** To run your entry, take payment, contact you, build the lifting order and run a safe competition. Parent or guardian details are used because we need a responsible adult to be reachable. Whether you have access needs is used only so we can contact you and help on the day.
+**Why we use it.** To run your entry, take payment, contact you, build the lifting order and run a safe competition. Parent or guardian details are used because we need a responsible adult to be reachable.
 
 **What is public.** Your name, club and weight class appear on the entries list and the lifting order. Your date of birth, email address and any access needs are never published.
 
@@ -58,7 +56,7 @@ We do not sell your information. [Confirm where each service stores data and whe
 
 **How long we keep it.**
 - Entry and payment records: [6 years], because we need them for our accounts.
-- Parent or guardian details, and whether you have access needs: [30 days after the competition], then they are deleted.
+- Parent or guardian details: [30 days after the competition], then they are deleted.
 - Emails we sent you about your entry: [12 months].
 
 **Who else handles it.** Stripe (payments), Resend (emails), Supabase (our database, [region to be confirmed, expected West EU]), Vercel (the website), and White Lights Media (see above). [Confirm where each stores data.]

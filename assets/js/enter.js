@@ -19,7 +19,7 @@
   var EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
   var EVENT_NAMES = { full_power: "Full power", bench_only: "Bench only" };
   var EVENT_HINTS = { full_power: "Squat, bench press and deadlift.", bench_only: "Bench press only." };
-  var EQUIP_NAMES = { classic: "Classic (raw)", equipped: "Equipped" };
+  var EQUIP_NAMES = { classic: "Classic", equipped: "Equipped" };
   var EQUIP_HINTS = { classic: "Knee sleeves, wrist wraps and a belt, competing in a singlet.", equipped: "Supportive equipment such as knee wraps, a squat suit, a bench shirt and a deadlift suit." };
   var PHOTO_NAMES = { yes: "I consent", no: "I do not consent", never: "I do not wish to be photographed or filmed at all" };
 
@@ -71,7 +71,6 @@
   }
   function guestBlocked() { var t = guestOpensAt(); return !!t && t > new Date(); }
   function whenText(d) { return d.toLocaleString("en-GB", { timeZone: Y.TZ, dateStyle: "full", timeStyle: "short" }); }
-  function pickClub() { var d = division(); return !!d && (d.kind === "home" || d.kind === "english"); }   // English divisions pick from the approved list
   // Classes this lifter may enter: men's 53 and women's 43 are for sub-juniors only (the database checks this too).
   function allowedClasses() {
     var iso = dobISO(), cat = iso ? ageCategory(+iso.slice(0, 4), +ctx.comp.start_date.slice(0, 4)) : null;
@@ -158,12 +157,12 @@
       el("label", { for: "division_id" }, "Which federation or division are you part of?"),
       el("p", { class: "help", id: "division_id-help" }, "Choose the one you are registered with. If it is not the Yorkshire & North East division, you enter as a guest."),
       el("p", { class: "field-error", id: "division_id-error", hidden: true }),
-      el("select", { id: "division_id", name: "division_id", "aria-describedby": "division_id-help", onchange: function (e) { v.division_id = e.target.value; v.club = ""; render(true); } },
+      el("select", { id: "division_id", name: "division_id", "aria-describedby": "division_id-help", onchange: function (e) { v.division_id = e.target.value; render(true); } },
         el("option", { value: "" }, "Choose your federation or division"),
         ctx.divisions.map(function (d) { return el("option", { value: d.id, selected: v.division_id === d.id }, d.name); })));
   }
   function clubField() {
-    if (!pickClub()) return null;      // outside the English divisions there is no club question
+    if (!ctx.clubs.length) return null;      // nothing to choose from until the club list has been imported
     return el("div", { class: "field", "data-field": "club" },
       el("label", { for: "club" }, "Club (optional)"),
       el("p", { class: "help", id: "club-help" }, "Select your club from the list of English Powerlifting Association (EPA) approved clubs."),
@@ -180,9 +179,8 @@
       text("email", "Email address", { type: "email", autocomplete: "email", max: 254, help: "We send your confirmation here." }),
       dobField(),
       el("p", { class: "callout", id: "cat-note", role: "status", hidden: myCategory() === null }, catNote()),
-      radios("sex", "Which category are you entering?", [["M", "Men's"], ["F", "Women's"]]),
-      check("eligibility_confirmed", "The category I am entering matches my sex at birth",
-        "If it does not, please email the entries team before entering and we will talk it through privately."),
+      radios("sex", "Which category are you entering?", [["M", "Men's"], ["F", "Women's"]],
+        ["This should usually match your sex at birth. If you are a transgender athlete, please ", el("a", { href: "contact.html", target: "_blank", rel: "noopener" }, "contact us", el("span", { class: "visually-hidden" }, " (opens in a new tab)")), " before you enter and we will talk it through."]),
       divisionField(),
       guestBlocked() ? el("p", { class: "callout", role: "status" }, "Entries from outside the Yorkshire & North East division open to guests on ", el("strong", null, whenText(guestOpensAt())), ". Please come back then. Members of the division can enter now.") : null,
       clubField(),
@@ -195,7 +193,6 @@
         text("guardian_phone", "Their phone number", { type: "tel", max: 30, autocomplete: "tel" }),
         text("guardian_email", "Their email address", { type: "email", max: 254 }),
         check("guardian_consent", "I am the parent or guardian, or I have their permission, and I consent to this entry and to photos being taken")) : null,
-      check("access_needs", "I have access needs", "Will you require any assistance on competition day? If so, tick this box and we will be in touch by email to see how we can best support you."),
       radios("photo_choice", "Do you consent to photos or videos of you being used in YNEPF promotional material?",
         [["yes", PHOTO_NAMES.yes], ["no", PHOTO_NAMES.no], ["never", PHOTO_NAMES.never]])
     ];
@@ -236,10 +233,10 @@
       row("Category", (v.sex === "M" ? "Men's" : "Women's") + (myCategory() !== null ? ", " + CAT_SHORT[myCategory()] : ""), 1),
       row("Federation or division", d ? d.name + (d.is_home ? "" : " (guest)") : "", 1)
     ];
-    if (pickClub()) rows.push(row("Club", v.club, 1));
+    if (ctx.clubs.length) rows.push(row("Club", v.club, 1));
     rows.push(row("Membership number", v.bp_number, 1), row("Instagram handle", trim(v.instagram) ? "@" + trim(v.instagram).replace(/^@/, "") : "", 1));
     if (age !== null && age < 18) rows.push(row("Parent or guardian", trim(v.guardian_name), 1));
-    rows.push(row("Access needs", v.access_needs ? "Yes, we will be in touch by email" : "No", 1), row("Photos and videos", PHOTO_NAMES[v.photo_choice], 1),
+    rows.push(row("Photos and videos", PHOTO_NAMES[v.photo_choice], 1),
       row("Event", EVENT_NAMES[v.event], 2), row("Equipment", EQUIP_NAMES[v.equipment], 2), row("Weight class", cls ? cls.label + " kg" : "", 2));
     if (trim(v.openipf_url)) rows.push(row("OpenIPF profile", trim(v.openipf_url), 2));
     return [
@@ -266,7 +263,6 @@
       else { var age = ageOnDay(); if (age < 14 && ageCategory(+iso.slice(0, 4), +ctx.comp.start_date.slice(0, 4)) === "under14") e.push(["dob", "Lifters must be at least 14 in the year of the competition"]); }
       if (!v.sex) e.push(["sex", "Choose men's or women's"]);
       if (!trim(v.bp_number)) e.push(["bp_number", "Enter your British Powerlifting membership number from your Sport80 profile, or TBC if you do not have it yet"]);
-      if (!v.eligibility_confirmed) e.push(["eligibility_confirmed", "Confirm the category you are entering matches your sex at birth. If it does not, please email the entries team before entering."]);
       if (!v.division_id) e.push(["division_id", "Choose the federation or division you are part of"]);
       else if (guestBlocked()) e.push(["division_id", "Entries from outside the Yorkshire & North East division open on " + whenText(guestOpensAt())]);
       if (iso && ageOnDay() < 18) {
@@ -290,10 +286,9 @@
   // ---- payment ---------------------------------------------------------------------------------
   function payload() {
     var o = { competition_id: ctx.comp.id, email: trim(v.email), full_name: trim(v.full_name), date_of_birth: dobISO(), sex: v.sex,
-      bp_number: trim(v.bp_number), club: pickClub() ? trim(v.club) : "", division_id: v.division_id, instagram: trim(v.instagram).replace(/^@/, ""), event: v.event, equipment: v.equipment,
+      bp_number: trim(v.bp_number), club: trim(v.club), division_id: v.division_id, instagram: trim(v.instagram).replace(/^@/, ""), event: v.event, equipment: v.equipment,
       weight_class_id: v.weight_class_id, openipf_url: trim(v.openipf_url),
-      photo_ok: v.photo_choice === "yes", photo_opt_out: v.photo_choice === "never", eligibility_confirmed: !!v.eligibility_confirmed,
-      access_needs: !!v.access_needs };
+      photo_ok: v.photo_choice === "yes", photo_opt_out: v.photo_choice === "never" };
     if (invite) o.invite = invite;
     if (ageOnDay() < 18) { o.guardian_name = trim(v.guardian_name); o.guardian_phone = trim(v.guardian_phone); o.guardian_email = trim(v.guardian_email); o.guardian_consent = !!v.guardian_consent; }
     return o;

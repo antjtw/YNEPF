@@ -48,7 +48,7 @@ ok((await db.query(`select access_needs h from public.entry_private where entry_
 await db.exec(`update public.entries set status='paid' where id='${r.entry_id}'`);
 r = await start({ email: "late@example.com" });
 ok(r.error === "already_entered", "someone already entered is told so");
-for (const [o, code] of [[{ sex: "X" }, "invalid:sex"], [{ eligibility_confirmed: false }, "invalid:eligibility"], [{ event: "squat" }, "invalid:event"], [{ weight_class_id: wcF }, "invalid:weight_class"], [{ date_of_birth: "2020-01-01" }, "invalid:too_young"], [{ email: "nope", full_name: "Z" }, "invalid:email"], [{ full_name: " " }, "invalid:full_name"]]) {
+for (const [o, code] of [[{ sex: "X" }, "invalid:sex"], [{ event: "squat" }, "invalid:event"], [{ weight_class_id: wcF }, "invalid:weight_class"], [{ date_of_birth: "2020-01-01" }, "invalid:too_young"], [{ email: "nope", full_name: "Z" }, "invalid:email"], [{ full_name: " " }, "invalid:full_name"]]) {
   r = await start({ email: "z@example.com", ...o }); ok(r.error === code, `refused: ${code}`);
 }
 await db.exec(`update public.competitions set entries_closed_manually = true`);
@@ -117,7 +117,9 @@ await db.exec(`update public.entries set status='cancelled' where competition_id
 ok((await start({ email: "h3@example.com", club: "IMPLEXUS gym" })).entry_id, "club names are matched ignoring capitals");
 await db.exec(`update public.entries set status='cancelled' where competition_id='${C}'`);
 r = await start({ email: "s1@example.com", division_id: scot, club: "Edinburgh Barbell" });
-ok(r.entry_id && (await db.query(`select club c from public.entries where id='${r.entry_id}'`)).rows[0].c === "", "from outside the English divisions there is no club: whatever is sent is dropped, and the entry still goes through");
+ok(r.error === "invalid:club", "a club that is not on the EPA list is refused, whichever division the lifter is in");
+r = await start({ email: "s1@example.com", division_id: scot, club: "Implexus Gym" });
+ok(r.entry_id, "a club from the list can be chosen in any division");
 await db.exec(`update public.entries set status='cancelled' where competition_id='${C}'; update public.competitions set entry_opens = null where id='${C}'`);
 // ---- fairness rules: priority entry, qualification, duplicates, short holds
 await db.exec("reset role");

@@ -702,7 +702,7 @@
   var ENTRY_STATUS = { held: "Paying", paid: "Paid", comped: "Free", cancelled: "Cancelled", refunded: "Refunded" };
   function renderEntriesTab(view, c) {
     view.replaceChildren(el("p", null, "Loading…"));
-    sb.from("entries").select("*, weight_classes(label), divisions(name), entry_private(access_needs)").eq("competition_id", c.id).order("created_at", { ascending: true }).then(function (res) {
+    sb.from("entries").select("*, weight_classes(label), divisions(name)").eq("competition_id", c.id).order("created_at", { ascending: true }).then(function (res) {
       var rows = ok(res);
       var live = rows.filter(function (e) { return e.status === "paid" || e.status === "comped"; });
       var total = live.reduce(function (n, e) { return n + e.price_pence; }, 0);
@@ -720,7 +720,7 @@
               el("td", null, [(e.sex === "M" ? "Men's " : "Women's ") + (e.weight_classes ? e.weight_classes.label + " kg" : ""), CAT_LABEL[catFor(e.date_of_birth, c.start_date)], e.event === "bench_only" ? "Bench only" : "Full power", e.equipment].join(" · "),
                 el("small", null, [e.club, e.bp_number && "BP " + e.bp_number].filter(Boolean).join(" · ")),
                 e.divisions ? el("small", null, e.divisions.name, e.is_guest ? [" ", el("span", { class: "tag tag-position" }, "Guest: check membership")] : null) : null,
-                (Array.isArray(e.entry_private) ? e.entry_private[0] : e.entry_private) && (Array.isArray(e.entry_private) ? e.entry_private[0] : e.entry_private).access_needs ? el("small", null, el("span", { class: "tag tag-open" }, "Access needs: follow up by email")) : null),
+                null),
               el("td", null, ENTRY_STATUS[e.status] || e.status),
               el("td", null, entryMoney(e.price_pence), e.paid_at ? el("small", null, new Date(e.paid_at).toLocaleString("en-GB", { timeZone: Y.TZ, dateStyle: "medium", timeStyle: "short" })) : null));
           })))) : el("p", { class: "empty" }, "No entries yet."));

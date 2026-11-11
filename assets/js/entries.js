@@ -30,9 +30,9 @@
         list.appendChild(el("h2", null, g[1] + " (" + inGroup.length + ")"));
         inGroup.sort(function (a, b) { return classKey(a) - classKey(b) || a.name.localeCompare(b.name); });
         list.appendChild(el("div", { class: "table-wrap" }, el("table", { class: "data" },
-          el("thead", null, el("tr", null, ["Name", "Club", "Class", "Category", "Event"].map(function (h) { return el("th", { scope: "col" }, h); }))),
+          el("thead", null, el("tr", null, ["Name", "Class", "Category", "Event"].map(function (h) { return el("th", { scope: "col" }, h); }))),
           el("tbody", null, inGroup.map(function (e) {
-            return el("tr", null, el("th", { scope: "row" }, e.name), el("td", null, e.club || ""), el("td", null, (e.weight_class || "") + " kg"), el("td", null, CAT[e.age_category || ""] || ""),
+            return el("tr", null, el("th", { scope: "row" }, e.name), el("td", null, (e.weight_class || "") + " kg"), el("td", null, CAT[e.age_category || ""] || ""),
               el("td", null, (EVENT[e.event] || "") + (e.equipment ? ", " + (EQUIP[e.equipment] || e.equipment).toLowerCase() : "")));
           })))));
       });

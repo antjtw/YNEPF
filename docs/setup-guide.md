@@ -103,6 +103,16 @@ Follow [email-setup-guide.md](email-setup-guide.md). Until then, Resend's starte
 
 ---
 
+## Part 5a: The confirmation page check
+
+The page people land on after paying only says "You're in" once the payment is really confirmed. It asks a small function, `entry-status`, which returns a single word (paid, pending, refunded or unknown) and nothing personal.
+
+1. In Supabase, **Edge Functions > Deploy a new function > Via editor**. Name it `entry-status`, paste in `supabase/functions/entry-status/index.ts`, switch **Verify JWT** **off**, and **Deploy**.
+
+Until it is deployed, the confirmation page shows "Still confirming" after about a minute, so do deploy it before testing a payment.
+
+---
+
 ## Part 5b: The club list
 
 Lifters in English divisions can choose their club (it is optional) from the English Powerlifting Association's list of approved clubs, copied from the EPA website. Only club **names** are copied, never contact details. Lifters from other nations have no club question, and clubs from other bodies are not included.

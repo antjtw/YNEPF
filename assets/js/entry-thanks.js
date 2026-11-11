@@ -1,7 +1,37 @@
-/* entry-thanks.js: if the address says which competition this was (?c=<address>), the "View entries" button goes to its list. */
+/* ==========================================================================
+   entry-thanks.js: the page people land on after paying.
+   It only says "You're in" once the payment is really confirmed. It asks the entry-status function (using the
+   payment's own session id from the address) every few seconds for up to about a minute: confirmed shows the
+   confirmation, still waiting shows "Still confirming" (and says not to pay again), an unknown payment or a
+   missing session id says so, and a refund says so. If the address says which competition this was (?c=), the
+   "View entries" button goes to its list.
+   ========================================================================== */
 (function () {
   "use strict";
-  var slug = new URLSearchParams(location.search).get("c");
+  var q = new URLSearchParams(location.search), slug = q.get("c"), session = q.get("session_id") || "";
+  var CFG = window.YNEPF_CONFIG || {};
+  var states = ["pending", "paid", "slow", "unknown", "refunded"];
+  function show(name) {
+    states.forEach(function (s) { var n = document.getElementById("state-" + s); if (n) n.hidden = s !== name; });
+    var h = document.querySelector("#state-" + name + " h1"); if (h) { h.setAttribute("tabindex", "-1"); if (name !== "pending") h.focus(); }
+  }
   var a = document.getElementById("view-entries");
   if (a && slug && /^[a-z0-9-]+$/i.test(slug)) { a.href = "/entries?c=" + encodeURIComponent(slug); a.hidden = false; }
+
+  if (!/^cs_[A-Za-z0-9_]{8,200}$/.test(session) || !CFG.supabaseUrl) return show("unknown");
+  var tries = 0, MAX = 24, DELAY = 2500;     // about a minute
+  function ask() {
+    tries++;
+    fetch(CFG.supabaseUrl.replace(/\/$/, "") + "/functions/v1/entry-status?session_id=" + encodeURIComponent(session), { headers: { apikey: CFG.supabaseAnonKey || "" } })
+      .then(function (r) { return r.ok ? r.json() : { status: "pending" }; })
+      .catch(function () { return { status: "pending" }; })
+      .then(function (b) {
+        if (b.status === "paid") return show("paid");
+        if (b.status === "refunded") return show("refunded");
+        if (b.status === "unknown") return show("unknown");
+        if (tries >= MAX) return show("slow");
+        setTimeout(ask, DELAY);
+      });
+  }
+  ask();
 })();

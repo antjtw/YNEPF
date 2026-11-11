@@ -807,7 +807,6 @@ begin
   -- Age category and the minimum age go by the calendar year (the year they turn the age); only the under-18 guardian rule uses the exact age on the day.
   if public.age_category_on(v_dob, c.start_date) = 'under14' then raise exception 'invalid:too_young'; end if;
   if v_sex not in ('M', 'F') then raise exception 'invalid:sex'; end if;
-  if not coalesce((p->>'eligibility_confirmed')::boolean, false) then raise exception 'invalid:eligibility'; end if;
   if not (v_event = any (s.events)) then raise exception 'invalid:event'; end if;
   if not (v_equip = any (s.equipment)) then raise exception 'invalid:equipment'; end if;
   if s.openipf_mode = 'required' and coalesce(p->>'openipf_url', '') !~* '^https://(www\.)?openipf\.org/.+' then raise exception 'invalid:openipf'; end if;
@@ -822,11 +821,10 @@ begin
   if not found then raise exception 'invalid:division'; end if;
   v_guest := not v_d.is_home;
   if v_guest and c.entry_opens is not null and now() < c.entry_opens + make_interval(days => s.guest_delay_days) then raise exception 'guest_not_open'; end if;
-  -- Club: optional, and only ever one from the EPA list. Lifters from outside the English divisions have no club here.
+  -- Club: optional, and only ever one from the EPA list (so it is stored exactly as the list spells it).
   v_club := btrim(coalesce(p->>'club', ''));
-  if v_d.kind not in ('home', 'english') or lower(v_club) = 'unattached' then
-    v_club := '';
-  elsif v_club <> '' then
+  if lower(v_club) = 'unattached' then v_club := ''; end if;
+  if v_club <> '' then
     select name into v_club from public.clubs where name_key = lower(v_club) and active;
     if not found then raise exception 'invalid:club'; end if;
   end if;
@@ -868,7 +866,7 @@ begin
       openipf_url, price_pence, hold_expires_at, is_guest)
     values (c.id, 'held', 'web', v_stage, v_email, v_name, trim(coalesce(p->>'display_name', '')), trim(coalesce(p->>'bp_number', '')), v_dob, v_sex,
       v_d.id, v_club, trim(coalesce(p->>'instagram', '')),
-      coalesce((p->>'photo_ok')::boolean, false), coalesce((p->>'photo_opt_out')::boolean, false), true, v_class, v_equip, v_event,
+      coalesce((p->>'photo_ok')::boolean, false), coalesce((p->>'photo_opt_out')::boolean, false), coalesce((p->>'eligibility_confirmed')::boolean, false), v_class, v_equip, v_event,
       trim(coalesce(p->>'openipf_url', '')), v_price, v_expires, v_guest)
     returning id into v_entry;
   insert into public.entry_private (entry_id, guardian_name, guardian_phone, guardian_email, guardian_consent, access_needs, delete_after)
