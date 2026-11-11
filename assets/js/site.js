@@ -289,8 +289,9 @@
       // full) and the lifting order (once its sheet has been added).
       var actions = [];
       if (c.entry_url && state === "open") {
-        actions.push(el("a", { class: "btn btn-primary", href: c.entry_url, target: "_blank", rel: "noopener",
-          "aria-label": "Enter now: " + c.name + " (opens in a new tab)" }, "Enter now"));
+        var inSite = c.entry_url.charAt(0) === "/";      // our own entry form opens in the same tab
+        actions.push(el("a", inSite ? { class: "btn btn-primary", href: c.entry_url, "aria-label": "Enter now: " + c.name }
+          : { class: "btn btn-primary", href: c.entry_url, target: "_blank", rel: "noopener", "aria-label": "Enter now: " + c.name + " (opens in a new tab)" }, "Enter now"));
       }
       if (state === "full" && c.waitlist_url) {
         actions.push(el("a", { class: "btn btn-ghost", href: c.waitlist_url, target: "_blank", rel: "noopener",

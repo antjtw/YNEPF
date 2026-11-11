@@ -48,6 +48,7 @@
     var grid = null;
 
     form.appendChild(el("h2", { id: "dlg-title" }, opt.title));
+    if (opt.intro) form.appendChild(el("p", { class: "panel-intro" }, opt.intro));
     form.appendChild(errBox);
 
     opt.fields.forEach(function (f) {
@@ -378,7 +379,7 @@
         { name: "map_url", label: "Custom map link (optional)", type: "url", help: "Only needed if the automatic Google Maps link is wrong." },
         { name: "openipf_url", label: "OpenIPF results link (optional)", type: "url", placeholder: "https://www.openipf.org/…",
           help: "Add this after the competition, once results are on OpenIPF. It shows as a link on the Calendar that opens in a new tab." },
-        { name: "entry_url", label: "Entry link", type: "url", placeholder: "https://…", help: "Goes live on the website at the time entry opens, and is hidden when entry closes." },
+        { name: "entry_url", label: "Entry link", type: "url", placeholder: "https://…", help: "For entry taken somewhere else. Goes live on the website at the time entry opens, and is hidden when entry closes. Not needed if entry is taken on this website: switch that on under Entries." },
         { name: "entry_opens", label: "Entry opens (UK time)", type: "datetime", half: true, help: "Filled in as 8 weeks before, at 9am. Change it if you need to." },
         { name: "entry_closes", label: "Entry closes (UK time)", type: "datetime", half: true, help: "Filled in as 3 weeks before, at noon." },
         { name: "entries_full", label: "Entries full", type: "checkbox", help: "Tick this when the competition fills up before entry closes. The entry link is replaced by a “Join the waiting list” link (if you add one below)." },
@@ -1247,9 +1248,9 @@
   // Who sees what: the entries team and admins run entries; editors and contributors never see this tab.
   var ENTRY_ERRORS = {
     "invalid:events": "Choose at least one event.", "invalid:equipment": "Choose at least one kind of equipment.",
-    "invalid:hold_minutes": "The hold must be between 5 and 30 minutes.", "invalid:general_opens_at": "Set when entries open.",
+    "invalid:hold_minutes": "The hold must be between 5 and 30 minutes.",
     "invalid:price_full_power": "Set a full power price.", "invalid:price_bench_only": "Set a bench only price.",
-    "invalid:price_sub_junior": "The sub-junior price must be zero or more.", "invalid:capacity": "Set the number of places on the competition first.",
+    "invalid:price_sub_junior": "The sub-junior price must be zero or more.", "invalid:capacity": "Set the number of places first, under Edit on the Calendar tab.",
     forbidden: "You do not have permission to change entry settings."
   };
   function pence(v) { return v === null || v === "" || v === undefined ? null : Math.round(Number(v) * 100); }
@@ -1287,17 +1288,17 @@
   function editEntrySettings(c) {
     Promise.all([
       sb.from("entry_settings").select("*").eq("competition_id", c.id).maybeSingle(),
-      sb.from("entry_stages").select("*").eq("competition_id", c.id).eq("kind", "general").maybeSingle(),
       sb.from("price_rules").select("*").eq("competition_id", c.id)
     ]).then(function (res) {
-      var s = ok(res[0]) || {}, stage = ok(res[1]), rules = ok(res[2]) || [];
+      var s = ok(res[0]) || {}, rules = ok(res[1]) || [];
       function price(match) { var r = rules.filter(match)[0]; return r ? poundsInput(r.price_pence) : ""; }
       var events = s.events || ["full_power", "bench_only"], equip = s.equipment || ["classic", "equipped"];
       openForm({
         title: "Entry settings: " + c.name, saveLabel: "Save entry settings",
+        intro: "Places, and when entry opens and closes, are set once, under Edit on the Calendar tab. Currently: " + (c.capacity ? c.capacity + " places" : "no places set") + "; " + (Y.entryLine(c) || "no opening or closing time set") + ".",
         values: {
-          entry_method: c.entry_method === "yne" ? "yne" : "external", capacity: c.capacity, entries_closed_manually: !!c.entries_closed_manually,
-          general_opens_at: Y.toLondonInput(stage && stage.opens_at), entries_close_at: Y.toLondonInput(s.entries_close_at), hold_minutes: s.hold_minutes || 15,
+          entry_method: c.entry_method === "yne" ? "yne" : "external", entries_closed_manually: !!c.entries_closed_manually,
+          hold_minutes: s.hold_minutes || 15,
           ev_full: events.indexOf("full_power") >= 0, ev_bench: events.indexOf("bench_only") >= 0,
           eq_classic: equip.indexOf("classic") >= 0, eq_equipped: equip.indexOf("equipped") >= 0,
           p_full: price(function (r) { return r.event === "full_power" && !r.age_category; }),
@@ -1306,10 +1307,7 @@
         },
         fields: [
           { name: "entry_method", label: "How are entries taken?", type: "select", options: [{ value: "external", label: "Not on this website (use the entry link on the calendar)" }, { value: "yne", label: "Online on this website, paid by card" }] },
-          { name: "capacity", label: "Number of places", type: "number", min: "1", half: true },
-          { name: "hold_minutes", label: "Minutes a place is held while paying", type: "number", min: "5", half: true, help: "Between 5 and 30." },
-          { name: "general_opens_at", label: "Entries open (UK time)", type: "datetime", half: true },
-          { name: "entries_close_at", label: "Entries close (UK time)", type: "datetime", half: true, help: "Leave blank to close when the competition is full or you close it." },
+          { name: "hold_minutes", label: "Minutes a place is held while paying", type: "number", min: "5", help: "Between 5 and 30." },
           { name: "ev_full", label: "Offer full power", type: "checkbox", half: true },
           { name: "ev_bench", label: "Offer bench only", type: "checkbox", half: true },
           { name: "eq_classic", label: "Offer classic", type: "checkbox", half: true },
@@ -1321,8 +1319,7 @@
         ],
         onSave: function (v) {
           var o = {
-            entry_method: v.entry_method, capacity: v.capacity, hold_minutes: v.hold_minutes || 15, entries_closed_manually: v.entries_closed_manually,
-            general_opens_at: Y.fromLondonInput(v.general_opens_at), entries_close_at: Y.fromLondonInput(v.entries_close_at),
+            entry_method: v.entry_method, hold_minutes: v.hold_minutes || 15, entries_closed_manually: v.entries_closed_manually,
             events: [v.ev_full && "full_power", v.ev_bench && "bench_only"].filter(Boolean),
             equipment: [v.eq_classic && "classic", v.eq_equipped && "equipped"].filter(Boolean),
             prices: { full_power: pence(v.p_full), bench_only: pence(v.p_bench), sub_junior: pence(v.p_sj) }

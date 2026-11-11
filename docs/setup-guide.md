@@ -104,14 +104,18 @@ Follow [email-setup-guide.md](email-setup-guide.md). Until then, Resend's starte
 
 ## Part 6: Making a TEST competition and entering it
 
-1. In the editor, **Calendar > Add competition**. Name it `TEST Spring Open`, pick a date in the future, set a **web address ending** like `test-spring-open`, and **untick Published** so the public cannot see it. Save.
-2. Open **Entries**, press **Entry settings** for it. Choose **Online on this website**, set the places, when entries open (a time in the past is fine), the prices (for example 60 and 25), and Save.
-3. Visit `/enter?c=` followed by the competition's `slug` on the test pages. It is the competition's web address ending including the year, for example `2027-test-spring-open`. The Entries tab shows it under the competition name.
+Everything about **when and how many** is set once, on the **Calendar**. The **Entries** tab only holds what is specific to online entry (the events, equipment, prices and the hold time).
+
+1. In the editor, **Calendar > Add competition**. Name it `TEST Spring Open`, pick a date in the future, set **Number of spaces** (for example 10), and check the entry opening and closing times. Leave **Entry link** empty. **Untick Published** so the public cannot see it. Save.
+2. Open **Entries**, press **Entry settings** for it. Choose **Online on this website**, set the prices (for example 60 and 25), and Save.
+3. Enter it:
+   - **Unpublished (testing):** sign in at `/admin` on the test address first, then go to `/enter?c=` followed by the competition's web address ending including the year, for example `2027-test-spring-open`. The Entries tab shows it under the competition name. You will see a "Preview" notice.
+   - **Published:** the competition's card on the Calendar gets an **Enter now** button that opens the same form.
 4. Fill in the form. Pay with the test card `4242 4242 4242 4242`.
 
 **What you should see:** a thank-you page, the entry in **Entries > View entries** marked **Paid**, and a confirmation email.
 
-**Why unpublished works:** an unpublished competition is hidden from the public, but you can still open its entry form **if you are signed in to the site editor on the same address**. Sign in at `/admin` on the test address first (the preview address from Part 3, then `/admin`), then open the entry form there. You will see a "Preview" notice at the top. Everyone else gets "Competition not found".
+**Why unpublished works:** an unpublished competition is hidden from the public, but you can still open its entry form **if you are signed in to the site editor on the same address**. Everyone else gets "Competition not found".
 
 ---
 

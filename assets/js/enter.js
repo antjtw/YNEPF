@@ -296,7 +296,7 @@
     var slug = new URLSearchParams(location.search).get("c") || "";
     var db = Y.db();
     if (!db || !slug) return stop("Enter a competition", "<p>Choose a competition from the <a href='calendar.html'>calendar</a> to enter.</p>");
-    var cols = "id,name,start_date,end_date,venue_name,slug,entry_url,waitlist_url";
+    var cols = "id,name,start_date,end_date,venue_name,slug,entry_url,waitlist_url,entry_opens,entry_closes";
     // The public sees published competitions only. A signed-in entries team member can also open an unpublished one
     // (a TEST competition) to try it. The payment function re-checks their login before allowing it.
     db.from("competitions_public").select(cols).eq("slug", slug).maybeSingle().then(function (r) {
@@ -316,17 +316,16 @@
         db.from("divisions").select("*").order("sort_order"),
         db.rpc("places_left", { c: comp.id })
       ]).then(function (a) {
-        var st = a[0].data, settings = a[1].data, stages = a[2].data || [];
-        if (st) { st.places_left = a[6].data; st.entries_close_at = settings && settings.entries_close_at; }
+        var st = a[0].data, settings = a[1].data;
+        if (st) st.places_left = a[6].data;
         preview = found.preview;
         title.textContent = "Enter " + comp.name;
         lede.textContent = Y.dateRange(comp.start_date, comp.end_date) + (comp.venue_name ? " at " + comp.venue_name : "");
         if (!st || !settings || st.entry_method !== "yne")
           return stop("Enter " + comp.name, "<p>Entries for this competition are not taken on this page." + (comp.entry_url ? " <a href='" + encodeURI(comp.entry_url) + "'>Enter here</a>." : "") + "</p>");
         var now = new Date();
-        if (st.entries_closed_manually || (st.entries_close_at && new Date(st.entries_close_at) <= now)) return stop("Entries are closed", "<p>Entries for " + Y.el("span", null, comp.name).textContent + " are closed.</p>");
-        var general = stages.filter(function (s) { return s.kind === "general"; })[0];
-        if (!general || new Date(general.opens_at) > now) return stop("Entries are not open yet", "<p>Entries" + (general ? " open on " + new Date(general.opens_at).toLocaleString("en-GB", { timeZone: Y.TZ, dateStyle: "full", timeStyle: "short" }) : " have not opened yet") + ".</p>");
+        if (st.entries_closed_manually || (comp.entry_closes && new Date(comp.entry_closes) <= now)) return stop("Entries are closed", "<p>Entries for " + Y.el("span", null, comp.name).textContent + " are closed.</p>");
+        if (comp.entry_opens && new Date(comp.entry_opens) > now) return stop("Entries are not open yet", "<p>Entries open on " + new Date(comp.entry_opens).toLocaleString("en-GB", { timeZone: Y.TZ, dateStyle: "full", timeStyle: "short" }) + ".</p>");
         if (st.places_left < 1) return stop("This competition is full", "<p>Sorry, all places have gone." + (comp.waitlist_url ? " <a href='" + encodeURI(comp.waitlist_url) + "'>Join the waiting list</a>." : "") + "</p>");
         ctx = { comp: comp, settings: settings, rules: a[3].data || [], classes: a[4].data || [], divisions: a[5].data || [] };
         document.getElementById("hold-minutes").textContent = settings.hold_minutes;

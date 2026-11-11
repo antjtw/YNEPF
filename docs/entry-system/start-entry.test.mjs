@@ -51,8 +51,11 @@ for (const [o, code] of [[{ sex: "X" }, "invalid:sex"], [{ eligibility_confirmed
 }
 await db.exec(`update public.competitions set entries_closed_manually = true`);
 ok((await start({ email: "z@example.com" })).error === "closed", "closed by hand means closed");
-await db.exec(`update public.competitions set entries_closed_manually = false; update public.entry_stages set opens_at = now() + interval '1 day'`);
-ok((await start({ email: "z@example.com" })).error === "not_open", "before the stage opens: not open yet");
+await db.exec(`update public.competitions set entries_closed_manually = false, entry_opens = now() + interval '1 day'`);
+ok((await start({ email: "z@example.com" })).error === "not_open", "before the opening time set on the competition: not open yet");
+await db.exec(`update public.competitions set entry_opens = now() - interval '1 day', entry_closes = now() - interval '1 hour'`);
+ok((await start({ email: "z@example.com" })).error === "closed", "after the closing time set on the competition: closed");
+await db.exec(`update public.competitions set entry_opens = null, entry_closes = null`);
 await db.exec("reset role");
 await db.exec(`update public.entry_stages set opens_at = now() - interval '1 day'; update public.entries set status='cancelled'`);
 const conf = async (id) => (await db.query(`select public.confirm_entry_payment('${id}') r`)).rows[0].r;
@@ -67,6 +70,21 @@ ok((await start({ email: "p3@example.com" })).error === "full", "(setup) the com
 await db.exec(`update public.entries set status='held', hold_expires_at = now() - interval '1 minute', paid_at=null where id='${r.entry_id}'`);
 await db.exec(`insert into public.entries (competition_id,email,full_name,date_of_birth,sex,status) values ('${C}','filler@example.com','Filler','1990-01-01','M','paid')`);
 ok((await conf(r.entry_id)) === "no_place", "a late payment when the competition is now full is told 'no_place' so it can be refunded");
+await db.exec("reset role");
+await db.exec(`update public.competitions set published = true, entry_method='yne', slug='2027-yne-march-open', entry_url='https://old.example/enter', entries_closed_manually=false, entry_opens=null, entry_closes=null where id='${C}'`);
+await db.exec("set role anon");
+const pubUrl = async () => (await db.query(`select entry_url from public.competitions_public where id='${C}'`)).rows[0].entry_url;
+ok((await pubUrl()) === "/enter?c=2027-yne-march-open", "the calendar's way in for online entry is our own form, not the old link");
+await db.exec("reset role");
+await db.exec(`update public.competitions set entry_method='external' where id='${C}'`);
+await db.exec("set role anon");
+ok((await pubUrl()) === "https://old.example/enter", "for entry taken elsewhere it is still the entry link");
+await db.exec("reset role");
+await db.exec(`update public.competitions set entry_method='yne', entries_closed_manually=true where id='${C}'`);
+await db.exec("set role anon");
+ok((await pubUrl()) === "", "closing entries by hand removes the way in");
+await db.exec("reset role");
+await db.exec(`update public.competitions set entries_closed_manually=false where id='${C}'`);
 // ---- save_entry_settings (the entries team's admin screen)
 await db.exec("reset role");
 const U = { entries: "00000000-0000-0000-0000-00000000000b", editor: "00000000-0000-0000-0000-00000000000c" };
@@ -74,7 +92,7 @@ for (const [k, id] of Object.entries(U)) await db.exec(`insert into auth.users (
 await db.exec(`insert into public.editors (email, role) values ('entries@example.com','entries'),('editor@example.com','editor')`);
 const C2 = "33333333-3333-3333-3333-333333333333";
 await db.exec(`insert into public.competitions (id,name,start_date,capacity,published,slug) values ('${C2}','New Open','2027-05-01',50,true,'new')`);
-const settings = { entry_method: "yne", capacity: 50, events: ["full_power", "bench_only"], equipment: ["classic"], hold_minutes: 15, general_opens_at: "2027-01-01T10:00:00Z", prices: { sub_junior: 2500, bench_only: 2500, full_power: 6000 } };
+const settings = { entry_method: "yne", events: ["full_power", "bench_only"], equipment: ["classic"], hold_minutes: 15, prices: { sub_junior: 2500, bench_only: 2500, full_power: 6000 } };
 const save = async (who, o) => { await db.exec("reset role"); await db.query(`select set_config('request.uid','${U[who]}',false)`); await db.exec("set role authenticated");
   try { await db.query(`select public.save_entry_settings('${C2}', $1::jsonb)`, [JSON.stringify({ ...settings, ...o })]); return "ok"; } catch (e) { return e.message; } };
 ok((await save("editor", {})) === "forbidden", "an editor cannot change entry settings");
@@ -86,7 +104,6 @@ ok((await save("entries", { prices: { bench_only: 2000, full_power: 5000 } })) =
 ok((await save("entries", { events: ["curl"] })) === "invalid:events", "an unknown event is refused");
 ok((await save("entries", { hold_minutes: 90 })) === "invalid:hold_minutes", "a hold longer than Stripe allows is refused");
 ok((await save("entries", { prices: { bench_only: 2000 } })) === "invalid:price_full_power", "a missing price for an offered event is refused");
-ok((await save("entries", { general_opens_at: null })) === "invalid:general_opens_at", "an opening time is required");
 await db.exec("reset role");
 await db.exec("reset role");
 await db.exec(`update public.competitions set published = false where id = '${C}'; update public.entry_stages set opens_at = now() - interval '1 day' where competition_id='${C}'; update public.entries set status='cancelled' where competition_id='${C}'`);

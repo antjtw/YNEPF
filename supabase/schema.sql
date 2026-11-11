@@ -374,20 +374,29 @@ create trigger competitions_touch before update on public.competitions
 --   This view deliberately runs with its owner's rights so anon can use it
 --   without having any access to the underlying table.
 -- ---------------------------------------------------------------------------
+-- How entries are taken: 'external' (the entry link) or 'yne' (the entry form on this website).
+alter table public.competitions add column if not exists entry_method text not null default 'external'
+  check (entry_method in ('yne', 'external'));
+alter table public.competitions add column if not exists entries_closed_manually boolean not null default false;
+
 drop view if exists public.competitions_public;
 create view public.competitions_public as
 select
   id, name, description, label, kind, start_date, end_date, start_time, end_time,
   venue_name, venue_address, map_url, capacity,
   entry_opens, entry_closes, entries_full,
+  -- The way in: our own entry form for online entry, otherwise the entry link. Only while entry is open.
   case
-    when entry_url <> ''
-     and not entries_full
+    when not entries_full
+     and not entries_closed_manually
      and (entry_opens is null or entry_opens <= now())
      and (entry_closes is null or entry_closes > now())
-    then entry_url
+    then case when entry_method = 'yne' and slug <> '' then '/enter?c=' || slug
+              when entry_method = 'external' then entry_url
+              else '' end
     else ''
   end as entry_url,
+  entry_method,
   -- The waiting list only appears once the competition is marked full.
   case when entries_full then waitlist_url else '' end as waitlist_url,
   lifting_order_url,
