@@ -99,6 +99,15 @@ const sjClass = (await db.query(`select id from public.weight_classes where sex=
 ok((await start({ email: "sj1@example.com", weight_class_id: sjClass })).error === "invalid:weight_class", "an adult cannot enter the sub-junior-only 53 kg class");
 r = await start({ email: "sj2@example.com", weight_class_id: sjClass, date_of_birth: "2010-01-01", guardian_name: "P", guardian_phone: "07", guardian_email: "p@example.com", guardian_consent: true });
 ok(r.entry_id, "a sub-junior can");
+await db.exec("reset role");
+await db.exec(`update public.entries set status='cancelled' where competition_id='${C}'`);
+const kid = { guardian_name: "P", guardian_phone: "07", guardian_email: "p@example.com", guardian_consent: true };
+r = await start({ email: "y1@example.com", date_of_birth: "2013-12-31", weight_class_id: sjClass, ...kid });
+ok(r.entry_id, "born 31 Dec 2013: turns 14 in 2027, so they may enter (the year counts, not the day), as a sub-junior");
+ok((await start({ email: "y2@example.com", date_of_birth: "2014-01-01", ...kid })).error === "invalid:too_young", "born 1 Jan 2014: turns 13 in 2027, too young");
+ok((await db.query(`select public.age_category_on('2009-12-31'::date, '2027-03-13'::date) a, public.age_category_on('2008-01-01'::date, '2027-03-13'::date) b, public.age_category_on('2004-06-01'::date, '2027-03-13'::date) c, public.age_category_on('1987-06-01'::date, '2027-03-13'::date) d`)).rows[0].a === "SJ", "born in 2009 is a sub-junior in 2027 (turns 18), born in 2008 a junior (turns 19)");
+const cats = (await db.query(`select public.age_category_on('2008-12-31'::date, '2027-03-13'::date) b, public.age_category_on('2004-06-01'::date, '2027-03-13'::date) c, public.age_category_on('1987-06-01'::date, '2027-03-13'::date) d, public.age_category_on('1977-12-31'::date, '2027-03-13'::date) e`)).rows[0];
+ok(cats.b === "J" && cats.c === "J" && cats.d === "M1" && cats.e === "M2", `year of birth decides: 2008 and 2004 are juniors, 1987 is masters 1 and 1977 is masters 2 in 2027 (${JSON.stringify(cats)})`);
 await db.exec("set role anon");
 try { await db.query(`select public.start_entry('{}'::jsonb)`); ok(false, "the browser cannot call it"); } catch { ok(true, "the browser (anon) cannot call start_entry"); }
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

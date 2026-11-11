@@ -747,7 +747,8 @@ begin
   begin v_dob := (p->>'date_of_birth')::date; exception when others then raise exception 'invalid:date_of_birth'; end;
   if v_dob is null or v_dob > c.start_date or v_dob < date '1900-01-01' then raise exception 'invalid:date_of_birth'; end if;
   v_age := public.age_on(v_dob, c.start_date);
-  if v_age < 14 then raise exception 'invalid:too_young'; end if;
+  -- Age category and the minimum age go by the calendar year (the year they turn the age); only the under-18 guardian rule uses the exact age on the day.
+  if public.age_category_on(v_dob, c.start_date) = 'under14' then raise exception 'invalid:too_young'; end if;
   if v_sex not in ('M', 'F') then raise exception 'invalid:sex'; end if;
   if not coalesce((p->>'eligibility_confirmed')::boolean, false) then raise exception 'invalid:eligibility'; end if;
   if not (v_event = any (s.events)) then raise exception 'invalid:event'; end if;
