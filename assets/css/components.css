@@ -15,7 +15,7 @@
   --btn-bg: var(--accent);
   --btn-fg: var(--accent-text);
   --btn-border: var(--accent);
-  --btn-fill: var(--accent-hover);       /* the colour that sweeps in on hover */
+  --btn-fill: var(--accent-hover);       /* the colour that fades in on hover */
   --btn-fg-hover: var(--accent-text);
   position: relative;
   isolation: isolate;
@@ -46,13 +46,13 @@
   inset: -1px;
   z-index: -1;
   background: var(--btn-fill);
-  transform: translateX(-102%);
+  opacity: 0;                            /* a plain fade on hover, the same for every button */
   border-radius: inherit;
-  transition: transform var(--dur) var(--ease-out);
+  transition: opacity var(--dur) var(--ease-out);
 }
 .btn:visited { color: var(--btn-fg); }
 .btn:hover { color: var(--btn-fg-hover); text-decoration: none; }
-.btn:hover::before { transform: translateX(0); }
+.btn:hover::before { opacity: 1; }
 .btn:active { transform: scale(0.985); --btn-fill: var(--accent-active); }
 .btn:focus-visible {
   color: var(--btn-fg);
@@ -64,7 +64,7 @@
 }
 .btn:focus-visible:hover, .btn:visited:hover { color: var(--btn-fg-hover); }
 
-/* Secondary: an outline that fills with Iron Oxide on hover. */
+/* Secondary: an outline that fills with Iron Oxide on hover (a fade). */
 .btn-secondary {
   --btn-bg: transparent;
   --btn-fg: var(--accent-ink);
@@ -80,8 +80,6 @@
   --btn-fill: color-mix(in srgb, var(--accent) 12%, var(--surface-page));
   --btn-fg-hover: var(--iron-800);
 }
-.btn-ghost::before { transform: scale(0.92); opacity: 0; transition: transform var(--dur) var(--ease-out), opacity var(--dur) var(--ease-out); }
-.btn-ghost:hover::before { transform: scale(1); opacity: 1; }
 .btn-sm { min-height: 2.25rem; padding: 0.3em 1.1em; font-size: var(--fs-16); }
 .btn-block { display: flex; width: 100%; }
 
@@ -95,8 +93,6 @@
 .on-dark .btn-ghost { --btn-fg: #fff; --btn-fill: color-mix(in srgb, #fff 16%, transparent); --btn-fg-hover: #fff; }
 
 .btn-danger { --btn-bg: transparent; --btn-fg: var(--error-text); --btn-border: transparent; --btn-fill: var(--rose-100); --btn-fg-hover: var(--rose-800); }
-.btn-danger::before { transform: scale(0.92); opacity: 0; transition: transform var(--dur) var(--ease-out), opacity var(--dur) var(--ease-out); }
-.btn-danger:hover::before { transform: scale(1); opacity: 1; }
 .btn[disabled], .btn[aria-disabled="true"] {
   --btn-bg: var(--grey-100); --btn-fg: var(--grey-700); --btn-border: var(--grey-100); --btn-fill: var(--grey-100); --btn-fg-hover: var(--grey-700);
   cursor: not-allowed; transform: none; opacity: 0.8;

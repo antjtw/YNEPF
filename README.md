@@ -105,7 +105,7 @@ those pairs look identical.)
 
 - **Primary** (filled iron), **secondary** (outline that fills on hover) and
   **ghost** (plain text that gets a soft tint on hover; used for row actions in
-  the editor). Hover sweeps the fill in, press
+  the editor). Hover fades the fill in, press
   nudges down, and all of it switches off for `prefers-reduced-motion`. Buttons on
   dark sections flip to white automatically (add `on-dark` to the section).
 - **Links** are navy, **visited** links are iron, hover thickens the underline.
