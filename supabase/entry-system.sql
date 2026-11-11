@@ -806,3 +806,32 @@ do $$ begin
     grant execute on function public.start_entry(jsonb) to service_role;
   end if;
 end $$;
+
+-- Marks an entry paid once Stripe confirms the payment. Stripe's checkout lasts longer than our hold,
+-- so a payment can arrive after the hold ran out: it is accepted if a place is still free, otherwise
+-- the caller refunds it ('no_place'). Safe to call twice.
+create or replace function public.confirm_entry_payment(e uuid) returns text
+language plpgsql security definer set search_path = public
+as $$
+declare r public.entries%rowtype;
+begin
+  select * into r from public.entries where id = e;
+  if not found then return 'missing'; end if;
+  perform 1 from public.competitions where id = r.competition_id for update;
+  select * into r from public.entries where id = e;
+  if r.status in ('paid', 'comped') then return 'paid'; end if;
+  if r.status = 'refunded' then return 'no_place'; end if;
+  if not (r.status = 'held' and r.hold_expires_at > now()) and public.places_left(r.competition_id) < 1 then
+    return 'no_place';
+  end if;
+  update public.entries set status = 'paid', paid_at = now(), hold_expires_at = null,
+    cancelled_at = null, cancel_reason = '' where id = e;
+  return 'paid';
+end
+$$;
+revoke all on function public.confirm_entry_payment(uuid) from public, anon, authenticated;
+do $$ begin
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    grant execute on function public.confirm_entry_payment(uuid) to service_role;
+  end if;
+end $$;
