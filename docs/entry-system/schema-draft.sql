@@ -276,15 +276,21 @@ create index if not exists entries_competition_status on public.entries (competi
 create index if not exists entries_email on public.entries (email);
 create index if not exists entries_bp_number on public.entries (bp_number) where bp_number <> '';
 
--- Sensitive details, readable only by the entries team. Never exported, emailed or in a public view.
+-- Sensitive details, readable only by the entries team. Never exported (except the printable support
+-- needs list for the day), emailed or in a public view. Guardian details are only collected, and only
+-- shown, for lifters who are under 18 on the competition day.
 create table if not exists public.entry_private (
   entry_id uuid primary key references public.entries (id) on delete cascade,
   guardian_name text not null default '',                 -- under 18 on the competition day
   guardian_phone text not null default '',
   guardian_email text not null default '',
   guardian_consent boolean not null default false,
-  access_needs text not null default '',
-  eligibility_note text not null default '',
+  -- Access needs: every lifter is asked. Stored so the entries team can help on the day.
+  access_hearing boolean not null default false,          -- "hard of hearing: needs hand signals or clear commands"
+  access_sight boolean not null default false,            -- "hard of seeing: may need assistance"
+  access_notes text not null default '',                  -- anything else
+  access_consent boolean not null default false,          -- ticked when they have entered anything: "I agree you can store this so you can help me on the day"
+  eligibility_note text not null default '',               -- kept only in case the committee wants the box; the plan starts without it
   delete_after date                                        -- when this row is removed automatically (see plan, privacy)
 );
 
@@ -412,8 +418,8 @@ create table if not exists public.lifting_orders (
   published_as text check (published_as in ('provisional', 'final')),
   published_at timestamptz,
   prime_time_enabled boolean not null default false,       -- the top lifters by GL points in their own session(s)
-  prime_time_men integer not null default 0,
-  prime_time_women integer not null default 0,
+  prime_time_men integer not null default 14,              -- one prime time session, two flights: the top 14 men and the top 14 women by best GL
+  prime_time_women integer not null default 14,
   max_full_power_per_flight integer not null default 14,
   max_per_flight integer not null default 20
 );

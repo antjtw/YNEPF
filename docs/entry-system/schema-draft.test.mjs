@@ -34,7 +34,7 @@ ok(!(await can(`insert into public.editors (email, role) values ('x@example.com'
 await db.exec("reset role");
 await db.exec(`insert into public.competitions (id, name, start_date, capacity, published, slug) values ('11111111-1111-1111-1111-111111111111','YNE March Open','2027-03-13',3,true,'2027-yne-march-open')`);
 await db.exec(`insert into public.entries (id, competition_id, email, full_name, date_of_birth, sex, status) values ('22222222-2222-2222-2222-222222222222','11111111-1111-1111-1111-111111111111','lifter@example.com','Test Lifter','1986-05-01','M','paid')`);
-await db.exec(`insert into public.entry_private (entry_id, guardian_name, access_needs) values ('22222222-2222-2222-2222-222222222222','Parent','needs a ramp')`);
+await db.exec(`insert into public.entry_private (entry_id, guardian_name, access_notes, access_hearing) values ('22222222-2222-2222-2222-222222222222','Parent','needs a ramp', true)`);
 const post = `insert into public.posts (title, slug, body_md) values ('t', 's'||gen_random_uuid(), 'b')`;
 const faq = `insert into public.faq_categories (title) values ('x')`;
 const comp = `insert into public.competitions (name, start_date) values ('c','2027-01-01')`;

@@ -22,6 +22,11 @@ Nothing in here has been built yet. The database design has been **tested** in a
 | Roles | Admin, Entries team, Editor, Contributor (see section 6). The entries team can refund. |
 | Places left | A short poll (the page asks "how many places left?" every few seconds). Not live connections. |
 | OpenIPF | The form only checks the link looks right. After payment, a background job fetches the lifter's results and stores their best total and GL points. |
+| Stripe fees | **The federation absorbs them.** They come out of the federation's share, never the host's or the photographer's. |
+| Prime time | One session with two flights (women, men), up to **14 lifters in each**. If bench only lifters are in prime time (unlikely) the same rule as elsewhere applies: up to 20 in a flight. |
+| Guardian details | Only asked for, stored and shown when the lifter is **under 18 on the competition day**. |
+| Access needs | **Everyone is asked**, and we store the answers so we can help on the day (see section 5). It goes in the privacy policy. |
+| Data location | Supabase is in an EU West region (to be confirmed). The UK treats the EU as adequate for personal data, so that is fine. |
 | Process | Work on branches. Each piece ends in a pull request with a plain-English summary, a testing checklist and the Vercel preview link. **You merge, I don't.** |
 
 ---
@@ -151,8 +156,9 @@ Things the report handles, all tested:
 
 - **Prices** are ordered rules, first match wins ("Sub-junior, any event: £15", "Bench only: £25", "Full power: £40").
 - **Age category** is never stored. It is worked out from date of birth and the competition date using the calendar-year rule, every time. (Born 1986 is Masters 1 in 2026. Born 1987 is Masters 1 from 2027.) Tested.
-- **Under 18 on the day** is worked out from the exact date, and asks for a parent or guardian's details and consent. They are stored privately, readable only by the entries team.
+- **Under 18 on the day** is worked out from the exact date, and **only then** the form asks for a parent or guardian's name, phone, email and consent. Adults are never asked, and nothing is stored for them. The details are stored privately, readable only by the entries team, and the entries screen only shows the guardian section for under-18s.
 - **Category declaration.** The form asks men's or women's, which decides the weight classes shown. The IPF requires transgender athletes to declare and have IPF approval before competing. The form carries one confirmation tick ("I confirm I'm eligible to compete in this category under IPF rules", linking to the policy) and the line "if you need to talk to us, email us". Wording to be agreed with British Powerlifting.
+- **Access needs.** Every lifter is asked, on the entry form: "Is there anything we can do to make the day easier for you?" with prompts for the things that matter on the platform: **hearing** (for example, "I'm hard of hearing and need hand signals or clear commands"), **sight** ("I may need assistance"), and a free box for anything else. Answering is optional, and a short line explains that we store it so we can help on the day, who sees it (the entries team) and how long we keep it. The entries team gets a **printable "support needs" list per competition** for the day. Because this is health information, the form asks the lifter to tick that they agree to us storing it (only when they have entered something). This goes in the privacy policy.
 - **Name on the lifting order.** Names are shown in full. The form says so ("your name will be shown on the entries list and the lifting order") and offers an optional **display name** if someone wants it shown differently. We keep the real name for our records.
 
 ---
@@ -165,7 +171,7 @@ Things the report handles, all tested:
 | Competition entry settings, prices, add-ons | ✔ | ✔ | | |
 | Entries, waiting list, refunds, manual entries | ✔ | ✔ | | |
 | Money reports and payouts | ✔ | ✔ | | |
-| Guardian details, access needs, eligibility notes | ✔ | ✔ | | |
+| Guardian details (under-18s only), access needs | ✔ | ✔ | | |
 | Lifting order builder and publishing | ✔ | ✔ | | |
 | Create competitions and events (not their entry settings) | ✔ | | ✔ | |
 | Site content (Home, FAQs, Organisation, Records, Footer) | ✔ | | ✔ | |
@@ -186,7 +192,19 @@ I looked at the real YNE Worlds 2026 lifting order (64 lifters) to see how you a
 - **Day 2 is prime time**: the top women by GL points (14 lifters, GL 78 to 90) then the top men (11 lifters, GL 86 to 99), each in their own flight, across mixed classes.
 - Lifters with no GL (new lifters) sit at the start of the first flight.
 
-So the auto sort works from your description: group by weight class and go up through the day (lightest women, lightest men, then heavier), heaviest classes last, with an optional **prime time**. Prime time is set per competition: switch it on, choose how many men and how many women (for example 40 each) and the system picks them by best GL and puts them in their own session(s).
+**How the auto sort will order things** (your description, to be checked in the phase 2 test harness):
+
+- Sessions are **bands of bodyweight, going up through the competition**. Each band holds the women and the men of about the same size, in **separate flights** (women first, set per competition), so women and men are not mixed in a flight.
+- Reading your example, it would look like this:
+
+  | Session | Women's flight | Men's flight |
+  |---|---|---|
+  | 1 (lightest) | 43, 47, 52, 57, 63, 69 | 53, 59, 66 (and 74 if it fits) |
+  | 2 (medium) | 76, 84, 84+ | 83, 93 |
+  | 3 (heaviest) | | 105, 120, 120+ |
+
+  Inside a flight, lifters are ordered by weight class and then by best total, lowest first, with lifters who have no total in the first flight. The numbers above are an illustration: the real split depends on how many people enter, and keeps each flight within the limits (14 full power, or 20 including bench only).
+- **Prime time** is optional per competition. When it is on, it is **one session with two flights**: the top **14 women** and the top **14 men** by best GL points (the setting is how many of each, default 14, maximum 14 for full power). They are taken out of the other sessions.
 
 ---
 
@@ -217,20 +235,36 @@ I will give you **numbered, plain-English steps** for every one of these when it
 
 ## 10. Still to decide
 
-1. **Who pays Stripe's fees?** The federation (simple, and it matches "we take a cut"), or shared in proportion to what each payee receives. The design supports both. My suggestion: the federation.
-2. **Prime time size.** How many men and women, and ranked by what? I have assumed best GL. You mentioned 40 of each. At 14 per flight that is three flights each, so should it be one prime time session or several?
-3. **Sequence within a day.** My reading is: women's classes lightest first, then men's, ascending, with the heaviest men on the last day. Is that right, or do you interleave women and men by bodyweight?
-4. **Entries team and guardian details.** Should every entries team member see guardian phone numbers and access needs for every competition, or only the people running that competition?
-5. **Our cut.** The percentage per host (set once per franchise).
-6. **Refund cut-off.** The default date (for example, entries closing date, or a set number of days before).
-7. **Stripe account owners.** The treasurer and who?
-8. **British Powerlifting.** Confirm the category declaration wording.
-9. **OpenLifter (phase 2).** I need a real exported file, and the list of division names as set up in your OpenLifter template.
-10. **Photo packages.** Confirm White Lights Media is paid 100%, and whether they should receive the order list by email automatically.
+> Answered since the first draft: Stripe fees (federation pays), prime time (one session, two flights of 14), guardian details (under 18s only), access needs (everyone is asked) and the Supabase region (EU West).
+
+1. **Day order.** Is the picture in section 7 right? (Women and men of similar size share a session, in separate flights.) We will settle the details in the phase 2 test harness, so this does not block phase 1.
+2. **Our cut.** The percentage per host (set once per franchise).
+3. **Refund cut-off.** The default date (for example, entries closing date, or a set number of days before).
+4. **Stripe account owners.** The treasurer and who?
+5. **British Powerlifting.** Confirm the category declaration wording.
+6. **OpenLifter (phase 2).** I need a real exported file, and the list of division names as set up in your OpenLifter template.
+7. **Photo packages.** Confirm White Lights Media is paid 100%, and whether they should receive the order list by email automatically.
 
 ---
 
-## 11. Risks I am watching
+## 11. Keeping test and live apart
+
+Taking payments means we must be able to **try everything without touching real money or real people's data**. The arrangement:
+
+| | Test | Live |
+|---|---|---|
+| Supabase | A second project (`ynepf-test`), with made-up data | The current project |
+| Stripe | **Test mode** keys and test cards only | Live keys, added only on go-live day, by the treasurer |
+| Website | Every **Vercel preview** (each branch) points at the test project | The live site |
+| Emails | Go to a test inbox | Go to lifters |
+
+How the website knows which project to use: the site reads its Supabase address and public key from `assets/js/config.js`. I will add a small build step so that Vercel previews write that file from settings (the test project's address and public key), while the live site keeps using the committed file. You will add those settings in Vercel once (steps in [`../setup-guide.md`](../setup-guide.md)).
+
+**Nothing reaches the live database, and no real card is charged, until you say so.**
+
+---
+
+## 12. Risks I am watching
 
 | Risk | What I will do about it |
 |---|---|

@@ -19,8 +19,8 @@ The entry system collects far more personal information than the site does today
 | OpenIPF link, best total, GL points | To check qualification and build flights | Entries team. Best total is public. Already public on OpenIPF | 6 years, with the entry |
 | Payment amount, Stripe fee, last four card digits, receipt link | Accounts and refunds | Entries team. **No card details are ever stored by us** | 6 years |
 | Photo permission and "do not photograph me" | To respect their wishes | Entries team, and the photographer (names only, for the do-not-photograph list) | Until they change their mind, or one season |
-| Parent or guardian name, phone, email, consent (under 18s) | They must be reachable, and a parent must consent | **Entries team only** | **30 days after the competition** |
-| Access needs ("anything we can do to make the day easier?") | To help | **Entries team only** | **30 days after the competition** |
+| Parent or guardian name, phone, email, consent (**only** for lifters under 18 on the day) | They must be reachable, and a parent must consent | **Entries team only** | **30 days after the competition** |
+| Access needs (**everyone is asked**: hearing, sight, anything else) | So we can help on the day, for example hand signals for someone hard of hearing | **Entries team only**, and a printable list for the day | **30 days after the competition**, unless the committee agrees a longer period and says so in the privacy notice |
 | Eligibility note (if someone tells us something about their category) | To handle it privately | **Entries team only** | **30 days after the competition** |
 | Waiting list name and email | To offer a place | Entries team. Name and position are public | Until the competition has happened |
 | Emails we sent | To show what was sent and resend | Entries team | 12 months |
@@ -33,16 +33,21 @@ The entry system collects far more personal information than the site does today
 
 ### Children (under 18 on the day)
 
-- Collect a **named parent or guardian** with a contact number and email, and their consent, including consent for photos.
+- Collect a **named parent or guardian** with a contact number and email, and their consent, including consent for photos, **only** for lifters who are under 18 on the day. Adults are never asked for guardian details.
 - Tell the lifter, on the form, on the check-your-answers page and in the confirmation email, that **a parent or guardian must be with them on the day**.
 - Guardian details are in their own private table and are deleted automatically after the competition.
 - A child's date of birth is never published.
 
 ### Sensitive information
 
-Two optional questions touch sensitive ground, and I recommend we handle them carefully:
+Two questions touch sensitive ground, and I recommend we handle them carefully:
 
-- **Access needs** can reveal health information, which is "special category" data. Make the question **optional**, say it is only used to help, say who sees it, and say they can ask us to delete it. Because it is optional and the wording is clear, asking for **consent** is appropriate.
+- **Access needs.** You have decided that **every lifter is asked**, and that we store the answers so we can help on the day. That is a good reason, and it is allowed, but because it can reveal health information (which the law calls "special category" data) it needs a little more:
+  - The question is asked of everyone, but **answering is optional** ("nothing needed" is fine).
+  - It carries a short explanation: why we ask, that the entries team can see it, how long we keep it, and that they can ask us to delete it.
+  - When someone does enter something, a **tick-box** asks them to agree that we store it for this reason. That is the "explicit consent" the law expects for health information.
+  - It goes in the **privacy policy**, as you suggested.
+  - It is only ever seen by the entries team, and the **printable list for the day** is for the people who need it to help on the platform. It is never in a public list, an email or an export for others.
 - **Eligibility for a category.** I recommend we do **not** have a free-text box for this. Instead the form says "if you need to talk to us about this, email us and we'll deal with it privately". That avoids us collecting sensitive details in a form, and avoids them being stored and exported by accident. (The design has a private place for a note in case the committee wants the box; my advice is to start without it.)
 - Never collect medical details for the eligibility declaration. That goes to the IPF, not us.
 
@@ -59,7 +64,7 @@ Each of these should be named in the privacy notice. For each, check where it st
 
 | Organisation | What they do | Check |
 |---|---|---|
-| Supabase | Holds the database | **Which region is our project in?** Settings > General. A UK or EU region is simplest. If it is in the US, ask for advice. |
+| Supabase | Holds the database | You think it is in EU West. Please check under Settings > General (it will say, for example, "West EU (Ireland)" or "West EU (London)"). Either is fine: the UK treats the EU as adequate for personal data, so no extra safeguards are needed. If it turns out to be somewhere else, tell me. |
 | Stripe | Takes payments | Stripe is responsible for card data. Stripe's own cookies are used on the payment page. |
 | Resend | Sends the emails | Based in the US. They provide the standard safeguards. |
 | Vercel | Hosts the website | Keeps normal server logs. |
@@ -97,7 +102,7 @@ If personal data is lost or seen by someone it should not be, the federation may
 - [ ] Agree the "suggested keep" periods above (or change them).
 - [ ] Decide whether the federation needs a **data protection impact assessment**. Because we hold data about children and some sensitive data, I recommend doing a short one.
 - [ ] Check whether the federation needs to **pay the ICO data protection fee** or is exempt (the ICO has a short online checker).
-- [ ] Confirm the **Supabase region**.
+- [ ] Confirm the **Supabase region** (expected: EU West, which is fine).
 - [ ] Agree a **written agreement with White Lights Media** about the do-not-photograph list.
 - [ ] Update `docs/privacy-policy-draft.md` and the live privacy policy. I will update the draft with each piece I build, so nothing is missed.
 - [ ] Name a person responsible for answering requests and for breaches.
