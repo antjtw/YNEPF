@@ -59,7 +59,7 @@ if (typeof Deno !== "undefined") {
     const rpc = async (fn: string, args: Record<string, unknown>) => (await db(`rpc/${fn}`, { method: "POST", body: JSON.stringify(args) })).json();
     const stripe = (path: string, body?: string) => fetch(`https://api.stripe.com/v1/${path}`, {
       method: body ? "POST" : "GET",
-      headers: { authorization: `Bearer ${stripeKey}`, ...(body ? { "content-type": "application/x-www-form-urlencoded" } : {}) }, body,
+      headers: { authorization: `Bearer ${stripeKey}`, "stripe-version": "2024-06-20", ...(body ? { "content-type": "application/x-www-form-urlencoded" } : {}) }, body,
     }).then((r) => r.json());
 
     // Each Stripe message is handled once, however many times it is delivered.

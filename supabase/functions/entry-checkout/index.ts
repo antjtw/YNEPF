@@ -13,6 +13,9 @@
 //   ALLOWED_ORIGIN           optional; leave unset while testing on preview addresses
 // Supabase fills in SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY by itself.
 
+// Stripe changes option names between API versions. Pinning one means a new default on the account cannot break us.
+export const STRIPE_VERSION = "2024-06-20";
+
 // Plain words for the codes start_entry() raises.
 export const MESSAGES: Record<string, string> = {
   closed: "Entries for this competition are closed.",
@@ -131,7 +134,7 @@ if (typeof Deno !== "undefined") {
     });
     const res = await fetch("https://api.stripe.com/v1/checkout/sessions", {
       method: "POST",
-      headers: { authorization: `Bearer ${stripeKey}`, "content-type": "application/x-www-form-urlencoded", "idempotency-key": `entry-${entry_id}` },
+      headers: { authorization: `Bearer ${stripeKey}`, "stripe-version": STRIPE_VERSION, "content-type": "application/x-www-form-urlencoded", "idempotency-key": `entry-${entry_id}` },
       body: formEncode(params),
     });
     const session = await res.json().catch(() => ({}));
