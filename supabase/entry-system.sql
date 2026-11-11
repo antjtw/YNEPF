@@ -786,7 +786,8 @@ begin
       and (r.equipment is null or r.equipment = v_equip)
       and (r.age_category is null or r.age_category = v_cat)
     order by r.sort_order, r.label limit 1;
-  if v_price is null then raise exception 'no_price'; end if;
+  -- A price of nothing is never accepted here: online entry always takes a payment. (Free places are added by the entries team.)
+  if v_price is null or v_price < 1 then raise exception 'no_price'; end if;
 
   v_expires := now() + make_interval(mins => s.hold_minutes);
   insert into public.entries (competition_id, status, source, stage_id, email, full_name, display_name, bp_number, date_of_birth, sex,
@@ -881,9 +882,9 @@ begin
     if cardinality(v_events) = 0 or not (v_events <@ array['full_power', 'bench_only']) then raise exception 'invalid:events'; end if;
     if cardinality(v_equip) = 0 or not (v_equip <@ array['classic', 'equipped']) then raise exception 'invalid:equipment'; end if;
     if v_hold < 5 or v_hold > 30 then raise exception 'invalid:hold_minutes'; end if;
-    if 'full_power' = any (v_events) and (v_full is null or v_full < 0) then raise exception 'invalid:price_full_power'; end if;
-    if 'bench_only' = any (v_events) and (v_bench is null or v_bench < 0) then raise exception 'invalid:price_bench_only'; end if;
-    if v_sj is not null and v_sj < 0 then raise exception 'invalid:price_sub_junior'; end if;
+    if 'full_power' = any (v_events) and (v_full is null or v_full < 1) then raise exception 'invalid:price_full_power'; end if;
+    if 'bench_only' = any (v_events) and (v_bench is null or v_bench < 1) then raise exception 'invalid:price_bench_only'; end if;
+    if v_sj is not null and v_sj < 1 then raise exception 'invalid:price_sub_junior'; end if;
     if coalesce((select capacity from public.competitions where id = c), 0) < 1 then raise exception 'invalid:capacity'; end if;
   end if;
 

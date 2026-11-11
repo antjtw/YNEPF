@@ -1249,8 +1249,8 @@
   var ENTRY_ERRORS = {
     "invalid:events": "Choose at least one event.", "invalid:equipment": "Choose at least one kind of equipment.",
     "invalid:hold_minutes": "The hold must be between 5 and 30 minutes.",
-    "invalid:price_full_power": "Set a full power price.", "invalid:price_bench_only": "Set a bench only price.",
-    "invalid:price_sub_junior": "The sub-junior price must be zero or more.", "invalid:capacity": "Set the number of places first, under Edit on the Calendar tab.",
+    "invalid:price_full_power": "Set a full power price of more than £0.", "invalid:price_bench_only": "Set a bench only price of more than £0.",
+    "invalid:price_sub_junior": "The sub-junior price must be more than £0, or left empty.", "invalid:capacity": "Set the number of places first, under Edit on the Calendar tab.",
     forbidden: "You do not have permission to change entry settings."
   };
   function pence(v) { return v === null || v === "" || v === undefined ? null : Math.round(Number(v) * 100); }

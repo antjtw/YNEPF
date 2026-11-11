@@ -71,6 +71,10 @@ await db.exec(`update public.entries set status='held', hold_expires_at = now() 
 await db.exec(`insert into public.entries (competition_id,email,full_name,date_of_birth,sex,status) values ('${C}','filler@example.com','Filler','1990-01-01','M','paid')`);
 ok((await conf(r.entry_id)) === "no_place", "a late payment when the competition is now full is told 'no_place' so it can be refunded");
 await db.exec("reset role");
+await db.exec(`update public.entries set status='cancelled' where competition_id='${C}'; update public.price_rules set price_pence = 0 where competition_id='${C}' and label='Full power'`);
+ok((await start({ email: "free@example.com" })).error === "no_price", "a price of £0 is refused, never a silent free entry");
+await db.exec(`update public.price_rules set price_pence = 6000 where competition_id='${C}' and label='Full power'`);
+await db.exec("reset role");
 await db.exec(`update public.competitions set published = true, entry_method='yne', slug='2027-yne-march-open', entry_url='https://old.example/enter', entries_closed_manually=false, entry_opens=null, entry_closes=null where id='${C}'`);
 await db.exec("set role anon");
 const pubUrl = async () => (await db.query(`select entry_url from public.competitions_public where id='${C}'`)).rows[0].entry_url;
@@ -103,6 +107,7 @@ ok((await db.query(`select entry_method m from public.competitions where id='${C
 ok((await save("entries", { prices: { bench_only: 2000, full_power: 5000 } })) === "ok" && (await db.query(`select count(*)::int n, min(price_pence)::int lo from public.price_rules where competition_id='${C2}'`)).rows[0].n === 2, "saving again replaces the price rules (no duplicates)");
 ok((await save("entries", { events: ["curl"] })) === "invalid:events", "an unknown event is refused");
 ok((await save("entries", { hold_minutes: 90 })) === "invalid:hold_minutes", "a hold longer than Stripe allows is refused");
+ok((await save("entries", { prices: { bench_only: 2000, full_power: 0 } })) === "invalid:price_full_power", "a zero price is refused when saving settings");
 ok((await save("entries", { prices: { bench_only: 2000 } })) === "invalid:price_full_power", "a missing price for an offered event is refused");
 await db.exec("reset role");
 await db.exec("reset role");
