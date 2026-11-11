@@ -135,6 +135,12 @@ await db.exec(`update public.entries set status='cancelled' where id='${r.entry_
 r = await start({ email: "d4@example.com", bp_number: "BP 300" }); const r4 = await start({ email: "d5@example.com", bp_number: "BP 300" });
 ok(r4.entry_id && (await db.query(`select status s from public.entries where id='${r.entry_id}'`)).rows[0].s === "cancelled", "retrying with a typo in the email replaces the earlier hold for the same membership number");
 await db.exec(`update public.entries set status='cancelled' where competition_id='${C}'`);
+// "TBC" is accepted for the membership number and never counts as a duplicate
+await db.exec(`update public.entries set status='cancelled' where competition_id='${C}'`);
+r = await start({ email: "t1@example.com", bp_number: "TBC" });
+await db.exec(`update public.entries set status='paid' where id='${r.entry_id}'`);
+ok(r.entry_id && (await start({ email: "t2@example.com", bp_number: "tbc" })).entry_id, "two lifters can both enter TBC for their membership number");
+await db.exec(`update public.entries set status='cancelled' where competition_id='${C}'`);
 // qualification: OpenIPF link mandatory
 await db.exec(`update public.entry_settings set openipf_mode='required' where competition_id='${C}'`);
 ok((await start({ email: "q1@example.com" })).error === "invalid:openipf", "when qualification is on, the OpenIPF link is mandatory");

@@ -770,6 +770,8 @@ declare
   v_guest boolean;
   v_club text;
 begin
+  -- "TBC" and the like are accepted when someone does not have their number yet; they are not a number to compare.
+  if v_bp ~ '^(tbc|tbd|n/?a|none|unknown|pending|\?+|-+|x+|0+)$' then v_bp := ''; end if;
   select * into c from public.competitions where id = (p->>'competition_id')::uuid for update;   -- one at a time per competition
   if not found or c.entry_method <> 'yne' then raise exception 'closed'; end if;
   -- Unpublished (test) competitions can only be entered by the entries team, previewing: the payment function

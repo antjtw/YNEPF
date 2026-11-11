@@ -186,8 +186,7 @@
       divisionField(),
       guestBlocked() ? el("p", { class: "callout", role: "status" }, "Entries from outside the Yorkshire & North East division open to guests on ", el("strong", null, whenText(guestOpensAt())), ". Please come back then. Members of the division can enter now.") : null,
       clubField(),
-      text("bp_number", "British Powerlifting membership number (optional)", { max: 40,
-        help: "This is displayed in your Sport80 profile. You may enter without a British Powerlifting membership number, but you must have a valid membership on competition day." }),
+      text("bp_number", "British Powerlifting membership number", { max: 40, help: "This is displayed in your Sport80 profile." }),
       text("instagram", "Instagram handle (optional)", { max: 60, help: "This will be displayed next to your name on the lifting order, and will be public." }),
       kids ? el("div", null,
         el("h2", { class: "form-heading" }, "Parent or guardian"),
@@ -266,6 +265,7 @@
       if (!iso) e.push(["dob", "Enter your date of birth as a real date, for example 27 3 1990"]);
       else { var age = ageOnDay(); if (age < 14 && ageCategory(+iso.slice(0, 4), +ctx.comp.start_date.slice(0, 4)) === "under14") e.push(["dob", "Lifters must be at least 14 in the year of the competition"]); }
       if (!v.sex) e.push(["sex", "Choose men's or women's"]);
+      if (!trim(v.bp_number)) e.push(["bp_number", "Enter your British Powerlifting membership number from your Sport80 profile, or TBC if you do not have it yet"]);
       if (!v.eligibility_confirmed) e.push(["eligibility_confirmed", "Confirm the category you are entering matches your sex at birth. If it does not, please email the entries team before entering."]);
       if (!v.division_id) e.push(["division_id", "Choose the federation or division you are part of"]);
       else if (guestBlocked()) e.push(["division_id", "Entries from outside the Yorkshire & North East division open on " + whenText(guestOpensAt())]);
@@ -355,7 +355,7 @@
       var errs = validate(step); if (errs.length) return showErrors(errs);
       step++; render(); window.scrollTo(0, 0);
     } }, step === 1 ? stepAbout() : step === 2 ? stepLifting() : stepCheck(),
-      el("div", { style: "display:flex;gap:.75rem;margin-top:1.5rem;flex-wrap:wrap" },
+      el("div", { class: "form-actions" },
         step > 1 ? el("button", { class: "btn btn-secondary", type: "button", onclick: function () { step--; render(); window.scrollTo(0, 0); } }, "Back") : null,
         el("button", { class: "btn btn-primary", type: "submit" }, step === 3 ? "Continue to payment" : "Continue")));
     app.appendChild(form);
@@ -407,6 +407,7 @@
           priority = true;
         }
         if (st.places_left < 1) return stop("This competition is full", "<p>Sorry, all places have gone." + (comp.waitlist_url ? " <a href='" + encodeURI(comp.waitlist_url) + "'>Join the waiting list</a>." : "") + "</p>");
+        if (!(a[5].data || []).length) return stop("Enter " + comp.name, "<p>We could not load the list of federations, so entries cannot be taken just now. Please try again later or <a href='contact.html'>contact the entries team</a>.</p>");
         ctx = { comp: comp, settings: settings, rules: a[3].data || [], classes: a[4].data || [], divisions: a[5].data || [], clubs: a[7].data || [] };
         document.getElementById("hold-minutes").textContent = settings.hold_minutes;
         lede.textContent += ". " + st.places_left + (st.places_left === 1 ? " place" : " places") + " left.";
