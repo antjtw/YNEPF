@@ -485,7 +485,7 @@ table.data tbody tr:hover { background: var(--navy-10); }
 .field label, .field .label { display: block; font-weight: 600; margin-bottom: var(--space-1); color: var(--text-heading); }
 .field .help { color: var(--text-muted); font-size: var(--fs-16); margin: 0 0 var(--space-2); }
 .field input[type="text"], .field input[type="url"], .field input[type="email"], .field input[type="password"], .field input[type="search"],
-.field input[type="date"], .field input[type="datetime-local"], .field input[type="number"], .field select, .field textarea, .rec-tools input {
+.field input[type="date"], .field input[type="datetime-local"], .field input[type="number"], .field input[type="tel"], .field input[type="time"], .field select, .field textarea, .rec-tools input {
   width: 100%; font: inherit; color: var(--text-default); background: var(--surface-raised);
   padding: var(--space-3) var(--space-4); min-height: 3rem;
   border: 1.5px solid var(--border-strong); border-radius: var(--radius);
@@ -695,3 +695,12 @@ table.lifters thead th { overflow-wrap: normal; }
 .confirm-panel.is-neutral { background: var(--navy-50); color: var(--text-heading); }
 .confirm-panel.is-neutral h1 { color: var(--text-heading); }
 .confirm-panel.is-neutral p { color: var(--text-default); }
+
+/* Dropdowns: the same box as the other fields, with our own arrow instead of the browser's. (The list that opens is
+   drawn by the browser or phone itself, which is what keeps it accessible and easy to use on a touch screen.) */
+.field select {
+  -webkit-appearance: none; appearance: none; cursor: pointer; padding-right: 3rem; text-overflow: ellipsis;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23152C41' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 1rem center; background-size: 1.25rem;
+}
+.field select:disabled { cursor: not-allowed; }
