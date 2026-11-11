@@ -83,6 +83,32 @@ create table if not exists public.divisions (
   sort_order integer not null default 0
 );
 
+-- What sort of division each is: our own, another English division (the club list applies), another home
+-- nation, or somewhere else. A lifter outside our own division is a guest.
+alter table public.divisions add column if not exists kind text not null default 'english'
+  check (kind in ('home', 'english', 'home_nation', 'other'));
+insert into public.divisions (name, is_home, kind, sort_order) values
+  ('Yorkshire & North East', true, 'home', 1),
+  ('East Midlands', false, 'english', 10), ('Greater London', false, 'english', 11), ('North Midlands', false, 'english', 12),
+  ('North West', false, 'english', 13), ('South East', false, 'english', 14), ('South Midlands', false, 'english', 15),
+  ('South West', false, 'english', 16), ('West Midlands', false, 'english', 17),
+  ('Scotland', false, 'home_nation', 30), ('Wales', false, 'home_nation', 31), ('Northern Ireland', false, 'home_nation', 32), ('Isle of Man', false, 'home_nation', 33),
+  ('Other (another country)', false, 'other', 90)
+on conflict (name) do update set kind = excluded.kind, is_home = excluded.is_home;
+
+-- Approved and affiliated clubs, imported every few weeks from the English Powerlifting Association and British
+-- Powerlifting websites (the sync-clubs function). Names only: no contact details are stored.
+create table if not exists public.clubs (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  name_key text generated always as (lower(btrim(name))) stored unique,
+  source text not null default 'manual' check (source in ('epa_affiliated', 'bp_approved', 'manual')),
+  region text not null default '',
+  active boolean not null default true,
+  last_seen timestamptz not null default now(),
+  created_at timestamptz not null default now()
+);
+
 -- Age category from year of birth (IPF calendar-year rule). Never stored on an entry.
 create or replace function public.age_category_on(dob date, on_date date)
 returns text
@@ -135,6 +161,7 @@ create table if not exists public.entry_settings (
   sessions_per_day integer not null default 2,
   platforms integer not null default 1,
   flights_per_session integer not null default 2,
+  guest_delay_days integer not null default 14 check (guest_delay_days between 0 and 90),   -- guests (outside our division) can enter this many days after entry opens
   offer_window_hours integer not null default 48,
   offer_reminder_hours integer not null default 12,
   offer_automatic boolean not null default true,          -- offer places automatically, or wait for "Offer next place"
@@ -352,7 +379,8 @@ create table if not exists public.offers (
   reminder_sent_at timestamptz,
   outcome text check (outcome in ('entered', 'declined', 'lapsed'))
 );
-alter table public.entry_settings alter column hold_minutes set default 5;   -- short holds are fairer: places are not parked
+alter table public.entry_settings alter column hold_minutes set default 5;
+alter table public.entry_settings add column if not exists guest_delay_days integer not null default 14 check (guest_delay_days between 0 and 90);   -- short holds are fairer: places are not parked
 
 create table if not exists public.invites (                -- priority entry (phase 3) and manual personal links
   id uuid primary key default gen_random_uuid(),
@@ -651,7 +679,7 @@ declare t text;
 begin
   -- Settings that the public competition page needs to read: public read, admins and the entries team write.
   foreach t in array array['entry_settings', 'entry_stages', 'price_rules', 'addons', 'addon_options', 'addon_images',
-                           'qualifying_totals', 'weight_classes', 'divisions', 'volunteer_roles'] loop
+                           'qualifying_totals', 'weight_classes', 'divisions', 'clubs', 'volunteer_roles'] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('drop policy if exists "public read" on public.%I', t);
     execute format('create policy "public read" on public.%I for select to anon, authenticated using (true)', t);
@@ -689,7 +717,7 @@ create policy "entries read" on public.audit_log for select to authenticated usi
 -- ---------------------------------------------------------------------------
 -- 15. Grants
 -- ---------------------------------------------------------------------------
-grant select on public.entry_settings, public.entry_stages, public.price_rules, public.addons, public.addon_options,
+grant select on public.clubs, public.entry_settings, public.entry_stages, public.price_rules, public.addons, public.addon_options,
                 public.addon_images, public.qualifying_totals, public.weight_classes, public.divisions, public.payees,
                 public.hosts, public.volunteer_roles, public.rota_slots, public.lifting_orders, public.lo_sessions to anon;
 grant select on public.entries_public, public.waiting_list_public, public.competition_entry_state to anon, authenticated;
@@ -734,6 +762,9 @@ declare
   v_access boolean;
   v_invite uuid;
   v_bp text := lower(trim(coalesce(p->>'bp_number', '')));
+  v_d public.divisions%rowtype;
+  v_guest boolean;
+  v_club text;
 begin
   select * into c from public.competitions where id = (p->>'competition_id')::uuid for update;   -- one at a time per competition
   if not found or c.entry_method <> 'yne' then raise exception 'closed'; end if;
@@ -779,6 +810,22 @@ begin
     raise exception 'invalid:weight_class';
   end if;
 
+  -- The federation they belong to, and their club. Anyone outside our own division is a guest, and guests can only
+  -- enter some days after entry opens. (The entries team checks the membership number by hand afterwards.)
+  select * into v_d from public.divisions where id = nullif(p->>'division_id', '')::uuid;
+  if not found then raise exception 'invalid:division'; end if;
+  v_guest := not v_d.is_home;
+  if v_guest and c.entry_opens is not null and now() < c.entry_opens + make_interval(days => s.guest_delay_days) then raise exception 'guest_not_open'; end if;
+  v_club := btrim(coalesce(p->>'club', ''));
+  if v_d.kind in ('home', 'english') then
+    -- English divisions: a club from the approved list, or unattached.
+    if v_club = '' then raise exception 'invalid:club'; end if;
+    if lower(v_club) <> 'unattached' and not exists (select 1 from public.clubs where name_key = lower(v_club) and active) then raise exception 'invalid:club'; end if;
+    if lower(v_club) = 'unattached' then v_club := 'Unattached'; end if;
+  elsif char_length(v_club) > 120 then
+    raise exception 'invalid:club';
+  end if;
+
   -- Under 18 on the day: a named parent or guardian and their consent are required. Adults are never asked.
   if v_age < 18 and (coalesce(trim(p->>'guardian_name'), '') = '' or coalesce(trim(p->>'guardian_phone'), '') = ''
        or coalesce(trim(p->>'guardian_email'), '') = '' or not coalesce((p->>'guardian_consent')::boolean, false)) then
@@ -816,11 +863,11 @@ begin
   v_expires := now() + make_interval(mins => s.hold_minutes);
   insert into public.entries (competition_id, status, source, stage_id, email, full_name, display_name, bp_number, date_of_birth, sex,
       division_id, club, instagram, photo_ok, photo_opt_out, eligibility_confirmed, weight_class_id, equipment, event,
-      openipf_url, price_pence, hold_expires_at)
+      openipf_url, price_pence, hold_expires_at, is_guest)
     values (c.id, 'held', 'web', v_stage, v_email, v_name, trim(coalesce(p->>'display_name', '')), trim(coalesce(p->>'bp_number', '')), v_dob, v_sex,
-      nullif(p->>'division_id', '')::uuid, trim(coalesce(p->>'club', '')), trim(coalesce(p->>'instagram', '')),
+      v_d.id, v_club, trim(coalesce(p->>'instagram', '')),
       coalesce((p->>'photo_ok')::boolean, false), coalesce((p->>'photo_opt_out')::boolean, false), true, v_class, v_equip, v_event,
-      trim(coalesce(p->>'openipf_url', '')), v_price, v_expires)
+      trim(coalesce(p->>'openipf_url', '')), v_price, v_expires, v_guest)
     returning id into v_entry;
   insert into public.entry_private (entry_id, guardian_name, guardian_phone, guardian_email, guardian_consent,
       access_hearing, access_sight, access_notes, access_consent, delete_after)
@@ -897,6 +944,7 @@ declare
   v_bench integer := nullif(p#>>'{prices,bench_only}', '')::int;
   v_full integer := nullif(p#>>'{prices,full_power}', '')::int;
   v_method text := coalesce(p->>'entry_method', 'external');
+  v_guest_days integer := coalesce((p->>'guest_delay_days')::int, 14);
   v_ipf text := case when coalesce((p->>'openipf_required')::boolean, false) then 'required' else 'optional' end;
 begin
   if not public.is_entries() then raise exception 'forbidden'; end if;
@@ -909,6 +957,7 @@ begin
     if cardinality(v_events) = 0 or not (v_events <@ array['full_power', 'bench_only']) then raise exception 'invalid:events'; end if;
     if cardinality(v_equip) = 0 or not (v_equip <@ array['classic', 'equipped']) then raise exception 'invalid:equipment'; end if;
     if v_hold < 5 or v_hold > 30 then raise exception 'invalid:hold_minutes'; end if;
+    if v_guest_days < 0 or v_guest_days > 90 then raise exception 'invalid:guest_delay_days'; end if;
     if 'full_power' = any (v_events) and (v_full is null or v_full < 1) then raise exception 'invalid:price_full_power'; end if;
     if 'bench_only' = any (v_events) and (v_bench is null or v_bench < 1) then raise exception 'invalid:price_bench_only'; end if;
     if v_sj is not null and v_sj < 1 then raise exception 'invalid:price_sub_junior'; end if;
@@ -918,12 +967,12 @@ begin
   update public.competitions set entry_method = v_method,
     entries_closed_manually = coalesce((p->>'entries_closed_manually')::boolean, false)
     where id = c;
-  insert into public.entry_settings (competition_id, events, equipment, hold_minutes, openipf_mode, updated_at)
+  insert into public.entry_settings (competition_id, events, equipment, hold_minutes, openipf_mode, guest_delay_days, updated_at)
     values (c, case when cardinality(v_events) = 0 then array['full_power', 'bench_only'] else v_events end,
             case when cardinality(v_equip) = 0 then array['classic', 'equipped'] else v_equip end,
-            v_hold, v_ipf, now())
+            v_hold, v_ipf, v_guest_days, now())
     on conflict (competition_id) do update set events = excluded.events, equipment = excluded.equipment,
-      hold_minutes = excluded.hold_minutes, openipf_mode = excluded.openipf_mode, updated_at = now();
+      hold_minutes = excluded.hold_minutes, openipf_mode = excluded.openipf_mode, guest_delay_days = excluded.guest_delay_days, updated_at = now();
 
   if v_method = 'yne' then
     delete from public.price_rules where competition_id = c;

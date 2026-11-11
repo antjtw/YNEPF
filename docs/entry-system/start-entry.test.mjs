@@ -20,7 +20,9 @@ await db.exec(`insert into public.competitions (id,name,start_date,capacity,publ
 const wc = async (sex) => (await db.query(`select id from public.weight_classes where sex='${sex}' and active and label = '${sex === "M" ? "83" : "63"}'`)).rows[0]?.id;
 let wcM = await wc("M"), wcF = await wc("F");
 if (!wcM) { await db.exec(`insert into public.weight_classes (sex,label,upper_kg) values ('M','83',83),('F','63',63)`); wcM = await wc("M"); wcF = await wc("F"); }
-const good = { competition_id: C, email: "A@Example.com", full_name: "Alex Lifter", date_of_birth: "1990-06-01", sex: "M", event: "full_power", equipment: "classic", weight_class_id: wcM, eligibility_confirmed: true };
+const divId = async (name) => (await db.query(`select id from public.divisions where name = $1`, [name])).rows[0].id;
+const homeDiv = await divId("Yorkshire & North East");
+const good = { division_id: homeDiv, club: "Unattached", competition_id: C, email: "A@Example.com", full_name: "Alex Lifter", date_of_birth: "1990-06-01", sex: "M", event: "full_power", equipment: "classic", weight_class_id: wcM, eligibility_confirmed: true };
 const start = async (o) => { try { const r = await db.query(`select public.start_entry($1::jsonb) r`, [JSON.stringify({ ...good, ...o })]); return r.rows[0].r; } catch (e) { return { error: e.message }; } };
 
 const can = async (q) => { try { await db.query(q); return true; } catch { return false; } };
@@ -90,6 +92,28 @@ await db.exec("set role anon");
 ok((await pubUrl()) === "", "closing entries by hand removes the way in");
 await db.exec("reset role");
 await db.exec(`update public.competitions set entries_closed_manually=false where id='${C}'`);
+// ---- divisions, guests and clubs
+await db.exec("reset role");
+await db.exec(`update public.entries set status='cancelled' where competition_id='${C}'; update public.entry_settings set guest_delay_days = 14 where competition_id='${C}'; update public.competitions set entry_opens = now() - interval '3 days', entry_closes = null where id='${C}'`);
+await db.exec(`insert into public.clubs (name, source, region) values ('Implexus Gym', 'epa_affiliated', ''), ('Old Club', 'epa_affiliated', '')`);
+await db.exec(`update public.clubs set active = false where name = 'Old Club'`);
+const sw = await divId("South West"), scot = await divId("Scotland");
+ok((await start({ email: "g1@example.com", division_id: "" })).error === "invalid:division", "a division must be chosen");
+ok((await start({ email: "g1@example.com", division_id: "00000000-0000-0000-0000-000000000099" })).error === "invalid:division", "...and be a real one");
+ok((await start({ email: "g2@example.com", division_id: sw, club: "Implexus Gym" })).error === "guest_not_open", "a guest cannot enter until 14 days after entry opened (opened 3 days ago)");
+await db.exec(`update public.competitions set entry_opens = now() - interval '15 days' where id='${C}'`);
+r = await start({ email: "g3@example.com", division_id: sw, club: "Implexus Gym" });
+ok(r.entry_id && (await db.query(`select is_guest g, club c from public.entries where id='${r.entry_id}'`)).rows[0].g === true, "after 14 days a guest can enter, and is marked as a guest");
+ok((await start({ email: "h1@example.com", club: "Implexus Gym" })).entry_id && (await db.query(`select is_guest g from public.entries where email='h1@example.com' and status='held'`)).rows[0].g === false, "our own division is not a guest");
+ok((await start({ email: "h2@example.com", club: "Not A Real Club" })).error === "invalid:club", "a club must be on the approved list");
+ok((await start({ email: "h2@example.com", club: "Old Club" })).error === "invalid:club", "...and a club that has dropped off the list is refused");
+ok((await start({ email: "h2@example.com", club: "" })).error === "invalid:club", "an English division must give a club, or say unattached");
+await db.exec(`update public.entries set status='cancelled' where competition_id='${C}'`);
+ok((await start({ email: "h3@example.com", club: "IMPLEXUS gym" })).entry_id, "club names are matched ignoring capitals");
+await db.exec(`update public.entries set status='cancelled' where competition_id='${C}'`);
+r = await start({ email: "s1@example.com", division_id: scot, club: "Edinburgh Barbell" });
+ok(r.entry_id, "from Scotland a club can be typed in (we cannot check it), once guests are allowed");
+await db.exec(`update public.entries set status='cancelled' where competition_id='${C}'; update public.competitions set entry_opens = null where id='${C}'`);
 // ---- fairness rules: priority entry, qualification, duplicates, short holds
 await db.exec("reset role");
 for (const [k, id] of [["entries", "00000000-0000-0000-0000-00000000000b"], ["editor", "00000000-0000-0000-0000-00000000000c"]]) await db.exec(`insert into auth.users (id,email,email_confirmed_at) values ('${id}','${k}@example.com',now()) on conflict do nothing`);

@@ -7,6 +7,7 @@
   var Y = window.YNEPF, el = Y.el;
   var list = document.getElementById("entries-list"), status = document.getElementById("entries-status");
   var title = document.getElementById("entries-title"), lede = document.getElementById("entries-lede");
+  var CAT = { SJ: "Sub-junior", J: "Junior", "": "Open", M1: "M1", M2: "M2", M3: "M3", M4: "M4" };
   var EVENT = { full_power: "Full power", bench_only: "Bench only" }, EQUIP = { classic: "Classic", equipped: "Equipped" };
 
   function stop(h, html) { title.textContent = h; lede.textContent = ""; status.hidden = false; status.innerHTML = html; }
@@ -29,9 +30,9 @@
         list.appendChild(el("h2", null, g[1] + " (" + inGroup.length + ")"));
         inGroup.sort(function (a, b) { return classKey(a) - classKey(b) || a.name.localeCompare(b.name); });
         list.appendChild(el("div", { class: "table-wrap" }, el("table", { class: "data" },
-          el("thead", null, el("tr", null, ["Name", "Club", "Class", "Event"].map(function (h) { return el("th", { scope: "col" }, h); }))),
+          el("thead", null, el("tr", null, ["Name", "Club", "Class", "Category", "Event"].map(function (h) { return el("th", { scope: "col" }, h); }))),
           el("tbody", null, inGroup.map(function (e) {
-            return el("tr", null, el("th", { scope: "row" }, e.name), el("td", null, e.club || ""), el("td", null, (e.weight_class || "") + " kg"),
+            return el("tr", null, el("th", { scope: "row" }, e.name), el("td", null, e.club || ""), el("td", null, (e.weight_class || "") + " kg"), el("td", null, CAT[e.age_category || ""] || ""),
               el("td", null, (EVENT[e.event] || "") + (e.equipment ? ", " + (EQUIP[e.equipment] || e.equipment).toLowerCase() : "")));
           })))));
       });

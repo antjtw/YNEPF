@@ -24,13 +24,25 @@ export async function verifySignature(payload: string, header: string, secret: s
   return sigs.some((s) => s.length === expected.length && [...s].reduce((d, c, i) => d | (c.charCodeAt(0) ^ expected.charCodeAt(i)), 0) === 0);
 }
 
+// The year they turn the age decides the category, not the day (the same rule as the database).
+export function ageCategory(yearOfBirth: number, competitionYear: number): string {
+  const d = competitionYear - yearOfBirth;
+  return d < 14 ? "" : d <= 18 ? "Sub-junior" : d <= 23 ? "Junior" : d <= 39 ? "Open" : d <= 49 ? "Masters 1 (M1)" : d <= 59 ? "Masters 2 (M2)" : d <= 69 ? "Masters 3 (M3)" : "Masters 4 (M4)";
+}
+// Exact age on the day (the under-18 guardian rule uses this, not the calendar year).
+export function exactAge(dob: string, on: string): number {
+  const b = new Date(dob), c = new Date(on);
+  let a = c.getUTCFullYear() - b.getUTCFullYear();
+  if (c.getUTCMonth() < b.getUTCMonth() || (c.getUTCMonth() === b.getUTCMonth() && c.getUTCDate() < b.getUTCDate())) a--;
+  return a;
+}
 export function pounds(pence: number): string { return "£" + (pence / 100).toFixed(2); }
 
-export function confirmationEmail(e: { name: string; competition: string; date: string; event: string; equipment: string; pence: number; under18: boolean; entriesEmail: string; refundsUntil?: string }) {
+export function confirmationEmail(e: { name: string; competition: string; date: string; event: string; equipment: string; pence: number; under18: boolean; entriesEmail: string; refundsUntil?: string; category?: string; division?: string; club?: string }) {
   const lines = [
     `Hi ${e.name},`, "",
     `You are entered in ${e.competition} (${e.date}). Thank you!`, "",
-    `Event: ${e.event}`, `Equipment: ${e.equipment}`, `Paid: ${pounds(e.pence)}`, "",
+    `Event: ${e.event}`, `Equipment: ${e.equipment}`, ...(e.category ? [`Category: ${e.category}`] : []), ...(e.division ? [`Federation or division: ${e.division}`] : []), ...(e.club ? [`Club: ${e.club}`] : []), `Paid: ${pounds(e.pence)}`, "",
   ];
   if (e.under18) lines.push("Because you are under 18 on the day, a parent or guardian must be with you at the competition.", "");
   if (e.refundsUntil) lines.push(`Refunds are available until entries close on ${e.refundsUntil}. After that, entries cannot be refunded.`, "");
@@ -86,7 +98,7 @@ if (typeof Deno !== "undefined") {
             card_last4: charge.payment_method_details?.card?.last4 ?? "", receipt_url: charge.receipt_url ?? "",
           }),
         });
-        const [row] = await (await db(`entries?id=eq.${entryId}&select=email,full_name,event,equipment,price_pence,date_of_birth,competitions(name,start_date,entry_closes)`)).json();
+        const [row] = await (await db(`entries?id=eq.${entryId}&select=email,full_name,event,equipment,price_pence,date_of_birth,club,divisions(name,is_home),competitions(name,start_date,entry_closes)`)).json();
         const from = Deno.env.get("MAIL_FROM") ?? "YNEPF <onboarding@resend.dev>";
         const copy = Deno.env.get("NOTIFY_TO") ?? "ynepfentries@gmail.com";
         const send = (to: string[], subject: string, text: string) => fetch("https://api.resend.com/emails", {
@@ -95,11 +107,11 @@ if (typeof Deno !== "undefined") {
         }).then((r) => { if (!r.ok) console.error("Resend failed", r.status); });
 
         if (state === "paid" && row) {
-          const age = new Date(row.competitions.start_date).getFullYear() - new Date(row.date_of_birth).getFullYear();
+          const compYear = new Date(row.competitions.start_date).getFullYear(), age = exactAge(row.date_of_birth, row.competitions.start_date);
           await send([row.email, copy], `Your entry: ${row.competitions.name}`, confirmationEmail({
             name: row.full_name, competition: row.competitions.name, date: row.competitions.start_date,
             event: row.event === "bench_only" ? "Bench only" : "Full power", equipment: row.equipment === "equipped" ? "Equipped" : "Classic",
-            pence: row.price_pence, under18: age < 18, entriesEmail: copy,
+            pence: row.price_pence, under18: age < 18, entriesEmail: copy, category: ageCategory(new Date(row.date_of_birth).getFullYear(), compYear), division: row.divisions ? row.divisions.name + (row.divisions.is_home ? "" : " (guest)") : undefined, club: row.club || undefined,
             refundsUntil: row.competitions.entry_closes ? new Date(row.competitions.entry_closes).toLocaleString("en-GB", { timeZone: "Europe/London", dateStyle: "full", timeStyle: "short" }) : undefined,
           }));
         } else if (state === "no_place" && row && session.payment_intent) {

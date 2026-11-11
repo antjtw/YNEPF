@@ -44,7 +44,7 @@ We do not sell your information. [Confirm where each service stores data and whe
 
 *These paragraphs are for the committee and whoever looks after data protection to review. They are not legal advice. Brackets mark decisions that are still open. See `docs/entry-system/privacy-guidance.md`.*
 
-**What we collect when you enter.** Your name, email address, date of birth, men's or women's category, British Powerlifting membership number, club, Instagram handle (optional), your event, equipment and weight class, any OpenIPF link you give us, and your photo permissions. We record what you paid and the last four digits of your card. We never see or store your full card details: Stripe takes the payment.
+**What we collect when you enter.** Your name, email address, date of birth (we work out your age category from the year you were born), men's or women's category, British Powerlifting membership number, the federation or division you belong to, your club, Instagram handle (optional), your event, equipment and weight class, any OpenIPF link you give us, and your photo permissions. We record what you paid and the last four digits of your card. We never see or store your full card details: Stripe takes the payment.
 
 **Lifters under 18.** If you are under 18 on the day of the competition we also ask for a parent or guardian's name, phone number and email address, and their consent. A parent or guardian must be with you on the day.
 

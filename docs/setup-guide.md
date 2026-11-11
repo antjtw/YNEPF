@@ -15,6 +15,7 @@ This guide grows as the entry system is built. Parts marked **(to be written)** 
 | 3 | Putting the payment functions into Supabase | You | Taking a test payment |
 | 4 | The Stripe webhook | You and treasurer | The system learning that a payment worked |
 | 5 | `@ynepf.co.uk` email | You | Sending emails. See [email-setup-guide.md](email-setup-guide.md) |
+| 5b | The club list | You | Lifters choosing their club (see below) |
 | 6 | Making a TEST competition and entering it | You | Trying it end to end |
 | 7 | Apple Pay domain **(to be written)** | Treasurer | Apple Pay and Google Pay |
 | 8 | Going live **(to be written)** | Treasurer and you | Real money |
@@ -102,6 +103,18 @@ Follow [email-setup-guide.md](email-setup-guide.md). Until then, Resend's starte
 
 ---
 
+## Part 5b: The club list
+
+Lifters in English divisions choose their club from a list copied from the English Powerlifting Association (affiliated clubs) and British Powerlifting (approved clubs) websites. Only club **names** are copied, never contact details.
+
+1. In Supabase, **Edge Functions > Deploy a new function > Via editor**. Name it `sync-clubs`, paste in `supabase/functions/sync-clubs/index.ts`, switch **Verify JWT** **off**, and **Deploy**.
+2. In the site editor, **Calendar**, scroll to **Club list** (entries team and admins) and press **Refresh club list**. You should see "Club list refreshed: about 89 clubs".
+3. Optional, to keep it fresh: run `docs/entry-system/schedule-club-sync.sql` once in the Supabase SQL editor. It refreshes on the 1st and 15th of each month.
+
+If a website changes shape, the import stops and leaves the list as it was, and the Club list box says the last check did not work. Tell me and I will adjust it. A club that is missing from both websites can only be chosen as "Unattached" until it is added to one of them.
+
+---
+
 ## Part 6: Making a TEST competition and entering it
 
 Everything for a competition is set up once, on one page in the **Calendar** tab. There is no separate Entries tab: a competition's page has **Details** (everything you set up) and **Entries** (who has entered).
@@ -110,7 +123,7 @@ Everything for a competition is set up once, on one page in the **Calendar** tab
    - **The competition:** name (for example `TEST Spring Open`), description.
    - **When and where:** the dates and venue.
    - **Entry:** choose **On this website, paid by card**, set the **Number of spaces**, and leave **Entry opens** and **Entry closes** on the usual settings (8 weeks before at 9am, 3 weeks before at noon) or choose your own. A line under each shows exactly when it will happen, and when priority entry opens (a day earlier).
-   - **Online entry:** the events and equipment you offer, and the prices.
+   - **Online entry:** the events and equipment you offer, the prices, and how many days after entry opens guests (anyone outside the Yorkshire & North East division) can enter. It is 14 by default.
    - Leave **Show on the website** unticked while you test. New items start as drafts.
 2. Press **Add competition**. You stay on the page, which now also has an **Entries** tab.
 3. Enter it:

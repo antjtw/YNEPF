@@ -27,6 +27,24 @@
     if (d >= 40 && d <= 49) return "M1"; if (d >= 50 && d <= 59) return "M2"; if (d >= 60 && d <= 69) return "M3"; if (d >= 70) return "M4";
     return "under14";
   }
+  // "You are an M2 lifter", "a sub-junior lifter", "an open lifter" (the year they turn the age decides, not the day).
+  var CAT_NAMES = { SJ: "a sub-junior lifter", J: "a junior lifter", "": "an open lifter", M1: "an M1 lifter (Masters 1)", M2: "an M2 lifter (Masters 2)", M3: "an M3 lifter (Masters 3)", M4: "an M4 lifter (Masters 4)" };
+  var CAT_SHORT = { SJ: "Sub-junior", J: "Junior", "": "Open", M1: "Masters 1 (M1)", M2: "Masters 2 (M2)", M3: "Masters 3 (M3)", M4: "Masters 4 (M4)" };
+  function catNote() {
+    var c = myCategory();
+    return c === null ? "" : ["For this competition ", el("strong", null, "you are " + CAT_NAMES[c] + "."), " We work this out from the year you were born."];
+  }
+  function updateCatNote() {
+    var n = document.getElementById("cat-note"); if (!n) return;
+    n.replaceChildren(); var c = catNote();
+    if (c) c.forEach(function (x) { n.appendChild(typeof x === "string" ? document.createTextNode(x) : x); });
+    n.hidden = !c;
+  }
+  function myCategory() {
+    var iso = dobISO(); if (!iso) return null;
+    var c = ageCategory(+iso.slice(0, 4), +ctx.comp.start_date.slice(0, 4));
+    return c === "under14" ? null : c;
+  }
   function dobISO() {
     var d = +v.dd, m = +v.mm, y = +v.yyyy;
     if (!d || !m || !y || String(v.yyyy).length !== 4) return null;
@@ -40,6 +58,17 @@
     var age = c[0] - b[0]; if (c[1] < b[1] || (c[1] === b[1] && c[2] < b[2])) age--;
     return age;
   }
+  // ---- federation / division and club ---------------------------------------------------------------
+  function division() { return ctx.divisions.filter(function (d) { return d.id === v.division_id; })[0] || null; }
+  // Anyone outside our own division is a guest, and guests can enter only some days after entry opens.
+  function guestOpensAt() {
+    var d = division();
+    if (!d || d.is_home || !ctx.comp.entry_opens) return null;
+    return new Date(new Date(ctx.comp.entry_opens).getTime() + (ctx.settings.guest_delay_days || 0) * 86400000);
+  }
+  function guestBlocked() { var t = guestOpensAt(); return !!t && t > new Date(); }
+  function whenText(d) { return d.toLocaleString("en-GB", { timeZone: Y.TZ, dateStyle: "full", timeStyle: "short" }); }
+  function pickClub() { var d = division(); return !!d && (d.kind === "home" || d.kind === "english"); }   // English divisions pick from the approved list
   // Classes this lifter may enter: men's 53 and women's 43 are for sub-juniors only (the database checks this too).
   function allowedClasses() {
     var iso = dobISO(), cat = iso ? ageCategory(+iso.slice(0, 4), +ctx.comp.start_date.slice(0, 4)) : null;
@@ -111,7 +140,7 @@
   function dobField() {
     function part(k, label, w, max) {
       return el("div", { class: "date-part" }, el("label", { for: "dob-" + k }, label),
-        el("input", { id: "dob-" + k, type: "text", inputmode: "numeric", maxlength: max, size: w, value: v[k], autocomplete: k === "dd" ? "bday-day" : k === "mm" ? "bday-month" : "bday-year", oninput: function (e) { v[k] = e.target.value; }, onchange: function () { var k = ageOnDay() !== null && ageOnDay() < 18; if (k !== shownKids) render(true); } }));
+        el("input", { id: "dob-" + k, type: "text", inputmode: "numeric", maxlength: max, size: w, value: v[k], autocomplete: k === "dd" ? "bday-day" : k === "mm" ? "bday-month" : "bday-year", oninput: function (e) { v[k] = e.target.value; }, onchange: function () { var k = ageOnDay() !== null && ageOnDay() < 18; if (k !== shownKids) render(true); else updateCatNote(); } }));
     }
     return el("div", { class: "field", "data-field": "dob" },
       el("fieldset", { id: "dob", tabindex: "-1" }, el("legend", null, "Date of birth"),
@@ -121,6 +150,28 @@
   }
 
   // ---- steps -----------------------------------------------------------------------------------
+  function divisionField() {
+    return el("div", { class: "field", "data-field": "division_id" },
+      el("label", { for: "division_id" }, "Which federation or division are you part of?"),
+      el("p", { class: "help", id: "division_id-help" }, "Choose the one you are registered with. If it is not the Yorkshire & North East division, you enter as a guest."),
+      el("p", { class: "field-error", id: "division_id-error", hidden: true }),
+      el("select", { id: "division_id", name: "division_id", "aria-describedby": "division_id-help", onchange: function (e) { v.division_id = e.target.value; v.club = ""; render(true); } },
+        el("option", { value: "" }, "Choose your federation or division"),
+        ctx.divisions.map(function (d) { return el("option", { value: d.id, selected: v.division_id === d.id }, d.name); })));
+  }
+  function clubField() {
+    var d = division();
+    if (!d) return null;
+    if (!pickClub()) return text("club", "Club", { optional: true, max: 120, help: "Type the name of your club, if you have one." });
+    return el("div", { class: "field", "data-field": "club" },
+      el("label", { for: "club" }, "Club"),
+      el("p", { class: "help", id: "club-help" }, "Only clubs approved or affiliated with English Powerlifting can be chosen. If your club is not listed, choose unattached and tell the entries team."),
+      el("p", { class: "field-error", id: "club-error", hidden: true }),
+      el("select", { id: "club", name: "club", "aria-describedby": "club-help", onchange: function (e) { v.club = e.target.value; } },
+        el("option", { value: "" }, "Choose your club"),
+        el("option", { value: "Unattached", selected: v.club === "Unattached" }, "Unattached (no club)"),
+        ctx.clubs.map(function (c) { return el("option", { value: c.name, selected: v.club === c.name }, c.name); })));
+  }
   function stepAbout() {
     var age = ageOnDay(), kids = age !== null && age < 18, wantsAccess = v.access_hearing || v.access_sight || (v.access_notes || "").trim();
     shownKids = kids;
@@ -128,9 +179,12 @@
       text("full_name", "Full name", { autocomplete: "name", help: "Your name, club and weight class are shown on the entries list and the lifting order." }),
       text("email", "Email address", { type: "email", autocomplete: "email", max: 254, help: "We send your confirmation here." }),
       dobField(),
+      el("p", { class: "callout", id: "cat-note", role: "status", hidden: myCategory() === null }, catNote()),
       radios("sex", "Which category are you entering?", [["M", "Men's"], ["F", "Women's"]]),
       text("bp_number", "British Powerlifting membership number", { max: 40 }),
-      text("club", "Club", { optional: true, max: 120 }),
+      divisionField(),
+      guestBlocked() ? el("p", { class: "callout", role: "status" }, "Entries from outside the Yorkshire & North East division open to guests on ", el("strong", null, whenText(guestOpensAt())), ". Please come back then. Members of the division can enter now.") : null,
+      clubField(),
       text("instagram", "Instagram handle", { optional: true, max: 60, help: "If you would like to be tagged." }),
       kids ? el("div", { class: "panel" },
         el("h2", null, "Parent or guardian"),
@@ -166,7 +220,6 @@
       radios("event", "Event", ctx.settings.events.map(function (e) { return [e, EVENT_NAMES[e] || e]; })),
       radios("equipment", "Equipment", ctx.settings.equipment.map(function (e) { return [e, EQUIP_NAMES[e] || e]; })),
       select("weight_class_id", "Weight class", classes, classes.length ? "Choose your class" : "Choose men's or women's first"),
-      ctx.divisions.length ? select("division_id", "Your division (optional)", ctx.divisions.map(function (d) { return [d.id, d.name]; }), "Choose a division") : null,
       ctx.settings.openipf_mode === "hidden" ? null : text("openipf_url", "OpenIPF profile link", ctx.settings.openipf_mode === "required"
         ? { max: 300, help: "Entry to this competition needs a qualifying total, so we need your link from openipf.org (it looks like https://www.openipf.org/u/yourname)." }
         : { optional: true, max: 300, help: "If you have one, paste your link from openipf.org. We use it to check qualification." }),
@@ -189,7 +242,7 @@
     return [
       el("h2", null, "Check your answers"),
       row("Name", v.full_name, 1), row("Email", v.email, 1), row("Date of birth", v.dd + "/" + v.mm + "/" + v.yyyy, 1),
-      row("Category", v.sex === "M" ? "Men's" : "Women's", 1), row("Membership number", v.bp_number, 1), row("Club", v.club, 1),
+      row("Category", (v.sex === "M" ? "Men's" : "Women's") + (myCategory() !== null ? ", " + CAT_SHORT[myCategory()] : ""), 1), row("Federation or division", division() ? division().name + (division().is_home ? "" : " (guest)") : "", 1), row("Membership number", v.bp_number, 1), row("Club", v.club, 1),
       row("Event", EVENT_NAMES[v.event], 2), row("Equipment", EQUIP_NAMES[v.equipment], 2), row("Weight class", cls ? cls.label + " kg" : "", 2),
       age !== null && age < 18 ? el("p", { class: "help" }, "A parent or guardian must be with you at the competition.") : null,
       el("p", { class: "lede" }, "Total to pay: ", el("strong", null, p === null ? "—" : pounds(p))),
@@ -211,6 +264,9 @@
       if (!iso) e.push(["dob", "Enter your date of birth as a real date, for example 27 3 1990"]);
       else { var age = ageOnDay(); if (age < 14 && ageCategory(+iso.slice(0, 4), +ctx.comp.start_date.slice(0, 4)) === "under14") e.push(["dob", "Lifters must be at least 14 in the year of the competition"]); }
       if (!v.sex) e.push(["sex", "Choose men's or women's"]);
+      if (!v.division_id) e.push(["division_id", "Choose the federation or division you are part of"]);
+      else if (guestBlocked()) e.push(["division_id", "Entries from outside the Yorkshire & North East division open on " + whenText(guestOpensAt())]);
+      else if (pickClub() && !v.club) e.push(["club", "Choose your club, or unattached"]);
       if (!trim(v.bp_number)) e.push(["bp_number", "Enter your British Powerlifting membership number"]);
       if (iso && ageOnDay() < 18) {
         if (!trim(v.guardian_name)) e.push(["guardian_name", "Enter your parent or guardian's name"]);
@@ -235,8 +291,8 @@
   // ---- payment ---------------------------------------------------------------------------------
   function payload() {
     var o = { competition_id: ctx.comp.id, email: trim(v.email), full_name: trim(v.full_name), date_of_birth: dobISO(), sex: v.sex,
-      bp_number: trim(v.bp_number), club: trim(v.club), instagram: trim(v.instagram).replace(/^@/, ""), event: v.event, equipment: v.equipment,
-      weight_class_id: v.weight_class_id, division_id: v.division_id || "", openipf_url: trim(v.openipf_url),
+      bp_number: trim(v.bp_number), club: trim(v.club), division_id: v.division_id, instagram: trim(v.instagram).replace(/^@/, ""), event: v.event, equipment: v.equipment,
+      weight_class_id: v.weight_class_id, openipf_url: trim(v.openipf_url),
       photo_ok: !!v.photo_ok, photo_opt_out: !!v.photo_opt_out, eligibility_confirmed: !!v.eligibility_confirmed,
       access_hearing: !!v.access_hearing, access_sight: !!v.access_sight, access_notes: trim(v.access_notes), access_consent: !!v.access_consent };
     if (invite) o.invite = invite;
@@ -333,7 +389,8 @@
         db.from("price_rules").select("*").eq("competition_id", comp.id).order("sort_order"),
         db.from("weight_classes").select("*").eq("active", true).order("sort_order"),
         db.from("divisions").select("*").order("sort_order"),
-        db.rpc("places_left", { c: comp.id })
+        db.rpc("places_left", { c: comp.id }),
+        db.from("clubs").select("name,region").eq("active", true).order("name")
       ]).then(function (a) {
         var st = a[0].data, settings = a[1].data;
         if (st) st.places_left = a[6].data;
@@ -351,7 +408,7 @@
           priority = true;
         }
         if (st.places_left < 1) return stop("This competition is full", "<p>Sorry, all places have gone." + (comp.waitlist_url ? " <a href='" + encodeURI(comp.waitlist_url) + "'>Join the waiting list</a>." : "") + "</p>");
-        ctx = { comp: comp, settings: settings, rules: a[3].data || [], classes: a[4].data || [], divisions: a[5].data || [] };
+        ctx = { comp: comp, settings: settings, rules: a[3].data || [], classes: a[4].data || [], divisions: a[5].data || [], clubs: a[7].data || [] };
         document.getElementById("hold-minutes").textContent = settings.hold_minutes;
         lede.textContent += ". " + st.places_left + (st.places_left === 1 ? " place" : " places") + " left.";
         if (priority) { status.hidden = false; status.innerHTML = "<p><strong>Priority entry.</strong> You are using a personal priority link. General entry opens on " + new Date(comp.entry_opens).toLocaleString("en-GB", { timeZone: Y.TZ, dateStyle: "full", timeStyle: "short" }) + ".</p>"; }

@@ -302,13 +302,19 @@
   var STATE_LABEL = { archived: "Past", open: "Entry open", closed: "Entry closed", full: "Entries full", soon: "Entry not open yet", none: "No entry set" };
   var ENTRY_ERRORS = {
     "invalid:events": "Choose at least one event.", "invalid:equipment": "Choose at least one kind of equipment.",
-    "invalid:hold_minutes": "The hold must be between 5 and 30 minutes.",
+    "invalid:hold_minutes": "The hold must be between 5 and 30 minutes.", "invalid:guest_delay_days": "Guest entry delay must be between 0 and 90 days.",
     "invalid:price_full_power": "Set a full power price of more than £0.", "invalid:price_bench_only": "Set a bench only price of more than £0.",
     "invalid:price_sub_junior": "The sub-junior price must be more than £0, or left empty.", "invalid:capacity": "Set the number of spaces first.",
     forbidden: "You do not have permission to change entry settings."
   };
   function pence(v) { return v === null || v === "" || v === undefined ? null : Math.round(Number(v) * 100); }
   function poundsInput(p) { return p === null || p === undefined ? "" : (p / 100).toFixed(2); }
+  var CAT_LABEL = { SJ: "Sub-junior", J: "Junior", "": "Open", M1: "M1", M2: "M2", M3: "M3", M4: "M4" };
+  // The category for a competition: the year they turn the age (calendar-year rule), the same as the database.
+  function catFor(dob, compStart) {
+    var d = +String(compStart).slice(0, 4) - +String(dob).slice(0, 4);
+    return d < 14 ? "" : d <= 18 ? "SJ" : d <= 23 ? "J" : d <= 39 ? "" : d <= 49 ? "M1" : d <= 59 ? "M2" : d <= 69 ? "M3" : "M4";
+  }
   function entryMoney(p) { return "£" + (p / 100).toFixed(p % 100 ? 2 : 0); }
   function canComp() { return state.role === "admin" || state.role === "editor"; }      // the competition itself
   function canEntry() { return state.role === "admin" || state.role === "entries"; }    // online entry settings and entries
@@ -350,7 +356,35 @@
       panel.appendChild(el("h2", null, "Upcoming"));
       panel.appendChild(current.length ? compTable(current, taken) : el("p", { class: "empty" }, "Nothing upcoming."));
       if (past.length) { panel.appendChild(el("h2", null, "Past")); panel.appendChild(compTable(past, taken)); }
+      if (canEntry()) panel.appendChild(clubsPanel());
     }).catch(function (e) { panel.lastChild.textContent = friendly(e); });
+  }
+
+  // The list of clubs people choose from on the entry form, imported from the EPA and British Powerlifting websites.
+  function clubsPanel() {
+    var box = el("div", { class: "panel", style: "margin-top:var(--space-6)" }, el("h2", { style: "margin-top:0" }, "Club list"), el("p", null, "Loading…"));
+    Promise.all([
+      sb.from("clubs").select("id", { count: "exact", head: true }).eq("active", true).then(function (r) { return r.error ? null : r; }, function () { return null; }),
+      sb.from("site_settings").select("value").eq("key", "clubs_sync").maybeSingle().then(function (r) { return r.error ? null : r.data; }, function () { return null; })
+    ]).then(function (r) {
+      var n = r[0] && typeof r[0].count === "number" ? r[0].count : null, last = r[1] && r[1].value;
+      var when = last && last.at ? new Date(last.at).toLocaleDateString("en-GB", { timeZone: Y.TZ, dateStyle: "long" }) : "never";
+      var line = (n !== null ? n + " clubs. " : "") + "Last checked: " + when + (last && last.ok === false ? ". The last check did not work: " + (last.message || "see the function logs") : "") + ".";
+      var button = btn("Refresh club list", function () {
+        button.disabled = true;
+        fetch((window.YNEPF_CONFIG.supabaseUrl || "").replace(/\/$/, "") + "/functions/v1/sync-clubs", { method: "POST", headers: { "Content-Type": "application/json", apikey: window.YNEPF_CONFIG.supabaseAnonKey || "" }, body: "{}" })
+          .then(function (res) { return res.json().then(function (b) { return { ok: res.ok, b: b }; }); })
+          .then(function (x) {
+            if (!x.ok) throw new Error("The club list could not be refreshed.");
+            toast(x.b.skipped ? "The list was refreshed in the last 12 hours, so nothing was done." : x.b.ok ? "Club list refreshed: " + x.b.total + " clubs." : (x.b.message || "A website looks different, so the list was left alone."), x.b.ok || x.b.skipped ? undefined : "error");
+            route();
+          }).catch(function (e) { toast(friendly(e), "error"); }).then(function () { button.disabled = false; });
+      }, "btn-secondary");
+      box.replaceChildren(el("h2", { style: "margin-top:0" }, "Club list"),
+        el("p", null, "Lifters in English divisions choose their club from this list, which is copied from the English Powerlifting Association and British Powerlifting websites every few weeks. If a club is missing, ask it to affiliate with the EPA, or press the button after the websites have been updated."),
+        el("p", null, line), el("p", null, button));
+    });
+    return box;
   }
 
   function compTable(rows, taken) {
@@ -504,6 +538,7 @@
         E({ name: "p_sj", label: "Sub-junior price, any event (£, optional)", type: "number", min: "0", show: isOnline, help: "If set, sub-juniors pay this whatever they lift." }),
         E({ name: "openipf_required", label: "Entry needs a qualifying total (the OpenIPF link becomes mandatory)", type: "checkbox", show: isOnline }),
         E({ name: "hold_minutes", label: "Minutes a place is held while paying", type: "number", min: "5", show: isOnline, help: "Between 5 and 30. A short hold stops places being parked." }),
+        E({ name: "guest_delay_days", label: "Guests can enter this many days after entry opens", type: "number", min: "0", show: isOnline, help: "A guest is anyone outside the Yorkshire & North East division. Usually 14 (two weeks). They are told the date on the entry form." }),
         { heading: "Full, closed and waiting list" },
         C({ name: "entries_full", label: "Entries full", type: "checkbox", help: "Tick when the competition fills up. The main button becomes “Join the waiting list” (if you add a link below)." }),
         E({ name: "entries_closed_manually", label: "Close entries now", type: "checkbox", show: isOnline, help: "Stops new online entries straight away. Untick to reopen." }),
@@ -536,7 +571,7 @@
         eq_classic: equip.indexOf("classic") >= 0, eq_equipped: equip.indexOf("equipped") >= 0,
         p_full: price(function (r) { return r.event === "full_power" && !r.age_category; }), p_bench: price(function (r) { return r.event === "bench_only" && !r.age_category; }),
         p_sj: price(function (r) { return r.age_category === "SJ"; }),
-        openipf_required: settings.openipf_mode === "required", hold_minutes: settings.hold_minutes || 5,
+        openipf_required: settings.openipf_mode === "required", hold_minutes: settings.hold_minutes || 5, guest_delay_days: settings.guest_delay_days === undefined || settings.guest_delay_days === null ? 14 : settings.guest_delay_days,
         entries_closed_manually: !!c.entries_closed_manually
       });
       var F = fields();
@@ -597,7 +632,7 @@
         step.then(function (id) {
           if (!canEntry()) return id;
           var p = {
-            entry_method: v.method === "online" ? "yne" : "external", hold_minutes: v.hold_minutes || 5, entries_closed_manually: !!v.entries_closed_manually,
+            entry_method: v.method === "online" ? "yne" : "external", hold_minutes: v.hold_minutes || 5, guest_delay_days: v.guest_delay_days === null ? 14 : v.guest_delay_days, entries_closed_manually: !!v.entries_closed_manually,
             openipf_required: !!v.openipf_required,
             events: [v.ev_full && "full_power", v.ev_bench && "bench_only"].filter(Boolean), equipment: [v.eq_classic && "classic", v.eq_equipped && "equipped"].filter(Boolean),
             prices: { full_power: pence(v.p_full), bench_only: pence(v.p_bench), sub_junior: pence(v.p_sj) }
@@ -667,7 +702,7 @@
   var ENTRY_STATUS = { held: "Paying", paid: "Paid", comped: "Free", cancelled: "Cancelled", refunded: "Refunded" };
   function renderEntriesTab(view, c) {
     view.replaceChildren(el("p", null, "Loading…"));
-    sb.from("entries").select("*, weight_classes(label)").eq("competition_id", c.id).order("created_at", { ascending: true }).then(function (res) {
+    sb.from("entries").select("*, weight_classes(label), divisions(name)").eq("competition_id", c.id).order("created_at", { ascending: true }).then(function (res) {
       var rows = ok(res);
       var live = rows.filter(function (e) { return e.status === "paid" || e.status === "comped"; });
       var total = live.reduce(function (n, e) { return n + e.price_pence; }, 0);
@@ -682,8 +717,9 @@
           el("tbody", null, rows.map(function (e) {
             return el("tr", null,
               el("th", { scope: "row" }, e.full_name, el("small", null, e.email)),
-              el("td", null, [(e.sex === "M" ? "Men's " : "Women's ") + (e.weight_classes ? e.weight_classes.label + " kg" : ""), e.event === "bench_only" ? "Bench only" : "Full power", e.equipment].join(" · "),
-                el("small", null, [e.club, e.bp_number && "BP " + e.bp_number].filter(Boolean).join(" · "))),
+              el("td", null, [(e.sex === "M" ? "Men's " : "Women's ") + (e.weight_classes ? e.weight_classes.label + " kg" : ""), CAT_LABEL[catFor(e.date_of_birth, c.start_date)], e.event === "bench_only" ? "Bench only" : "Full power", e.equipment].join(" · "),
+                el("small", null, [e.club, e.bp_number && "BP " + e.bp_number].filter(Boolean).join(" · ")),
+                e.divisions ? el("small", null, e.divisions.name, e.is_guest ? [" ", el("span", { class: "tag tag-position" }, "Guest: check membership")] : null) : null),
               el("td", null, ENTRY_STATUS[e.status] || e.status),
               el("td", null, entryMoney(e.price_pence), e.paid_at ? el("small", null, new Date(e.paid_at).toLocaleString("en-GB", { timeZone: Y.TZ, dateStyle: "medium", timeStyle: "short" })) : null));
           })))) : el("p", { class: "empty" }, "No entries yet."));
@@ -692,10 +728,10 @@
 
   function csvCell(v) { v = v === null || v === undefined ? "" : String(v); if (/^[=+\-@\t\r]/.test(v)) v = "'" + v; return '"' + v.replace(/"/g, '""') + '"'; }
   function downloadEntries(c) {
-    sb.from("entries").select("*, weight_classes(label)").eq("competition_id", c.id).in("status", ["paid", "comped"]).order("created_at").then(ok).then(function (rows) {
-      var head = ["Name", "Email", "BP number", "Sex", "Weight class", "Event", "Equipment", "Club", "Instagram", "Paid (GBP)", "Paid at"];
+    sb.from("entries").select("*, weight_classes(label), divisions(name)").eq("competition_id", c.id).in("status", ["paid", "comped"]).order("created_at").then(ok).then(function (rows) {
+      var head = ["Name", "Email", "BP number", "Sex", "Age category", "Weight class", "Event", "Equipment", "Division", "Guest", "Club", "Instagram", "Paid (GBP)", "Paid at"];
       var lines = [head.map(csvCell).join(",")].concat(rows.map(function (e) {
-        return [e.full_name, e.email, e.bp_number, e.sex, e.weight_classes && e.weight_classes.label, e.event, e.equipment, e.club, e.instagram, (e.price_pence / 100).toFixed(2), e.paid_at].map(csvCell).join(",");
+        return [e.full_name, e.email, e.bp_number, e.sex, CAT_LABEL[catFor(e.date_of_birth, c.start_date)], e.weight_classes && e.weight_classes.label, e.event, e.equipment, e.divisions && e.divisions.name, e.is_guest ? "Yes" : "No", e.club, e.instagram, (e.price_pence / 100).toFixed(2), e.paid_at].map(csvCell).join(",");
       }));
       var a = el("a", { href: URL.createObjectURL(new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv" })), download: (c.slug || "entries") + "-entries.csv" });
       document.body.appendChild(a); a.click(); a.remove();
