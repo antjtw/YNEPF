@@ -23,6 +23,7 @@ if (!wcM) { await db.exec(`insert into public.weight_classes (sex,label,upper_kg
 const good = { competition_id: C, email: "A@Example.com", full_name: "Alex Lifter", date_of_birth: "1990-06-01", sex: "M", event: "full_power", equipment: "classic", weight_class_id: wcM, eligibility_confirmed: true };
 const start = async (o) => { try { const r = await db.query(`select public.start_entry($1::jsonb) r`, [JSON.stringify({ ...good, ...o })]); return r.rows[0].r; } catch (e) { return { error: e.message }; } };
 
+const can = async (q) => { try { await db.query(q); return true; } catch { return false; } };
 let r = await start({});
 ok(r.price_pence === 6000 && r.entry_id, "an adult full-power entry is priced £60 and a place is held");
 ok((await db.query(`select email, status from public.entries where id='${r.entry_id}'`)).rows[0].email === "a@example.com", "the email is stored in lower case");
@@ -89,11 +90,56 @@ await db.exec("set role anon");
 ok((await pubUrl()) === "", "closing entries by hand removes the way in");
 await db.exec("reset role");
 await db.exec(`update public.competitions set entries_closed_manually=false where id='${C}'`);
+// ---- fairness rules: priority entry, qualification, duplicates, short holds
+await db.exec("reset role");
+for (const [k, id] of [["entries", "00000000-0000-0000-0000-00000000000b"], ["editor", "00000000-0000-0000-0000-00000000000c"]]) await db.exec(`insert into auth.users (id,email,email_confirmed_at) values ('${id}','${k}@example.com',now()) on conflict do nothing`);
+await db.exec(`insert into public.editors (email, role) values ('entries@example.com','entries'),('editor@example.com','editor') on conflict do nothing`);
+await db.exec(`update public.entries set status='cancelled' where competition_id='${C}'`);
+ok((await db.query(`select column_default d from information_schema.columns where table_name='entry_settings' and column_name='hold_minutes'`)).rows[0].d === "5", "a place is held for 5 minutes by default");
+// duplicates
+r = await start({ email: "d1@example.com", bp_number: "BP 100" });
+await db.exec(`update public.entries set status='paid' where id='${r.entry_id}'`);
+ok((await start({ email: "d2@example.com", bp_number: "bp 100" })).error === "duplicate_bp", "the same membership number cannot take a second place under another email");
+r = await start({ email: "d3@example.com", bp_number: "BP 200" });
+ok(r.entry_id, "a different membership number can");
+await db.exec(`update public.entries set status='cancelled' where id='${r.entry_id}'`);
+r = await start({ email: "d4@example.com", bp_number: "BP 300" }); const r4 = await start({ email: "d5@example.com", bp_number: "BP 300" });
+ok(r4.entry_id && (await db.query(`select status s from public.entries where id='${r.entry_id}'`)).rows[0].s === "cancelled", "retrying with a typo in the email replaces the earlier hold for the same membership number");
+await db.exec(`update public.entries set status='cancelled' where competition_id='${C}'`);
+// qualification: OpenIPF link mandatory
+await db.exec(`update public.entry_settings set openipf_mode='required' where competition_id='${C}'`);
+ok((await start({ email: "q1@example.com" })).error === "invalid:openipf", "when qualification is on, the OpenIPF link is mandatory");
+ok((await start({ email: "q1@example.com", openipf_url: "https://example.com/not-ipf" })).error === "invalid:openipf", "...and must be an OpenIPF link");
+ok((await start({ email: "q1@example.com", openipf_url: "https://www.openipf.org/u/alexlifter1" })).entry_id, "a proper OpenIPF link is accepted");
+await db.exec(`update public.entry_settings set openipf_mode='optional' where competition_id='${C}'; update public.entries set status='cancelled' where competition_id='${C}'`);
+// priority entry: one day before general entry, personal single-use links
+const asEntries = async (q, params) => { await db.exec("reset role"); await db.query(`select set_config('request.uid','00000000-0000-0000-0000-00000000000b',false)`); await db.exec("set role authenticated"); try { return (await db.query(q, params)).rows; } catch (e) { return { error: e.message }; } finally { await db.exec("reset role"); } };
+await db.exec("reset role");
+await db.exec(`update public.competitions set entry_opens = now() + interval '12 hours' where id='${C}'`);
+ok((await start({ email: "p1@example.com" })).error === "not_open", "before priority opens and without a link: not open");
+const made = await asEntries(`select * from public.create_priority_invites('${C}', array['P1@Example.com', ' p2@example.com '])`);
+ok(Array.isArray(made) && made.length === 2 && made[0].token.length === 64, "the entries team can make personal priority links");
+const tok1 = made.find((m) => m.email === "p1@example.com").token;
+ok((await start({ email: "p1@example.com", invite: tok1 })).entry_id, "12 hours before general entry, a priority link works (priority opens a day before)");
+ok((await start({ email: "p2@example.com", invite: tok1 })).error === "not_open", "a link only works for the email it was made for");
+ok((await start({ email: "p1@example.com", invite: "nonsense" })).error === "not_open", "a made-up link does not work");
+await db.exec("reset role");
+await db.exec(`update public.competitions set entry_opens = now() + interval '3 days' where id='${C}'`);
+ok((await start({ email: "p1@example.com", invite: tok1 })).error === "not_open", "more than a day before general entry, even a priority link is too early");
+await db.exec(`update public.competitions set entry_opens = now() + interval '12 hours' where id='${C}'`);
+const held = (await db.query(`select id from public.entries where email='p1@example.com' and status='held'`)).rows[0];
+ok((await db.query(`select public.confirm_entry_payment('${held.id}') r`)).rows[0].r === "paid", "(payment confirmed)");
+ok((await start({ email: "p1@example.com", invite: tok1 })).error === "already_entered", "...and a paid entry cannot be repeated");
+ok((await db.query(`select count(*)::int n from public.invites where used_at is not null`)).rows[0].n === 1, "the link is marked used once the payment is confirmed");
+await db.exec("set role anon");
+try { await db.query(`select * from public.create_priority_invites('${C}', array['x@example.com'])`); ok(false, "anon cannot make priority links"); } catch { ok(true, "the public cannot make priority links"); }
+await db.exec("reset role");
+await db.exec(`update public.competitions set entry_opens = null where id='${C}'; update public.entries set status='cancelled' where competition_id='${C}'`);
 // ---- save_entry_settings (the entries team's admin screen)
 await db.exec("reset role");
 const U = { entries: "00000000-0000-0000-0000-00000000000b", editor: "00000000-0000-0000-0000-00000000000c" };
-for (const [k, id] of Object.entries(U)) await db.exec(`insert into auth.users (id,email,email_confirmed_at) values ('${id}','${k}@example.com',now())`);
-await db.exec(`insert into public.editors (email, role) values ('entries@example.com','entries'),('editor@example.com','editor')`);
+for (const [k, id] of Object.entries(U)) await db.exec(`insert into auth.users (id,email,email_confirmed_at) values ('${id}','${k}@example.com',now()) on conflict do nothing`);
+await db.exec(`insert into public.editors (email, role) values ('entries@example.com','entries'),('editor@example.com','editor') on conflict do nothing`);
 const C2 = "33333333-3333-3333-3333-333333333333";
 await db.exec(`insert into public.competitions (id,name,start_date,capacity,published,slug) values ('${C2}','New Open','2027-05-01',50,true,'new')`);
 const settings = { entry_method: "yne", events: ["full_power", "bench_only"], equipment: ["classic"], hold_minutes: 15, prices: { sub_junior: 2500, bench_only: 2500, full_power: 6000 } };

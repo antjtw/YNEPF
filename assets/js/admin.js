@@ -1280,6 +1280,7 @@
             el("td", null, online ? count(c) + " of " + (c.capacity || "?") : "—"),
             el("td", null, el("span", { class: "actions" },
               btn("Entry settings", function () { editEntrySettings(c); }),
+              online ? btn("Priority entry", function () { editPriority(c); }) : null,
               online ? btn("View entries", function () { viewEntries(c, panel); }, "btn-primary") : null)));
         })))) : el("p", { class: "empty" }, "No competitions yet. Add one on the Calendar tab first."));
     }).catch(function (e) { panel.lastChild.textContent = friendly(e); });
@@ -1298,7 +1299,7 @@
         intro: "Places, and when entry opens and closes, are set once, under Edit on the Calendar tab. Currently: " + (c.capacity ? c.capacity + " places" : "no places set") + "; " + (Y.entryLine(c) || "no opening or closing time set") + ".",
         values: {
           entry_method: c.entry_method === "yne" ? "yne" : "external", entries_closed_manually: !!c.entries_closed_manually,
-          hold_minutes: s.hold_minutes || 15,
+          hold_minutes: s.hold_minutes || 5, openipf_required: s.openipf_mode === "required",
           ev_full: events.indexOf("full_power") >= 0, ev_bench: events.indexOf("bench_only") >= 0,
           eq_classic: equip.indexOf("classic") >= 0, eq_equipped: equip.indexOf("equipped") >= 0,
           p_full: price(function (r) { return r.event === "full_power" && !r.age_category; }),
@@ -1307,7 +1308,8 @@
         },
         fields: [
           { name: "entry_method", label: "How are entries taken?", type: "select", options: [{ value: "external", label: "Not on this website (use the entry link on the calendar)" }, { value: "yne", label: "Online on this website, paid by card" }] },
-          { name: "hold_minutes", label: "Minutes a place is held while paying", type: "number", min: "5", help: "Between 5 and 30." },
+          { name: "hold_minutes", label: "Minutes a place is held while paying", type: "number", min: "5", help: "Between 5 and 30. A short hold stops places being parked." },
+          { name: "openipf_required", label: "Entry needs a qualifying total (the OpenIPF link becomes mandatory)", type: "checkbox" },
           { name: "ev_full", label: "Offer full power", type: "checkbox", half: true },
           { name: "ev_bench", label: "Offer bench only", type: "checkbox", half: true },
           { name: "eq_classic", label: "Offer classic", type: "checkbox", half: true },
@@ -1319,7 +1321,7 @@
         ],
         onSave: function (v) {
           var o = {
-            entry_method: v.entry_method, hold_minutes: v.hold_minutes || 15, entries_closed_manually: v.entries_closed_manually,
+            entry_method: v.entry_method, hold_minutes: v.hold_minutes || 5, openipf_required: v.openipf_required, entries_closed_manually: v.entries_closed_manually,
             events: [v.ev_full && "full_power", v.ev_bench && "bench_only"].filter(Boolean),
             equipment: [v.eq_classic && "classic", v.eq_equipped && "equipped"].filter(Boolean),
             prices: { full_power: pence(v.p_full), bench_only: pence(v.p_bench), sub_junior: pence(v.p_sj) }
@@ -1331,6 +1333,35 @@
         }
       });
     }).catch(function (e) { toast(friendly(e), "error"); });
+  }
+
+  // Priority entry opens one day before general entry. Each email gets a personal, single-use link. Only a
+  // fingerprint is stored, so the links are shown once, here.
+  function editPriority(c) {
+    var made = null;
+    openForm({
+      title: "Priority entry: " + c.name, saveLabel: "Make links",
+      intro: "Priority entry opens one day before general entry (" + (c.entry_opens ? Y.entryLine(c).replace(/ and closes.*/, "") : "set the opening time on the Calendar first") + "). Enter one email address per line. Each person gets a personal link that only works with their own email address. Making a new link for someone replaces their old unused one.",
+      fields: [{ name: "emails", label: "Email addresses (one per line)", type: "textarea", required: true }],
+      onSave: function (v) {
+        var list = v.emails.split(/[\s,;]+/).filter(Boolean);
+        if (!list.length) return Promise.reject(new Error("Enter at least one email address."));
+        return sb.rpc("create_priority_invites", { c: c.id, emails: list }).then(function (r) {
+          if (r.error) { var m = (r.error.message || "").trim(); throw new Error(/^invalid:email/.test(m) ? "That does not look like an email address: " + m.replace(/^invalid:email:/, "") : friendly(r.error)); }
+          made = r.data;
+          setTimeout(function () { showPriorityLinks(c, made); }, 80);
+        });
+      }
+    });
+  }
+  function showPriorityLinks(c, rows) {
+    var text = rows.map(function (r) { return r.email + "  " + location.origin + "/enter?c=" + c.slug + "&invite=" + r.token; }).join("\n");
+    openForm({
+      title: "Priority links", saveLabel: "Done", values: { links: text },
+      intro: "Copy these now. They cannot be shown again. Send each person only their own link.",
+      fields: [{ name: "links", label: "One link per person", type: "textarea", rows: Math.min(14, rows.length + 2) }],
+      onSave: function () { return Promise.resolve(); }
+    });
   }
 
   var ENTRY_STATUS = { held: "Paying", paid: "Paid", comped: "Free", cancelled: "Cancelled", refunded: "Refunded" };

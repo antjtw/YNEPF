@@ -19,9 +19,11 @@ export const STRIPE_VERSION = "2024-06-20";
 // Plain words for the codes start_entry() raises.
 export const MESSAGES: Record<string, string> = {
   closed: "Entries for this competition are closed.",
-  not_open: "Entries for this competition have not opened yet.",
+  not_open: "Entries for this competition have not opened yet, or your priority link does not match this email address.",
   full: "Sorry, this competition is full. Please join the waiting list.",
   already_entered: "You have already entered this competition. Check your email for the confirmation.",
+  duplicate_bp: "A lifter with that membership number has already entered. If this is a mistake, please contact the entries team.",
+  "invalid:openipf": "Please enter your OpenIPF profile link, starting https://www.openipf.org/",
   no_price: "We could not work out a price for that combination. Please email the entries team.",
   "invalid:full_name": "Please enter your full name.",
   "invalid:email": "Please check your email address.",

@@ -26,13 +26,14 @@ export async function verifySignature(payload: string, header: string, secret: s
 
 export function pounds(pence: number): string { return "£" + (pence / 100).toFixed(2); }
 
-export function confirmationEmail(e: { name: string; competition: string; date: string; event: string; equipment: string; pence: number; under18: boolean; entriesEmail: string }) {
+export function confirmationEmail(e: { name: string; competition: string; date: string; event: string; equipment: string; pence: number; under18: boolean; entriesEmail: string; refundsUntil?: string }) {
   const lines = [
     `Hi ${e.name},`, "",
     `You are entered in ${e.competition} (${e.date}). Thank you!`, "",
     `Event: ${e.event}`, `Equipment: ${e.equipment}`, `Paid: ${pounds(e.pence)}`, "",
   ];
   if (e.under18) lines.push("Because you are under 18 on the day, a parent or guardian must be with you at the competition.", "");
+  if (e.refundsUntil) lines.push(`Refunds are available until entries close on ${e.refundsUntil}. After that, entries cannot be refunded.`, "");
   lines.push(
     "Your name, club and weight class will be shown on the entries list and the lifting order. Your date of birth is never published.", "",
     `If anything is wrong, or you would like us to change or delete the information we hold about you, reply to this email or write to ${e.entriesEmail}.`, "",
@@ -85,7 +86,7 @@ if (typeof Deno !== "undefined") {
             card_last4: charge.payment_method_details?.card?.last4 ?? "", receipt_url: charge.receipt_url ?? "",
           }),
         });
-        const [row] = await (await db(`entries?id=eq.${entryId}&select=email,full_name,event,equipment,price_pence,date_of_birth,competitions(name,start_date)`)).json();
+        const [row] = await (await db(`entries?id=eq.${entryId}&select=email,full_name,event,equipment,price_pence,date_of_birth,competitions(name,start_date,entry_closes)`)).json();
         const from = Deno.env.get("MAIL_FROM") ?? "YNEPF <onboarding@resend.dev>";
         const copy = Deno.env.get("NOTIFY_TO") ?? "ynepfentries@gmail.com";
         const send = (to: string[], subject: string, text: string) => fetch("https://api.resend.com/emails", {
@@ -99,6 +100,7 @@ if (typeof Deno !== "undefined") {
             name: row.full_name, competition: row.competitions.name, date: row.competitions.start_date,
             event: row.event === "bench_only" ? "Bench only" : "Full power", equipment: row.equipment === "equipped" ? "Equipped" : "Classic",
             pence: row.price_pence, under18: age < 18, entriesEmail: copy,
+            refundsUntil: row.competitions.entry_closes ? new Date(row.competitions.entry_closes).toLocaleString("en-GB", { timeZone: "Europe/London", dateStyle: "full", timeStyle: "short" }) : undefined,
           }));
         } else if (state === "no_place" && row && session.payment_intent) {
           // Paid after the hold ran out and the competition filled in the meantime: refund in full.

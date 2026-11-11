@@ -17,7 +17,11 @@ Nothing in here has been built yet. The database design has been **tested** in a
 | Merchandise | 100% goes to the host (for YNE competitions, the federation). |
 | Photo packages | 100% goes to White Lights Media, our photographer. |
 | Reporting | A "money to send" report: what each payee is owed, what the federation keeps, Stripe fees, and total earnings. |
-| Refunds | Full refund up to a cut-off date per competition. Points come back with a refund. |
+| Refunds | Refunds stop when entries close (no separate cut-off date). The form and the confirmation email say so. The entries team can still refund by hand, with a reason that is logged. Points come back with a refund. |
+| Entry windows | General entry opens 8 weeks before the competition at 9am and closes 3 weeks before at noon (suggested on the Calendar, editable). Priority entry opens one day before general entry. |
+| Priority entry | Personal, single-use links, one per email, made by the entries team (volunteer points will fill the list in phase 3). A link only works with the email it was made for. |
+| Qualification | A per-competition switch. When on, the OpenIPF link is mandatory on the form and checked by the database. |
+| Fair holds | A place is held for 5 minutes (a setting, 5 to 30), with a countdown on the payment page. One lifter, one place: the same email or the same membership number cannot take a second place. |
 | Names | Full names on the public entries and waiting lists, as we have always done, with a clear line on the form saying so. |
 | Roles | Admin, Entries team, Editor, Contributor (see section 6). The entries team can refund. |
 | Places left | A short poll (the page asks "how many places left?" every few seconds). Not live connections. |

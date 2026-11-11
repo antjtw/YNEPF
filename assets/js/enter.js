@@ -14,7 +14,7 @@
   var summary = document.getElementById("error-summary"), list = document.getElementById("error-list");
   var lede = document.getElementById("enter-lede"), title = document.getElementById("enter-title");
   var ctx = null;                               // competition, settings, price rules, classes, divisions
-  var step = 1, shownKids = false, preview = false;
+  var step = 1, shownKids = false, preview = false, invite = "", countdown = null;
   var v = { sex: "", event: "", equipment: "", weight_class_id: "", division_id: "", dd: "", mm: "", yyyy: "" };
   var EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
   var EVENT_NAMES = { full_power: "Full power (squat, bench press and deadlift)", bench_only: "Bench press only" };
@@ -167,9 +167,17 @@
       radios("equipment", "Equipment", ctx.settings.equipment.map(function (e) { return [e, EQUIP_NAMES[e] || e]; })),
       select("weight_class_id", "Weight class", classes, classes.length ? "Choose your class" : "Choose men's or women's first"),
       ctx.divisions.length ? select("division_id", "Your division (optional)", ctx.divisions.map(function (d) { return [d.id, d.name]; }), "Choose a division") : null,
-      text("openipf_url", "OpenIPF profile link", { optional: true, max: 300, help: "If you have one, paste your link from openipf.org. We use it to check qualification." }),
+      ctx.settings.openipf_mode === "hidden" ? null : text("openipf_url", "OpenIPF profile link", ctx.settings.openipf_mode === "required"
+        ? { max: 300, help: "Entry to this competition needs a qualifying total, so we need your link from openipf.org (it looks like https://www.openipf.org/u/yourname)." }
+        : { optional: true, max: 300, help: "If you have one, paste your link from openipf.org. We use it to check qualification." }),
       p !== null ? el("p", { class: "lede" }, "Your entry fee: ", el("strong", null, pounds(p))) : null
     ];
+  }
+  // Refunds stop when entries close: the same rule for everyone.
+  function refundNote() {
+    if (!ctx.comp.entry_closes) return null;
+    var d = new Date(ctx.comp.entry_closes).toLocaleString("en-GB", { timeZone: Y.TZ, dateStyle: "full", timeStyle: "short" });
+    return el("p", { class: "help" }, "Refunds are available until entries close on " + d + ". After that, entries cannot be refunded.");
   }
   function row(label, value, stepNo) {
     return el("div", { class: "summary-row", style: "display:flex;justify-content:space-between;gap:1rem;padding:.5rem 0;border-bottom:1px solid var(--border,#ccd)" },
@@ -186,6 +194,7 @@
       age !== null && age < 18 ? el("p", { class: "help" }, "A parent or guardian must be with you at the competition.") : null,
       el("p", { class: "lede" }, "Total to pay: ", el("strong", null, p === null ? "—" : pounds(p))),
       el("p", { class: "help" }, "Pressing the button holds your place for " + ctx.settings.hold_minutes + " minutes while you pay. We never see or store your card details."),
+      refundNote(),
       el("p", { class: "field-error", id: "submit-error", hidden: true })
     ];
   }
@@ -214,6 +223,7 @@
       if (!v.eligibility_confirmed) e.push(["eligibility_confirmed", "Confirm that you are eligible to compete in this category"]);
     }
     if (n === 2) {
+      if (ctx.settings.openipf_mode === "required" && !/^https:\/\/(www\.)?openipf\.org\/.+/i.test(trim(v.openipf_url))) e.push(["openipf_url", "Enter your OpenIPF profile link, starting https://www.openipf.org/"]);
       if (!v.event) e.push(["event", "Choose an event"]);
       if (!v.equipment) e.push(["equipment", "Choose your equipment"]);
       if (!v.weight_class_id || !allowedClasses().some(function (c) { return c.id === v.weight_class_id; })) e.push(["weight_class_id", "Choose your weight class"]);
@@ -229,6 +239,7 @@
       weight_class_id: v.weight_class_id, division_id: v.division_id || "", openipf_url: trim(v.openipf_url),
       photo_ok: !!v.photo_ok, photo_opt_out: !!v.photo_opt_out, eligibility_confirmed: !!v.eligibility_confirmed,
       access_hearing: !!v.access_hearing, access_sight: !!v.access_sight, access_notes: trim(v.access_notes), access_consent: !!v.access_consent };
+    if (invite) o.invite = invite;
     if (ageOnDay() < 18) { o.guardian_name = trim(v.guardian_name); o.guardian_phone = trim(v.guardian_phone); o.guardian_email = trim(v.guardian_email); o.guardian_consent = !!v.guardian_consent; }
     return o;
   }
@@ -255,6 +266,14 @@
         return loadStripe().then(function (Stripe) {
           app.innerHTML = ""; app.appendChild(el("h2", null, "Pay " + pounds(r.b.price_pence)));
           app.appendChild(el("p", { class: "help" }, "Your place is held for " + ctx.settings.hold_minutes + " minutes. Please complete payment before then."));
+          var clock = el("p", { class: "help", role: "timer" }); app.appendChild(clock);
+          var endsAt = Date.now() + ctx.settings.hold_minutes * 60000;
+          if (countdown) clearInterval(countdown);
+          countdown = setInterval(function () {
+            var left = Math.max(0, Math.round((endsAt - Date.now()) / 1000));
+            if (left > 0) clock.textContent = "Time left to pay: " + Math.floor(left / 60) + ":" + ("0" + (left % 60)).slice(-2);
+            else { clearInterval(countdown); clock.textContent = "Your held place has run out. If you have not paid, please start again. If you pay now and a place is still free, your entry will be confirmed; otherwise you will be refunded in full."; }
+          }, 1000);
           var box = el("div", { id: "checkout" }); app.appendChild(box);
           return Stripe(r.b.publishable_key).initEmbeddedCheckout({ clientSecret: r.b.client_secret }).then(function (c) { c.mount(box); });
         });
@@ -293,7 +312,7 @@
     title.textContent = headline; lede.textContent = ""; app.hidden = true; status.hidden = false; status.innerHTML = html;
   }
   function init() {
-    var slug = new URLSearchParams(location.search).get("c") || "";
+    var q = new URLSearchParams(location.search), slug = q.get("c") || ""; invite = q.get("invite") || "";
     var db = Y.db();
     if (!db || !slug) return stop("Enter a competition", "<p>Choose a competition from the <a href='calendar.html'>calendar</a> to enter.</p>");
     var cols = "id,name,start_date,end_date,venue_name,slug,entry_url,waitlist_url,entry_opens,entry_closes";
@@ -325,11 +344,17 @@
           return stop("Enter " + comp.name, "<p>Entries for this competition are not taken on this page." + (comp.entry_url ? " <a href='" + encodeURI(comp.entry_url) + "'>Enter here</a>." : "") + "</p>");
         var now = new Date();
         if (st.entries_closed_manually || (comp.entry_closes && new Date(comp.entry_closes) <= now)) return stop("Entries are closed", "<p>Entries for " + Y.el("span", null, comp.name).textContent + " are closed.</p>");
-        if (comp.entry_opens && new Date(comp.entry_opens) > now) return stop("Entries are not open yet", "<p>Entries open on " + new Date(comp.entry_opens).toLocaleString("en-GB", { timeZone: Y.TZ, dateStyle: "full", timeStyle: "short" }) + ".</p>");
+        var opensAt = comp.entry_opens ? new Date(comp.entry_opens) : null, priority = false;
+        if (opensAt && opensAt > now) {
+          var priorityFrom = new Date(opensAt.getTime() - 24 * 3600 * 1000), when = function (d) { return d.toLocaleString("en-GB", { timeZone: Y.TZ, dateStyle: "full", timeStyle: "short" }); };
+          if (!(invite && now >= priorityFrom)) return stop("Entries are not open yet", "<p>Entries open on " + when(opensAt) + ".</p>" + (invite ? "<p>Your priority link works from " + when(priorityFrom) + ".</p>" : ""));
+          priority = true;
+        }
         if (st.places_left < 1) return stop("This competition is full", "<p>Sorry, all places have gone." + (comp.waitlist_url ? " <a href='" + encodeURI(comp.waitlist_url) + "'>Join the waiting list</a>." : "") + "</p>");
         ctx = { comp: comp, settings: settings, rules: a[3].data || [], classes: a[4].data || [], divisions: a[5].data || [] };
         document.getElementById("hold-minutes").textContent = settings.hold_minutes;
         lede.textContent += ". " + st.places_left + (st.places_left === 1 ? " place" : " places") + " left.";
+        if (priority) { status.hidden = false; status.innerHTML = "<p><strong>Priority entry.</strong> You are using a personal priority link. General entry opens on " + new Date(comp.entry_opens).toLocaleString("en-GB", { timeZone: Y.TZ, dateStyle: "full", timeStyle: "short" }) + ".</p>"; }
         if (preview) status.hidden = false, status.innerHTML = "<p><strong>Preview.</strong> This competition is not published. You can enter it because you are signed in to the site editor. Use Stripe test cards only.</p>";
         app.hidden = false; render();
       });

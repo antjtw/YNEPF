@@ -126,7 +126,7 @@ create table if not exists public.entry_settings (
   events text[] not null default array['full_power', 'bench_only'],
   equipment text[] not null default array['classic', 'equipped'],
   entries_close_at timestamptz,
-  hold_minutes integer not null default 15,
+  hold_minutes integer not null default 5,
   refund_cutoff timestamptz,                              -- full automatic refund up to here
   openipf_mode text not null default 'optional' check (openipf_mode in ('required', 'optional', 'hidden')),
   qualification_mode text not null default 'none' check (qualification_mode in ('none', 'glp', 'totals')),
@@ -352,6 +352,8 @@ create table if not exists public.offers (
   reminder_sent_at timestamptz,
   outcome text check (outcome in ('entered', 'declined', 'lapsed'))
 );
+alter table public.entry_settings alter column hold_minutes set default 5;   -- short holds are fairer: places are not parked
+
 create table if not exists public.invites (                -- priority entry (phase 3) and manual personal links
   id uuid primary key default gen_random_uuid(),
   competition_id uuid not null references public.competitions (id) on delete cascade,
@@ -359,8 +361,10 @@ create table if not exists public.invites (                -- priority entry (ph
   token_hash text not null unique,
   stage_id uuid references public.entry_stages (id),
   expires_at timestamptz,
-  used_at timestamptz
+  used_at timestamptz,
+  entry_id uuid references public.entries (id) on delete set null          -- the entry started with this link
 );
+alter table public.invites add column if not exists entry_id uuid references public.entries (id) on delete set null;
 
 -- ---------------------------------------------------------------------------
 -- 8. Emails: the wording (federation default, per-competition override) and a log
@@ -728,6 +732,8 @@ declare
   v_entry uuid;
   v_expires timestamptz;
   v_access boolean;
+  v_invite uuid;
+  v_bp text := lower(trim(coalesce(p->>'bp_number', '')));
 begin
   select * into c from public.competitions where id = (p->>'competition_id')::uuid for update;   -- one at a time per competition
   if not found or c.entry_method <> 'yne' then raise exception 'closed'; end if;
@@ -738,7 +744,20 @@ begin
   if not found then raise exception 'closed'; end if;
   -- Places, opening and closing are set once, on the competition (Calendar).
   if c.entries_closed_manually or coalesce(c.entry_closes, 'infinity') <= now() then raise exception 'closed'; end if;
-  if c.entry_opens is not null and c.entry_opens > now() then raise exception 'not_open'; end if;
+  if c.entry_opens is not null and c.entry_opens > now() then
+    -- Priority entry opens one day before general entry, for people with a personal link made for their email.
+    if c.entry_opens - interval '1 day' <= now() and coalesce(p->>'invite', '') <> '' then
+      select i.id into v_invite from public.invites i
+        where i.competition_id = c.id and i.email = v_email and i.used_at is null and (i.expires_at is null or i.expires_at > now())
+          and i.token_hash = encode(sha256(convert_to(p->>'invite', 'UTF8')), 'hex');
+      if v_invite is null then
+        if exists (select 1 from public.entries where competition_id = c.id and email = v_email and status in ('paid', 'comped')) then raise exception 'already_entered'; end if;
+        raise exception 'not_open';
+      end if;
+    else
+      raise exception 'not_open';
+    end if;
+  end if;
   select id into v_stage from public.entry_stages
     where competition_id = c.id and kind = 'general' order by opens_at desc limit 1;     -- null unless stages are used (later phases)
 
@@ -754,6 +773,7 @@ begin
   if not coalesce((p->>'eligibility_confirmed')::boolean, false) then raise exception 'invalid:eligibility'; end if;
   if not (v_event = any (s.events)) then raise exception 'invalid:event'; end if;
   if not (v_equip = any (s.equipment)) then raise exception 'invalid:equipment'; end if;
+  if s.openipf_mode = 'required' and coalesce(p->>'openipf_url', '') !~* '^https://(www\.)?openipf\.org/.+' then raise exception 'invalid:openipf'; end if;
   if v_class is null or not exists (select 1 from public.weight_classes w where w.id = v_class and w.sex = v_sex and w.active
       and (w.min_age_category = '' or w.min_age_category = public.age_category_on(v_dob, c.start_date))) then
     raise exception 'invalid:weight_class';
@@ -773,8 +793,12 @@ begin
   if exists (select 1 from public.entries where competition_id = c.id and email = v_email and status in ('paid', 'comped')) then
     raise exception 'already_entered';
   end if;
+  -- One lifter, one place: the same membership number cannot take a second place under another email.
+  if v_bp <> '' and exists (select 1 from public.entries where competition_id = c.id and status in ('paid', 'comped') and lower(bp_number) = v_bp) then
+    raise exception 'duplicate_bp';
+  end if;
   update public.entries set status = 'cancelled', cancelled_at = now(), cancel_reason = 'replaced by a new attempt'
-    where competition_id = c.id and email = v_email and status = 'held';
+    where competition_id = c.id and status = 'held' and (email = v_email or (v_bp <> '' and lower(bp_number) = v_bp));
 
   if public.places_left(c.id) < 1 then raise exception 'full'; end if;
 
@@ -805,6 +829,7 @@ begin
       case when v_age < 18 then trim(p->>'guardian_email') else '' end, v_age < 18,
       coalesce((p->>'access_hearing')::boolean, false), coalesce((p->>'access_sight')::boolean, false),
       trim(coalesce(p->>'access_notes', '')), v_access, coalesce(c.end_date, c.start_date) + 30);
+  if v_invite is not null then update public.invites set entry_id = v_entry where id = v_invite; end if;
   return jsonb_build_object('entry_id', v_entry, 'price_pence', v_price, 'hold_expires_at', v_expires, 'competition', c.name);
 end
 $$;
@@ -834,6 +859,7 @@ begin
   end if;
   update public.entries set status = 'paid', paid_at = now(), hold_expires_at = null,
     cancelled_at = null, cancel_reason = '' where id = e;
+  update public.invites set used_at = now() where entry_id = e and used_at is null;
   return 'paid';
 end
 $$;
@@ -866,11 +892,12 @@ as $$
 declare
   v_events text[];
   v_equip text[];
-  v_hold integer := coalesce((p->>'hold_minutes')::int, 15);
+  v_hold integer := coalesce((p->>'hold_minutes')::int, 5);
   v_sj integer := nullif(p#>>'{prices,sub_junior}', '')::int;
   v_bench integer := nullif(p#>>'{prices,bench_only}', '')::int;
   v_full integer := nullif(p#>>'{prices,full_power}', '')::int;
   v_method text := coalesce(p->>'entry_method', 'external');
+  v_ipf text := case when coalesce((p->>'openipf_required')::boolean, false) then 'required' else 'optional' end;
 begin
   if not public.is_entries() then raise exception 'forbidden'; end if;
   if not exists (select 1 from public.competitions where id = c) then raise exception 'not_found'; end if;
@@ -891,12 +918,12 @@ begin
   update public.competitions set entry_method = v_method,
     entries_closed_manually = coalesce((p->>'entries_closed_manually')::boolean, false)
     where id = c;
-  insert into public.entry_settings (competition_id, events, equipment, hold_minutes, updated_at)
+  insert into public.entry_settings (competition_id, events, equipment, hold_minutes, openipf_mode, updated_at)
     values (c, case when cardinality(v_events) = 0 then array['full_power', 'bench_only'] else v_events end,
             case when cardinality(v_equip) = 0 then array['classic', 'equipped'] else v_equip end,
-            v_hold, now())
+            v_hold, v_ipf, now())
     on conflict (competition_id) do update set events = excluded.events, equipment = excluded.equipment,
-      hold_minutes = excluded.hold_minutes, updated_at = now();
+      hold_minutes = excluded.hold_minutes, openipf_mode = excluded.openipf_mode, updated_at = now();
 
   if v_method = 'yne' then
     delete from public.price_rules where competition_id = c;
@@ -914,3 +941,29 @@ end
 $$;
 revoke all on function public.save_entry_settings(uuid, jsonb) from public, anon;
 grant execute on function public.save_entry_settings(uuid, jsonb) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 18. Priority entry: personal links
+--     Priority entry opens one day before general entry. The entries team lists the emails that get it
+--     (later, volunteer points will fill this list). Each email gets a personal, single-use link. Only a
+--     fingerprint of the link is stored, so the full links are shown once, when they are made. Making new
+--     links for an email replaces its unused older one.
+-- ---------------------------------------------------------------------------
+create or replace function public.create_priority_invites(c uuid, emails text[]) returns table (email text, token text)
+language plpgsql security definer set search_path = public
+as $$
+declare e text; t text;
+begin
+  if not public.is_entries() then raise exception 'forbidden'; end if;
+  if not exists (select 1 from public.competitions where id = c) then raise exception 'not_found'; end if;
+  foreach e in array (select coalesce(array_agg(distinct lower(trim(x))), '{}') from unnest(emails) x where trim(x) <> '') loop
+    if e !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then raise exception 'invalid:email:%', e; end if;
+    delete from public.invites i where i.competition_id = c and i.email = e and i.used_at is null;
+    t := replace(gen_random_uuid()::text, '-', '') || replace(gen_random_uuid()::text, '-', '');
+    insert into public.invites (competition_id, email, token_hash) values (c, e, encode(sha256(convert_to(t, 'UTF8')), 'hex'));
+    email := e; token := t; return next;
+  end loop;
+end
+$$;
+revoke all on function public.create_priority_invites(uuid, text[]) from public, anon;
+grant execute on function public.create_priority_invites(uuid, text[]) to authenticated;
