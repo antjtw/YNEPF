@@ -1,9 +1,9 @@
-// Tests for docs/entry-system/schema-draft.sql, run in a scratch Postgres (PGlite) built from the
+// Tests for docs/entry-system/entry-system.sql, run in a scratch Postgres (PGlite) built from the
 // real supabase/schema.sql. It checks what each role can see and do, the public views, age
 // categories, places left, the audit log, and that the "money to send" report always adds up.
 //
 //   npm install --no-save @electric-sql/pglite
-//   node docs/entry-system/schema-draft.test.mjs
+//   node docs/entry-system/entry-system.test.mjs
 //
 import { PGlite } from "@electric-sql/pglite";
 import fs from "fs";
@@ -14,7 +14,7 @@ await db.exec(`create role anon nologin; create role authenticated nologin; crea
  create table auth.users (id uuid primary key default gen_random_uuid(), email text, email_confirmed_at timestamptz, raw_user_meta_data jsonb default '{}');
  create function auth.uid() returns uuid language sql as $$ select nullif(current_setting('request.uid', true),'')::uuid $$;`);
 const real = fs.readFileSync(new URL("../../supabase/schema.sql", import.meta.url), "utf8");
-const draft = fs.readFileSync(new URL("./schema-draft.sql", import.meta.url), "utf8");
+const draft = fs.readFileSync(new URL("../../supabase/entry-system.sql", import.meta.url), "utf8");
 await db.exec(real); await db.exec(draft); await db.exec(draft);   // upgrade, then re-run: safe
 let pass = 0, fail = 0;
 const ok = (c, n) => { c ? pass++ : fail++; console.log((c ? "PASS " : "FAIL ") + n); };

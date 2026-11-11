@@ -58,10 +58,14 @@ create table if not exists public.editors (
   id uuid primary key default gen_random_uuid(),
   email text not null unique check (email = lower(email) and email like '%_@_%'),
   display_name text not null default '',
-  role text not null default 'editor' check (role in ('admin', 'editor')),
+  role text not null default 'editor' check (role in ('admin', 'entries', 'editor', 'contributor')),
   added_by text not null default '',
   created_at timestamptz not null default now()
 );
+-- Older databases were created with only admin and editor; widen the list.
+alter table public.editors drop constraint if exists editors_role_check;
+alter table public.editors add constraint editors_role_check
+  check (role in ('admin', 'entries', 'editor', 'contributor'));
 
 -- The caller's role, or null if they are not allowed in. Requires a CONFIRMED
 -- email on the login, so nobody can sign up with someone else's address.
@@ -81,7 +85,19 @@ $$;
 
 create or replace function public.is_editor() returns boolean
 language sql stable security definer set search_path = public, auth
-as $$ select public.my_role() is not null $$;
+as $$ select coalesce(public.my_role() in ('admin', 'editor'), false) $$;
+
+-- Roles: admin (everything), entries (entries desk), editor (site content),
+-- contributor (news posts only). is_editor() means "manages site content".
+create or replace function public.is_entries() returns boolean
+language sql stable security definer set search_path = public, auth
+as $$ select coalesce(public.my_role() in ('admin', 'entries'), false) $$;
+
+create or replace function public.can_post() returns boolean
+language sql stable security definer set search_path = public, auth
+as $$ select coalesce(public.my_role() in ('admin', 'editor', 'contributor'), false) $$;
+
+grant execute on function public.is_entries(), public.can_post() to anon, authenticated;
 
 create or replace function public.is_admin() returns boolean
 language sql stable security definer set search_path = public, auth
@@ -427,8 +443,9 @@ drop policy if exists "public read" on public.posts;
 create policy "public read" on public.posts
   for select to anon, authenticated using (published and post_date <= now());
 drop policy if exists "editors all" on public.posts;
-create policy "editors all" on public.posts
-  for all to authenticated using (public.is_editor()) with check (public.is_editor());
+drop policy if exists "posters all" on public.posts;
+create policy "posters all" on public.posts
+  for all to authenticated using (public.can_post()) with check (public.can_post());
 
 -- Competitions: the public reads only through competitions_public. Editors use the table.
 drop policy if exists "editors all" on public.competitions;

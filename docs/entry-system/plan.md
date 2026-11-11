@@ -1,6 +1,6 @@
 # YNEPF entry system: the plan
 
-This is the plan to read **before any code is written**. It covers what we are building, how it is split into pieces, how the money works, who can do what, and what is still undecided. The database design is in [`schema-draft.sql`](schema-draft.sql) and the privacy guidance is in [`privacy-guidance.md`](privacy-guidance.md).
+This is the plan to read **before any code is written**. It covers what we are building, how it is split into pieces, how the money works, who can do what, and what is still undecided. The database design is in [`../../supabase/entry-system.sql`](../../supabase/entry-system.sql) and the privacy guidance is in [`privacy-guidance.md`](privacy-guidance.md).
 
 Nothing in here has been built yet. The database design has been **tested** in a scratch database (40 checks, see "How this is tested").
 

@@ -29,30 +29,7 @@
 -- WHEN THIS IS ADOPTED these definitions move into supabase/schema.sql itself. Until
 -- then, re-running the old schema.sql would quietly put is_editor() back to "anyone on the list".
 -- ---------------------------------------------------------------------------
-alter table public.editors drop constraint if exists editors_role_check;
-alter table public.editors add constraint editors_role_check
-  check (role in ('admin', 'entries', 'editor', 'contributor'));
-
-create or replace function public.is_editor() returns boolean
-language sql stable security definer set search_path = public, auth
-as $$ select coalesce(public.my_role() in ('admin', 'editor'), false) $$;
-
-create or replace function public.is_entries() returns boolean
-language sql stable security definer set search_path = public, auth
-as $$ select coalesce(public.my_role() in ('admin', 'entries'), false) $$;
-
-create or replace function public.can_post() returns boolean
-language sql stable security definer set search_path = public, auth
-as $$ select coalesce(public.my_role() in ('admin', 'editor', 'contributor'), false) $$;
-
-grant execute on function public.is_entries(), public.can_post() to anon, authenticated;
-
--- Contributors may write news posts (and only those).
-drop policy if exists "editors all" on public.posts;
-drop policy if exists "posters all" on public.posts;
-create policy "posters all" on public.posts
-  for all to authenticated using (public.can_post()) with check (public.can_post());
--- The entries team needs to read competitions to run their entries.
+-- Roles now live in supabase/schema.sql. Only the entries team's read access to competitions is added here.
 drop policy if exists "entries read" on public.competitions;
 create policy "entries read" on public.competitions
   for select to authenticated using (public.is_entries());
