@@ -875,8 +875,10 @@
     panel.replaceChildren(panelHead("Users", btn("Add user", function () { editUser(); }, "btn-primary")),
       el("div", { class: "panel-intro" },
         el("p", null, "Only the people listed here can change the website. ",
-          el("strong", null, "Editors"), " can manage competitions, news, records, the organisation page and FAQs. ",
-          el("strong", null, "Admins"), " can also add and remove users."),
+          el("strong", null, "Admins"), " can do everything, including adding and removing users. ",
+          el("strong", null, "Entries team"), " run entries: settings, entries, refunds and reports. ",
+          el("strong", null, "Editors"), " manage competitions, news, records, the organisation page and FAQs. ",
+          el("strong", null, "Contributors"), " can write news posts only."),
         el("p", null, "To give someone access, add their email address here. They then go to this page and either continue with Google or choose “Create your login”, using that same email. Removing someone takes their access away straight away.")),
       el("p", null, "Loading…"));
     sb.from("editors").select("*").order("created_at", { ascending: true }).then(function (res) {
@@ -888,23 +890,32 @@
         el("tbody", null, rows.map(function (u) {
           var self = u.email === me;
           var actions = self ? el("span", { class: "empty" }, "This is you") : el("span", { class: "actions" },
-            btn(u.role === "admin" ? "Make editor" : "Make admin", function () { setRole(u); }),
+            btn("Change role", function () { setRole(u); }),
             btn("Remove", function () { removeUser(u); }, "btn-danger"));
           return el("tr", null,
             el("th", { scope: "row" }, u.email, self ? el("span", { class: "tag tag-open tag-you" }, "You") : null,
               u.added_by ? el("small", null, "Added by " + u.added_by) : null),
             el("td", null, u.display_name || "—"),
-            el("td", null, u.role === "admin" ? "Admin" : "Editor"),
+            el("td", null, ROLE_NAMES[u.role] || u.role),
             el("td", null, actions));
         })))));
     }).catch(function (e) { panel.lastChild.textContent = friendly(e); });
   }
+  var ROLE_NAMES = { admin: "Admin", entries: "Entries team", editor: "Editor", contributor: "Contributor" };
+  var ROLE_OPTIONS = [
+    { value: "editor", label: "Editor: can edit the website" },
+    { value: "entries", label: "Entries team: runs entries, refunds and reports" },
+    { value: "contributor", label: "Contributor: can write news posts only" },
+    { value: "admin", label: "Admin: can do everything, including users" }
+  ];
   function setRole(u) {
-    var next = u.role === "admin" ? "editor" : "admin";
-    if (!window.confirm("Make " + u.email + " " + (next === "admin" ? "an admin? They will be able to add and remove users." : "an editor? They will no longer be able to manage users."))) return;
-    sb.from("editors").update({ role: next }).eq("id", u.id).then(ok)
-      .then(function () { toast("Role changed."); route(); })
-      .catch(function (e) { toast(friendly(e), "error"); });
+    openForm({
+      title: "Change role: " + u.email, saveLabel: "Change role", values: { role: u.role },
+      fields: [{ name: "role", label: "Role", type: "select", options: ROLE_OPTIONS }],
+      onSave: function (v) {
+        return sb.from("editors").update({ role: v.role }).eq("id", u.id).then(ok).then(function () { toast("Role changed."); route(); });
+      }
+    });
   }
   function removeUser(u) {
     if (!window.confirm("Remove " + u.email + "? They will lose access straight away.")) return;
@@ -918,7 +929,7 @@
       fields: [
         { name: "email", label: "Email address", type: "email", required: true, help: "Must match the email they sign in with (their Google account, or the one they create a login with)." },
         { name: "display_name", label: "Name (optional)", help: "Shown as the author on their news posts." },
-        { name: "role", label: "Role", type: "select", options: [{ value: "editor", label: "Editor: can edit the website" }, { value: "admin", label: "Admin: can also add and remove users" }] }
+        { name: "role", label: "Role", type: "select", options: ROLE_OPTIONS }
       ],
       validate: function (v) { return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.email) ? null : "Enter a valid email address."; },
       onSave: function (v) {
@@ -1232,12 +1243,145 @@
   }
 
   // ---- shell, routing, auth ---------------------------------------------------------
+  // ---- entries (phase 1A): settings per competition, and a basic list --------------
+  // Who sees what: the entries team and admins run entries; editors and contributors never see this tab.
+  var ENTRY_ERRORS = {
+    "invalid:events": "Choose at least one event.", "invalid:equipment": "Choose at least one kind of equipment.",
+    "invalid:hold_minutes": "The hold must be between 5 and 30 minutes.", "invalid:general_opens_at": "Set when entries open.",
+    "invalid:price_full_power": "Set a full power price.", "invalid:price_bench_only": "Set a bench only price.",
+    "invalid:price_sub_junior": "The sub-junior price must be zero or more.", "invalid:capacity": "Set the number of places on the competition first.",
+    forbidden: "You do not have permission to change entry settings."
+  };
+  function pence(v) { return v === null || v === "" || v === undefined ? null : Math.round(Number(v) * 100); }
+  function poundsInput(p) { return p === null || p === undefined ? "" : (p / 100).toFixed(2); }
+  function entryMoney(p) { return "£" + (p / 100).toFixed(p % 100 ? 2 : 0); }
+
+  function renderEntries(panel) {
+    panel.replaceChildren(panelHead("Entries"),
+      el("p", { class: "panel-intro" }, "Set up online entry for a competition, then watch the entries come in. Entries are taken on the website and paid for by card. While you are testing, use Stripe test cards and name the competition TEST."),
+      el("p", null, "Loading…"));
+    Promise.all([
+      sb.from("competitions").select("id,name,start_date,end_date,capacity,slug,published,entry_method,entries_closed_manually,kind").order("start_date", { ascending: false }),
+      sb.from("entries").select("competition_id,status,hold_expires_at")
+    ]).then(function (res) {
+      var comps = ok(res[0]).filter(function (c) { return c.kind !== "event"; }), entries = ok(res[1]), now = Date.now();
+      function count(c) {
+        return entries.filter(function (e) { return e.competition_id === c.id && (e.status === "paid" || e.status === "comped" || (e.status === "held" && new Date(e.hold_expires_at) > now)); }).length;
+      }
+      panel.lastChild.remove();
+      panel.appendChild(comps.length ? el("div", { class: "table-scroll" }, el("table", { class: "admin-table" },
+        el("thead", null, el("tr", null, ["Competition", "Entry", "Places", "Actions"].map(function (h) { return el("th", { scope: "col" }, h); }))),
+        el("tbody", null, comps.map(function (c) {
+          var online = c.entry_method === "yne";
+          return el("tr", null,
+            el("th", { scope: "row" }, c.name, !c.published ? [" ", el("span", { class: "tag tag-position" }, "Draft")] : null, el("small", null, Y.dateRange(c.start_date, c.end_date))),
+            el("td", null, online ? (c.entries_closed_manually ? "Online (closed by hand)" : "Online") : "Not set up", online && c.slug ? el("small", null, "enter?c=" + c.slug) : null),
+            el("td", null, online ? count(c) + " of " + (c.capacity || "?") : "—"),
+            el("td", null, el("span", { class: "actions" },
+              btn("Entry settings", function () { editEntrySettings(c); }),
+              online ? btn("View entries", function () { viewEntries(c, panel); }, "btn-primary") : null)));
+        })))) : el("p", { class: "empty" }, "No competitions yet. Add one on the Calendar tab first."));
+    }).catch(function (e) { panel.lastChild.textContent = friendly(e); });
+  }
+
+  function editEntrySettings(c) {
+    Promise.all([
+      sb.from("entry_settings").select("*").eq("competition_id", c.id).maybeSingle(),
+      sb.from("entry_stages").select("*").eq("competition_id", c.id).eq("kind", "general").maybeSingle(),
+      sb.from("price_rules").select("*").eq("competition_id", c.id)
+    ]).then(function (res) {
+      var s = ok(res[0]) || {}, stage = ok(res[1]), rules = ok(res[2]) || [];
+      function price(match) { var r = rules.filter(match)[0]; return r ? poundsInput(r.price_pence) : ""; }
+      var events = s.events || ["full_power", "bench_only"], equip = s.equipment || ["classic", "equipped"];
+      openForm({
+        title: "Entry settings: " + c.name, saveLabel: "Save entry settings",
+        values: {
+          entry_method: c.entry_method === "yne" ? "yne" : "external", capacity: c.capacity, entries_closed_manually: !!c.entries_closed_manually,
+          general_opens_at: Y.toLondonInput(stage && stage.opens_at), entries_close_at: Y.toLondonInput(s.entries_close_at), hold_minutes: s.hold_minutes || 15,
+          ev_full: events.indexOf("full_power") >= 0, ev_bench: events.indexOf("bench_only") >= 0,
+          eq_classic: equip.indexOf("classic") >= 0, eq_equipped: equip.indexOf("equipped") >= 0,
+          p_full: price(function (r) { return r.event === "full_power" && !r.age_category; }),
+          p_bench: price(function (r) { return r.event === "bench_only" && !r.age_category; }),
+          p_sj: price(function (r) { return r.age_category === "SJ"; })
+        },
+        fields: [
+          { name: "entry_method", label: "How are entries taken?", type: "select", options: [{ value: "external", label: "Not on this website (use the entry link on the calendar)" }, { value: "yne", label: "Online on this website, paid by card" }] },
+          { name: "capacity", label: "Number of places", type: "number", min: "1", half: true },
+          { name: "hold_minutes", label: "Minutes a place is held while paying", type: "number", min: "5", half: true, help: "Between 5 and 30." },
+          { name: "general_opens_at", label: "Entries open (UK time)", type: "datetime", half: true },
+          { name: "entries_close_at", label: "Entries close (UK time)", type: "datetime", half: true, help: "Leave blank to close when the competition is full or you close it." },
+          { name: "ev_full", label: "Offer full power", type: "checkbox", half: true },
+          { name: "ev_bench", label: "Offer bench only", type: "checkbox", half: true },
+          { name: "eq_classic", label: "Offer classic", type: "checkbox", half: true },
+          { name: "eq_equipped", label: "Offer equipped", type: "checkbox", half: true },
+          { name: "p_full", label: "Full power price (£)", type: "number", min: "0", half: true },
+          { name: "p_bench", label: "Bench only price (£)", type: "number", min: "0", half: true },
+          { name: "p_sj", label: "Sub-junior price, any event (£, optional)", type: "number", min: "0", help: "If set, sub-juniors pay this whatever they lift." },
+          { name: "entries_closed_manually", label: "Close entries now", type: "checkbox", help: "Stops new entries straight away. Untick to reopen." }
+        ],
+        onSave: function (v) {
+          var o = {
+            entry_method: v.entry_method, capacity: v.capacity, hold_minutes: v.hold_minutes || 15, entries_closed_manually: v.entries_closed_manually,
+            general_opens_at: Y.fromLondonInput(v.general_opens_at), entries_close_at: Y.fromLondonInput(v.entries_close_at),
+            events: [v.ev_full && "full_power", v.ev_bench && "bench_only"].filter(Boolean),
+            equipment: [v.eq_classic && "classic", v.eq_equipped && "equipped"].filter(Boolean),
+            prices: { full_power: pence(v.p_full), bench_only: pence(v.p_bench), sub_junior: pence(v.p_sj) }
+          };
+          return sb.rpc("save_entry_settings", { c: c.id, p: o }).then(function (r) {
+            if (r.error) { var m = (r.error.message || "").trim(); throw new Error(ENTRY_ERRORS[m] || friendly(r.error)); }
+            toast("Entry settings saved."); route();
+          });
+        }
+      });
+    }).catch(function (e) { toast(friendly(e), "error"); });
+  }
+
+  var ENTRY_STATUS = { held: "Paying", paid: "Paid", comped: "Free", cancelled: "Cancelled", refunded: "Refunded" };
+  function viewEntries(c, panel) {
+    var view = el("div");
+    panel.replaceChildren(view);
+    view.appendChild(panelHead(c.name + ": entries", el("span", { class: "actions" },
+      btn("Back to competitions", function () { route(); }),
+      btn("Download CSV", function () { downloadEntries(c); }, "btn-secondary"))));
+    view.appendChild(el("p", null, "Loading…"));
+    sb.from("entries").select("*, weight_classes(label)").eq("competition_id", c.id).order("created_at", { ascending: true }).then(function (res) {
+      var rows = ok(res);
+      view.lastChild.remove();
+      var live = rows.filter(function (e) { return e.status === "paid" || e.status === "comped"; });
+      var total = live.reduce(function (n, e) { return n + e.price_pence; }, 0);
+      view.appendChild(el("p", { class: "panel-intro" }, live.length + " entered of " + (c.capacity || "?") + " places. Entry money taken: " + entryMoney(total) + "."));
+      view.appendChild(rows.length ? el("div", { class: "table-scroll" }, el("table", { class: "admin-table" },
+        el("thead", null, el("tr", null, ["Name", "Details", "Status", "Paid"].map(function (h) { return el("th", { scope: "col" }, h); }))),
+        el("tbody", null, rows.map(function (e) {
+          return el("tr", null,
+            el("th", { scope: "row" }, e.full_name, el("small", null, e.email)),
+            el("td", null, [(e.sex === "M" ? "Men's " : "Women's ") + (e.weight_classes ? e.weight_classes.label + " kg" : ""), e.event === "bench_only" ? "Bench only" : "Full power", e.equipment].join(" · "),
+              el("small", null, [e.club, e.bp_number && "BP " + e.bp_number].filter(Boolean).join(" · "))),
+            el("td", null, ENTRY_STATUS[e.status] || e.status),
+            el("td", null, entryMoney(e.price_pence), e.paid_at ? el("small", null, new Date(e.paid_at).toLocaleString("en-GB", { timeZone: Y.TZ, dateStyle: "medium", timeStyle: "short" })) : null));
+        })))) : el("p", { class: "empty" }, "No entries yet."));
+    }).catch(function (e) { view.lastChild.textContent = friendly(e); });
+  }
+
+  function csvCell(v) { v = v === null || v === undefined ? "" : String(v); if (/^[=+\-@\t\r]/.test(v)) v = "'" + v; return '"' + v.replace(/"/g, '""') + '"'; }
+  function downloadEntries(c) {
+    sb.from("entries").select("*, weight_classes(label)").eq("competition_id", c.id).in("status", ["paid", "comped"]).order("created_at").then(ok).then(function (rows) {
+      var head = ["Name", "Email", "BP number", "Sex", "Weight class", "Event", "Equipment", "Club", "Instagram", "Paid (GBP)", "Paid at"];
+      var lines = [head.map(csvCell).join(",")].concat(rows.map(function (e) {
+        return [e.full_name, e.email, e.bp_number, e.sex, e.weight_classes && e.weight_classes.label, e.event, e.equipment, e.club, e.instagram, (e.price_pence / 100).toFixed(2), e.paid_at].map(csvCell).join(",");
+      }));
+      var a = el("a", { href: URL.createObjectURL(new Blob(["\ufeff" + lines.join("\r\n")], { type: "text/csv" })), download: (c.slug || "entries") + "-entries.csv" });
+      document.body.appendChild(a); a.click(); a.remove();
+    }).catch(function (e) { toast(friendly(e), "error"); });
+  }
+
   function panelHead(title, action) {
     return el("div", { class: "panel-head" }, el("h1", null, title), action || null);
   }
 
   var TABS = {
     competitions: renderCompetitions,
+    entries: renderEntries,
     news: renderNews,
     home: renderHome,
     organisation: function (p) { renderGrouped(p, ORG); },
@@ -1248,9 +1392,16 @@
     account: renderAccount
   };
 
+  // Which roles see which tab. contributor: news only. entries: the entries desk. editor: site content.
+  var TAB_ROLES = {
+    competitions: ["admin", "editor"], entries: ["admin", "entries"], news: ["admin", "editor", "contributor"], home: ["admin", "editor"],
+    organisation: ["admin", "editor"], records: ["admin", "editor"], faqs: ["admin", "editor"], footer: ["admin", "editor"], users: ["admin"],
+    account: ["admin", "entries", "editor", "contributor"]
+  };
+  function canSee(tab) { return (TAB_ROLES[tab] || []).indexOf(state.role) >= 0; }
   function route() {
     var tab = (location.hash || "").replace("#", "");
-    if (!TABS[tab] || (tab === "users" && state.role !== "admin")) tab = "competitions";
+    if (!TABS[tab] || !canSee(tab)) tab = state.role === "entries" ? "entries" : state.role === "contributor" ? "news" : "competitions";
     Array.prototype.forEach.call(document.querySelectorAll(".admin-tabs a"), function (a) {
       if (a.getAttribute("data-tab") === tab) a.setAttribute("aria-current", "page");
       else a.removeAttribute("aria-current");
@@ -1304,7 +1455,7 @@
         show($("auth"), false); show($("noaccess"), false);
         show($("app"), true);
         show($("user-box"), true);
-        show($("tab-users"), state.role === "admin");
+        Array.prototype.forEach.call(document.querySelectorAll(".admin-tabs a"), function (t) { show(t, canSee(t.getAttribute("data-tab"))); });
         route();
       });
     });

@@ -67,6 +67,27 @@ ok((await start({ email: "p3@example.com" })).error === "full", "(setup) the com
 await db.exec(`update public.entries set status='held', hold_expires_at = now() - interval '1 minute', paid_at=null where id='${r.entry_id}'`);
 await db.exec(`insert into public.entries (competition_id,email,full_name,date_of_birth,sex,status) values ('${C}','filler@example.com','Filler','1990-01-01','M','paid')`);
 ok((await conf(r.entry_id)) === "no_place", "a late payment when the competition is now full is told 'no_place' so it can be refunded");
+// ---- save_entry_settings (the entries team's admin screen)
+await db.exec("reset role");
+const U = { entries: "00000000-0000-0000-0000-00000000000b", editor: "00000000-0000-0000-0000-00000000000c" };
+for (const [k, id] of Object.entries(U)) await db.exec(`insert into auth.users (id,email,email_confirmed_at) values ('${id}','${k}@example.com',now())`);
+await db.exec(`insert into public.editors (email, role) values ('entries@example.com','entries'),('editor@example.com','editor')`);
+const C2 = "33333333-3333-3333-3333-333333333333";
+await db.exec(`insert into public.competitions (id,name,start_date,capacity,published,slug) values ('${C2}','New Open','2027-05-01',50,true,'new')`);
+const settings = { entry_method: "yne", capacity: 50, events: ["full_power", "bench_only"], equipment: ["classic"], hold_minutes: 15, general_opens_at: "2027-01-01T10:00:00Z", prices: { sub_junior: 2500, bench_only: 2500, full_power: 6000 } };
+const save = async (who, o) => { await db.exec("reset role"); await db.query(`select set_config('request.uid','${U[who]}',false)`); await db.exec("set role authenticated");
+  try { await db.query(`select public.save_entry_settings('${C2}', $1::jsonb)`, [JSON.stringify({ ...settings, ...o })]); return "ok"; } catch (e) { return e.message; } };
+ok((await save("editor", {})) === "forbidden", "an editor cannot change entry settings");
+ok((await save("entries", {})) === "ok", "the entries team can");
+await db.exec("reset role");
+ok((await db.query(`select count(*)::int n from public.price_rules where competition_id='${C2}'`)).rows[0].n === 3, "three price rules were written");
+ok((await db.query(`select entry_method m from public.competitions where id='${C2}'`)).rows[0].m === "yne", "online entry is switched on");
+ok((await save("entries", { prices: { bench_only: 2000, full_power: 5000 } })) === "ok" && (await db.query(`select count(*)::int n, min(price_pence)::int lo from public.price_rules where competition_id='${C2}'`)).rows[0].n === 2, "saving again replaces the price rules (no duplicates)");
+ok((await save("entries", { events: ["curl"] })) === "invalid:events", "an unknown event is refused");
+ok((await save("entries", { hold_minutes: 90 })) === "invalid:hold_minutes", "a hold longer than Stripe allows is refused");
+ok((await save("entries", { prices: { bench_only: 2000 } })) === "invalid:price_full_power", "a missing price for an offered event is refused");
+ok((await save("entries", { general_opens_at: null })) === "invalid:general_opens_at", "an opening time is required");
+await db.exec("reset role");
 await db.exec("set role anon");
 try { await db.query(`select public.start_entry('{}'::jsonb)`); ok(false, "the browser cannot call it"); } catch { ok(true, "the browser (anon) cannot call start_entry"); }
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

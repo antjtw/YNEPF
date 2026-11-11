@@ -844,3 +844,73 @@ insert into public.weight_classes (sex, label, upper_kg, sort_order, min_age_cat
   ('F', '43', 43, 1, 'SJ'), ('F', '47', 47, 2, ''), ('F', '52', 52, 3, ''), ('F', '57', 57, 4, ''), ('F', '63', 63, 5, ''),
   ('F', '69', 69, 6, ''), ('F', '76', 76, 7, ''), ('F', '84', 84, 8, ''), ('F', '84+', null, 9, '')
 on conflict (sex, label) do nothing;
+
+-- ---------------------------------------------------------------------------
+-- 17. Entry settings, saved in one step by the entries team (admin screen)
+--     The entries team cannot edit the competition itself (that is the editors' job), so this
+--     function does the entry parts for them: how entry is taken, the places, when it opens and
+--     closes, the events and equipment, and the prices. Prices are in whole pence:
+--       prices = {"sub_junior": 2500 | null, "bench_only": 2500, "full_power": 6000}
+--     The sub-junior price, when set, applies to sub-juniors in any event (first match wins).
+-- ---------------------------------------------------------------------------
+create or replace function public.save_entry_settings(c uuid, p jsonb) returns void
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_events text[];
+  v_equip text[];
+  v_hold integer := coalesce((p->>'hold_minutes')::int, 15);
+  v_opens timestamptz := nullif(p->>'general_opens_at', '')::timestamptz;
+  v_sj integer := nullif(p#>>'{prices,sub_junior}', '')::int;
+  v_bench integer := nullif(p#>>'{prices,bench_only}', '')::int;
+  v_full integer := nullif(p#>>'{prices,full_power}', '')::int;
+  v_method text := coalesce(p->>'entry_method', 'external');
+begin
+  if not public.is_entries() then raise exception 'forbidden'; end if;
+  if not exists (select 1 from public.competitions where id = c) then raise exception 'not_found'; end if;
+  if v_method not in ('yne', 'external') then raise exception 'invalid:entry_method'; end if;
+  select coalesce(array_agg(x), '{}') into v_events from jsonb_array_elements_text(coalesce(p->'events', '[]')) x;
+  select coalesce(array_agg(x), '{}') into v_equip from jsonb_array_elements_text(coalesce(p->'equipment', '[]')) x;
+
+  if v_method = 'yne' then
+    if cardinality(v_events) = 0 or not (v_events <@ array['full_power', 'bench_only']) then raise exception 'invalid:events'; end if;
+    if cardinality(v_equip) = 0 or not (v_equip <@ array['classic', 'equipped']) then raise exception 'invalid:equipment'; end if;
+    if v_hold < 5 or v_hold > 30 then raise exception 'invalid:hold_minutes'; end if;
+    if v_opens is null then raise exception 'invalid:general_opens_at'; end if;
+    if 'full_power' = any (v_events) and (v_full is null or v_full < 0) then raise exception 'invalid:price_full_power'; end if;
+    if 'bench_only' = any (v_events) and (v_bench is null or v_bench < 0) then raise exception 'invalid:price_bench_only'; end if;
+    if v_sj is not null and v_sj < 0 then raise exception 'invalid:price_sub_junior'; end if;
+    if coalesce((p->>'capacity')::int, (select capacity from public.competitions where id = c), 0) < 1 then raise exception 'invalid:capacity'; end if;
+  end if;
+
+  update public.competitions set entry_method = v_method,
+    entries_closed_manually = coalesce((p->>'entries_closed_manually')::boolean, false),
+    capacity = coalesce((p->>'capacity')::int, capacity)
+    where id = c;
+  insert into public.entry_settings (competition_id, events, equipment, entries_close_at, hold_minutes, updated_at)
+    values (c, case when cardinality(v_events) = 0 then array['full_power', 'bench_only'] else v_events end,
+            case when cardinality(v_equip) = 0 then array['classic', 'equipped'] else v_equip end,
+            nullif(p->>'entries_close_at', '')::timestamptz, v_hold, now())
+    on conflict (competition_id) do update set events = excluded.events, equipment = excluded.equipment,
+      entries_close_at = excluded.entries_close_at, hold_minutes = excluded.hold_minutes, updated_at = now();
+
+  if v_opens is not null then
+    delete from public.entry_stages where competition_id = c and kind = 'general';
+    insert into public.entry_stages (competition_id, kind, name, opens_at) values (c, 'general', 'General entry', v_opens);
+  end if;
+  if v_method = 'yne' then
+    delete from public.price_rules where competition_id = c;
+    if v_sj is not null then
+      insert into public.price_rules (competition_id, sort_order, label, age_category, price_pence) values (c, 1, 'Sub-junior, any event', 'SJ', v_sj);
+    end if;
+    if v_bench is not null then
+      insert into public.price_rules (competition_id, sort_order, label, event, price_pence) values (c, 2, 'Bench only', 'bench_only', v_bench);
+    end if;
+    if v_full is not null then
+      insert into public.price_rules (competition_id, sort_order, label, event, price_pence) values (c, 3, 'Full power', 'full_power', v_full);
+    end if;
+  end if;
+end
+$$;
+revoke all on function public.save_entry_settings(uuid, jsonb) from public, anon;
+grant execute on function public.save_entry_settings(uuid, jsonb) to authenticated;
