@@ -40,6 +40,11 @@
     var age = c[0] - b[0]; if (c[1] < b[1] || (c[1] === b[1] && c[2] < b[2])) age--;
     return age;
   }
+  // Classes this lifter may enter: men's 53 and women's 43 are for sub-juniors only (the database checks this too).
+  function allowedClasses() {
+    var iso = dobISO(), cat = iso ? ageCategory(+iso.slice(0, 4), +ctx.comp.start_date.slice(0, 4)) : null;
+    return ctx.classes.filter(function (c) { return c.sex === v.sex && (!c.min_age_category || c.min_age_category === cat); });
+  }
   function priceNow() {
     var iso = dobISO(); if (!iso || !v.event || !v.equipment) return null;
     var cat = ageCategory(+iso.slice(0, 4), +ctx.comp.start_date.slice(0, 4));
@@ -153,7 +158,9 @@
     ];
   }
   function stepLifting() {
-    var classes = ctx.classes.filter(function (c) { return c.sex === v.sex; }).map(function (c) { return [c.id, c.label + " kg"]; });
+    var allowed = allowedClasses();
+    if (v.weight_class_id && !allowed.some(function (c) { return c.id === v.weight_class_id; })) v.weight_class_id = "";
+    var classes = allowed.map(function (c) { return [c.id, c.label + " kg"]; });
     var p = priceNow();
     return [
       radios("event", "Event", ctx.settings.events.map(function (e) { return [e, EVENT_NAMES[e] || e]; })),
@@ -209,7 +216,7 @@
     if (n === 2) {
       if (!v.event) e.push(["event", "Choose an event"]);
       if (!v.equipment) e.push(["equipment", "Choose your equipment"]);
-      if (!v.weight_class_id) e.push(["weight_class_id", "Choose your weight class"]);
+      if (!v.weight_class_id || !allowedClasses().some(function (c) { return c.id === v.weight_class_id; })) e.push(["weight_class_id", "Choose your weight class"]);
       if (priceNow() === null && v.event && v.equipment) e.push(["event", "We could not work out a price. Please contact the entries team"]);
     }
     return e;

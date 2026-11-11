@@ -17,7 +17,7 @@ await db.exec(`insert into public.competitions (id,name,start_date,capacity,publ
  insert into public.entry_stages (competition_id,kind,name,opens_at) values ('${C}','general','General',now() - interval '1 day');
  insert into public.price_rules (competition_id,sort_order,label,event,age_category,price_pence) values
   ('${C}',1,'Sub-junior',null,'SJ',2500),('${C}',2,'Bench only','bench_only',null,2500),('${C}',3,'Full power','full_power',null,6000);`);
-const wc = async (sex) => (await db.query(`select id from public.weight_classes where sex='${sex}' and active order by sort_order limit 1`)).rows[0]?.id;
+const wc = async (sex) => (await db.query(`select id from public.weight_classes where sex='${sex}' and active and label = '${sex === "M" ? "83" : "63"}'`)).rows[0]?.id;
 let wcM = await wc("M"), wcF = await wc("F");
 if (!wcM) { await db.exec(`insert into public.weight_classes (sex,label,upper_kg) values ('M','83',83),('F','63',63)`); wcM = await wc("M"); wcF = await wc("F"); }
 const good = { competition_id: C, email: "A@Example.com", full_name: "Alex Lifter", date_of_birth: "1990-06-01", sex: "M", event: "full_power", equipment: "classic", weight_class_id: wcM, eligibility_confirmed: true };
@@ -93,6 +93,12 @@ await db.exec(`update public.competitions set published = false where id = '${C}
 ok((await start({ email: "t1@example.com" })).error === "closed", "an unpublished (test) competition cannot be entered by the public");
 ok((await start({ email: "t1@example.com", allow_unpublished: true })).entry_id, "...but the entries team can preview it");
 await db.exec(`update public.competitions set published = true where id = '${C}'`);
+await db.exec("reset role");
+await db.exec(`update public.entries set status='cancelled' where competition_id='${C}'`);
+const sjClass = (await db.query(`select id from public.weight_classes where sex='M' and label='53'`)).rows[0].id;
+ok((await start({ email: "sj1@example.com", weight_class_id: sjClass })).error === "invalid:weight_class", "an adult cannot enter the sub-junior-only 53 kg class");
+r = await start({ email: "sj2@example.com", weight_class_id: sjClass, date_of_birth: "2010-01-01", guardian_name: "P", guardian_phone: "07", guardian_email: "p@example.com", guardian_consent: true });
+ok(r.entry_id, "a sub-junior can");
 await db.exec("set role anon");
 try { await db.query(`select public.start_entry('{}'::jsonb)`); ok(false, "the browser cannot call it"); } catch { ok(true, "the browser (anon) cannot call start_entry"); }
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

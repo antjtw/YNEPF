@@ -70,7 +70,7 @@ create table if not exists public.weight_classes (
   label text not null,                                    -- "66", "120+"
   upper_kg numeric(5, 1),                                 -- null for the top "+" class
   sort_order integer not null default 0,
-  min_age_category text not null default '',              -- '' = open to all; e.g. 'SJ' for men's 53 and women's 43 (see plan)
+  min_age_category text not null default '',              -- '' = open to all; 'SJ' = sub-juniors only (men's 53, women's 43). Despite the name, it means "only this age category"
   active boolean not null default true,
   unique (sex, label)
 );
@@ -752,7 +752,8 @@ begin
   if not coalesce((p->>'eligibility_confirmed')::boolean, false) then raise exception 'invalid:eligibility'; end if;
   if not (v_event = any (s.events)) then raise exception 'invalid:event'; end if;
   if not (v_equip = any (s.equipment)) then raise exception 'invalid:equipment'; end if;
-  if v_class is null or not exists (select 1 from public.weight_classes w where w.id = v_class and w.sex = v_sex and w.active) then
+  if v_class is null or not exists (select 1 from public.weight_classes w where w.id = v_class and w.sex = v_sex and w.active
+      and (w.min_age_category = '' or w.min_age_category = public.age_category_on(v_dob, c.start_date))) then
     raise exception 'invalid:weight_class';
   end if;
 
@@ -840,7 +841,7 @@ do $$ begin
   end if;
 end $$;
 
--- Weight classes (IPF). Men's 53 and women's 43 are the sub-junior and junior classes. Admins can change these.
+-- Weight classes (IPF). Men's 53 and women's 43 are offered to sub-juniors only. Admins can change these.
 insert into public.weight_classes (sex, label, upper_kg, sort_order, min_age_category) values
   ('M', '53', 53, 1, 'SJ'), ('M', '59', 59, 2, ''), ('M', '66', 66, 3, ''), ('M', '74', 74, 4, ''), ('M', '83', 83, 5, ''),
   ('M', '93', 93, 6, ''), ('M', '105', 105, 7, ''), ('M', '120', 120, 8, ''), ('M', '120+', null, 9, ''),
