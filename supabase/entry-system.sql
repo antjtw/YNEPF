@@ -628,7 +628,8 @@ from public.waiting_list w
 where w.status in ('waiting', 'offered');
 
 -- The state of entry for a competition card or page.
-create or replace view public.competition_entry_state as
+drop view if exists public.competition_entry_state;
+create view public.competition_entry_state as
 select c.id as competition_id, c.capacity, public.places_left(c.id) as places_left,
        c.entry_method, c.entries_closed_manually, c.entry_opens, c.entry_closes
 from public.competitions c
