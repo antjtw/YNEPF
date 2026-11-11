@@ -17,6 +17,7 @@
   --btn-border: var(--accent);
   --btn-fill: var(--accent-hover);       /* the colour that fades in on hover */
   --btn-fg-hover: var(--accent-text);
+  --btn-fade: 360ms;                     /* how long the hover fade takes (the site's usual is 280ms) */
   position: relative;
   isolation: isolate;
   overflow: hidden;
@@ -37,8 +38,8 @@
   border: 2px solid var(--btn-border);
   border-radius: var(--radius-pill);
   cursor: pointer;
-  transition: color var(--dur) var(--ease-out), border-color var(--dur) var(--ease-out),
-              background-color var(--dur) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+  transition: color var(--btn-fade) var(--ease-out), border-color var(--btn-fade) var(--ease-out),
+              background-color var(--btn-fade) var(--ease-out), transform var(--dur-fast) var(--ease-out);
 }
 .btn::before {
   content: "";
@@ -48,7 +49,7 @@
   background: var(--btn-fill);
   opacity: 0;                            /* a plain fade on hover, the same for every button */
   border-radius: inherit;
-  transition: opacity var(--dur) var(--ease-out);
+  transition: opacity var(--btn-fade) var(--ease-out);
 }
 .btn:visited { color: var(--btn-fg); }
 .btn:hover { color: var(--btn-fg-hover); text-decoration: none; }
