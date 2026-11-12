@@ -33,6 +33,16 @@
   // "You are an M2 lifter", "a sub-junior lifter", "an open lifter" (the year they turn the age decides, not the day).
   var CAT_NAMES = { SJ: "a sub-junior lifter", J: "a junior lifter", "": "an open lifter", M1: "an M1 lifter (Masters 1)", M2: "an M2 lifter (Masters 2)", M3: "an M3 lifter (Masters 3)", M4: "an M4 lifter (Masters 4)" };
   var CAT_SHORT = { SJ: "Sub-junior", J: "Junior", "": "Open", M1: "Masters 1 (M1)", M2: "Masters 2 (M2)", M3: "Masters 3 (M3)", M4: "Masters 4 (M4)" };
+  function catNote() {
+    var c = myCategory();
+    return c === null ? "" : ["For this competition ", el("strong", null, "you are " + CAT_NAMES[c] + "."), " We work this out from the year you were born."];
+  }
+  function updateCatNote() {
+    var n = document.getElementById("cat-note"); if (!n) return;
+    n.replaceChildren(); var c = catNote();
+    if (c) c.forEach(function (x) { n.appendChild(typeof x === "string" ? document.createTextNode(x) : x); });
+    n.hidden = !c;
+  }
   function myCategory() {
     var iso = dobISO(); if (!iso) return null;
     var c = ageCategory(+iso.slice(0, 4), +ctx.comp.start_date.slice(0, 4));
@@ -139,7 +149,7 @@
   function dobField() {
     function part(k, label, w, max) {
       return el("div", { class: "date-part" }, el("label", { for: "dob-" + k }, label),
-        el("input", { id: "dob-" + k, type: "text", inputmode: "numeric", maxlength: max, size: w, value: v[k], autocomplete: k === "dd" ? "bday-day" : k === "mm" ? "bday-month" : "bday-year", oninput: function (e) { v[k] = e.target.value; }}));
+        el("input", { id: "dob-" + k, type: "text", inputmode: "numeric", maxlength: max, size: w, value: v[k], autocomplete: k === "dd" ? "bday-day" : k === "mm" ? "bday-month" : "bday-year", oninput: function (e) { v[k] = e.target.value; }, onchange: updateCatNote }));
     }
     return el("div", { class: "field", "data-field": "dob" },
       el("fieldset", { class: "choice", id: "dob", tabindex: "-1" }, el("legend", null, "Date of birth"),
@@ -180,6 +190,7 @@
       text("full_name", "Full name", { autocomplete: "name", help: "Your name, club and weight class are shown on the entries list and the lifting order." }),
       text("email", "Email address", { type: "email", autocomplete: "email", max: 254, help: "We send your confirmation here." }),
       dobField(),
+      el("p", { class: "callout", id: "cat-note", role: "status", hidden: myCategory() === null }, catNote()),
       radios("sex", "Which category are you entering?", [["M", "Men's"], ["F", "Women's"]],
         ["This should usually match your sex at birth. If you are a transgender athlete, please ", el("a", { href: "contact.html", target: "_blank", rel: "noopener" }, "contact us", el("span", { class: "visually-hidden" }, " (opens in a new tab)")), " before you enter and we will talk it through."]),
       divisionField(),
@@ -208,9 +219,7 @@
     var allowed = allowedClasses();
     if (v.weight_class_id && !allowed.some(function (c) { return c.id === v.weight_class_id; })) v.weight_class_id = "";
     var classes = allowed.map(function (c) { return [c.id, c.label + " kg"]; });
-    var cat = myCategory();
     return [
-      cat !== null ? el("p", { class: "callout", style: "margin-top:0" }, "For this competition ", el("strong", null, "you are " + CAT_NAMES[cat] + "."), " We work this out from the year you were born.") : null,
       radios("event", "Which event do you wish to compete in?", ctx.settings.events.map(function (e) { return [e, EVENT_NAMES[e] || e, EVENT_HINTS[e]]; })),
       radios("equipment", "Equipment", ctx.settings.equipment.map(function (e) { return [e, EQUIP_NAMES[e] || e, EQUIP_HINTS[e]]; })),
       select("weight_class_id", "Weight class", classes, classes.length ? "Choose your class" : "Choose men's or women's first",
