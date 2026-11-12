@@ -132,17 +132,18 @@ ok(s1["Implexus Gym"].e === 2800 && s1["Implexus Gym"].m === 2000 && s1["Implexu
 await clearEntries();
 await mkEntry({ event: "bench_only", price: 2500 });                                  // bench: federation £7.50, host £17.50
 await mkEntry({ dob: "2010-03-03", price: 1500 });                                    // sub-junior: federation £4.50, host £10.50
+await mkEntry({ dob: "2010-03-03", event: "bench_only", price: 2500 });                 // sub-junior bench only: same as bench, federation £7.50, host £17.50
 await mkEntry({ dob: "1960-03-03" });                                                 // master: full power rate: £12 / £28
 await mkEntry({ price: 2000, discount: 2000, list: 4000 });                           // paid £20 of £40: host still £28, the federation absorbs £8
 await mkEntry({ addon: { id: "a2", price: 1000 } });                                  // photo pack £10 goes to the photographer
 await mkEntry({ status: "refunded", price: 4000 });                                   // refunded: not counted (Stripe still keeps its fee)
 let s = await settle(); let by = byName(s);
-ok(by["Implexus Gym"].e === 1750 + 1050 + 2800 + 2800 + 2800, "host entry money: 17.50 + 10.50 + 28 + 28 + 28 = £114: " + by["Implexus Gym"].e);
-ok(by["YNEPF"].e === (750 + 450 + 1200 + (2000 - 2800) + 1200), "the federation's entry money: 7.50 + 4.50 + 12 - 8 (the discount it absorbs) + 12: " + by["YNEPF"].e);
+ok(by["Implexus Gym"].e === 1750 + 1050 + 1750 + 2800 + 2800 + 2800, "host entry money: 17.50 + 10.50 + 17.50 + 28 + 28 + 28 = £114: " + by["Implexus Gym"].e);
+ok(by["YNEPF"].e === (750 + 450 + 750 + 1200 + (2000 - 2800) + 1200), "the federation's entry money: 7.50 + 4.50 + 7.50 (sub-junior bench) + 12 - 8 (the discount it absorbs) + 12: " + by["YNEPF"].e);
 ok(by["White Lights Media"].p === 1000 && by["White Lights Media"].g === 1000, "the photographer gets the whole of the photo packages");
 const fees = (await rows(`select sum(stripe_fee_pence)::int f from public.payments p join public.entries e on e.id = p.entry_id where e.competition_id = '${COMP}'`))[0].f;
 ok(by["YNEPF"].f === fees && by["Implexus Gym"].f === 0 && by["White Lights Media"].f === 0, `the federation pays all ${fees}p of Stripe fees, including on the refunded entry`);
-const cash = 2500 + 1500 + 4000 + 2000 + 5000;   // what the live entries actually paid (the refunded one is excluded)
+const cash = 2500 + 1500 + 2500 + 4000 + 2000 + 5000;   // what the live entries actually paid (the refunded one is excluded)
 ok(s.reduce((a, r) => a + r.n, 0) === cash - fees, "the rows add up exactly: cash taken less fees: " + s.reduce((a, r) => a + r.n, 0) + " = " + (cash - fees));
 // a free place (a comped entry) is the full price to the host: the federation absorbs it
 const freeId = await mkEntry({ status: "comped", price: 0, list: 4000 });

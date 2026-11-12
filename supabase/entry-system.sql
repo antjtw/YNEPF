@@ -630,7 +630,7 @@ begin
   per_entry as (
     select l.id, l.price_pence - l.addons as cash,
            coalesce(l.list_price_pence, l.price_pence - l.addons + l.discount_pence) as list,
-           case when public.age_category_on(l.date_of_birth, start) = 'SJ' then f_sj when l.event = 'bench_only' then f_bench else f_full end as std_fee
+           case when l.event = 'bench_only' then f_bench when public.age_category_on(l.date_of_birth, start) = 'SJ' then f_sj else f_full end as std_fee
       from live l
   ),
   entry_parts as (

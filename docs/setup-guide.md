@@ -133,7 +133,7 @@ Codes are made in the editor: open a competition, then the **Discounts** tab, th
 
 ## Part 5e: The money tab
 
-Each competition has a **Money** tab (entries team and admins). Press **Set who gets paid** to name the host; the host is paid the entry fee less the federation's fixed amount (£12 full power, £7.50 bench only, £4.50 sub-junior, changed for that competition with **Change this competition's amounts**; the amounts new competitions start with are on the Calendar page under **What the federation keeps from each entry**, and changing those never alters competitions that already exist). The federation absorbs discounts, free places and Stripe's fees. The report shows what each person is owed and what is still to send; **Record a payment sent** notes when you have paid someone. It needs the newest all-in-one SQL (the report refuses anyone who is not on the entries team).
+Each competition has a **Money** tab (entries team and admins). Press **Set who gets paid** to name the host; the host is paid the entry fee less the federation's fixed amount (£12 full power, £7.50 bench only, £4.50 sub-junior (full power; sub-junior bench only pays the bench amount), changed for that competition with **Change this competition's amounts**; the amounts new competitions start with are on the Calendar page under **What the federation keeps from each entry**, and changing those never alters competitions that already exist). The federation absorbs discounts, free places and Stripe's fees. The report shows what each person is owed and what is still to send; **Record a payment sent** notes when you have paid someone. It needs the newest all-in-one SQL (the report refuses anyone who is not on the entries team).
 
 ---
 
