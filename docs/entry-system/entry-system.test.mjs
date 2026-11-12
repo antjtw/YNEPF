@@ -157,10 +157,22 @@ await mkEntry({ price: 1000, fee: 0 });
 s = byName(await settle());
 ok(s["Implexus Gym"].e === 0 && s["YNEPF"].e === 1000, "if the entry fee is less than the federation's amount, the federation keeps the lot and the host is not paid a negative amount");
 // the fixed amounts can be changed
-await clearEntries(); await db.exec(`update public.federation_fees set pence = 1500 where key = 'full_power'`);
+await clearEntries();
+// the defaults for NEW competitions can change without touching a competition that already exists
+await db.exec(`update public.federation_fees set pence = 1500 where key = 'full_power'`);
 await mkEntry({});
-s = byName(await settle()); ok(s["Implexus Gym"].e === 2500 && s["YNEPF"].e === 1500, "changing the federation's fixed amount changes the split");
+s = byName(await settle()); ok(s["Implexus Gym"].e === 2800 && s["YNEPF"].e === 1200, "changing the defaults does NOT change an existing competition's report: past competitions keep the amounts they started with");
+await db.exec(`insert into public.competitions (id, name, start_date, capacity, published, slug) values ('55555555-5555-5555-5555-555555555555','Later Open','2028-03-01',10,true,'later')`);
+ok((await rows(`select fee_full_power_pence f, fee_bench_only_pence b, fee_sub_junior_pence j from public.competitions where id = '55555555-5555-5555-5555-555555555555'`))[0].f === 1500, "a competition made afterwards starts with the new amounts");
+ok((await rows(`select fee_full_power_pence f from public.competitions where id = '${COMP}'`))[0].f === 1200, "...and the old one still has its own");
 await db.exec(`update public.federation_fees set pence = 1200 where key = 'full_power'`);
+// one competition's amounts can be changed by the entries team only
+const saveFees = async (who, o) => { await as(who); try { await db.query(`select public.save_competition_fees('${COMP}', $1::jsonb)`, [JSON.stringify(o)]); return "ok"; } catch (e) { return e.message; } finally { await db.exec("reset role"); } };
+ok((await saveFees(U.editor, { full_power: 1000, bench_only: 600, sub_junior: 300 })) === "forbidden" && (await saveFees(null, { full_power: 1, bench_only: 1, sub_junior: 1 })) !== "ok", "editors and the public cannot change a competition's amounts");
+ok((await saveFees(U.entries, { full_power: 1000, bench_only: 600, sub_junior: -1 })) === "invalid:fees", "negative amounts are refused");
+ok((await saveFees(U.entries, { full_power: 1500, bench_only: 750, sub_junior: 450 })) === "ok", "the entries team can change one competition's amounts");
+s = byName(await settle()); ok(s["Implexus Gym"].e === 2500 && s["YNEPF"].e === 1500, "...and that changes that competition's split: host £25, federation £15");
+await saveFees(U.entries, { full_power: 1200, bench_only: 750, sub_junior: 450 });
 // with no host set, all the entry money stays with the federation
 await db.exec(`update public.competitions set host_payee_id = null where id = '${COMP}'`);
 s = byName(await settle()); ok(!s["Implexus Gym"] || s["Implexus Gym"].e === 0, "with no host set, the host gets no entry money (it stays with the federation)");

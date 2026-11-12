@@ -238,6 +238,29 @@ create table if not exists public.federation_fees (
 );
 insert into public.federation_fees (key, pence) values ('full_power', 1200), ('bench_only', 750), ('sub_junior', 450) on conflict (key) do nothing;
 
+-- Each competition keeps its own copy of the amounts, taken from these defaults when it is created, so changing the defaults later
+-- never changes the report for a competition that already exists. (A competition's amounts can be changed on its Money tab.)
+alter table public.competitions add column if not exists fee_full_power_pence integer check (fee_full_power_pence >= 0);
+alter table public.competitions add column if not exists fee_bench_only_pence integer check (fee_bench_only_pence >= 0);
+alter table public.competitions add column if not exists fee_sub_junior_pence integer check (fee_sub_junior_pence >= 0);
+update public.competitions set
+  fee_full_power_pence = coalesce(fee_full_power_pence, (select pence from public.federation_fees where key = 'full_power'), 1200),
+  fee_bench_only_pence = coalesce(fee_bench_only_pence, (select pence from public.federation_fees where key = 'bench_only'), 750),
+  fee_sub_junior_pence = coalesce(fee_sub_junior_pence, (select pence from public.federation_fees where key = 'sub_junior'), 450)
+  where fee_full_power_pence is null or fee_bench_only_pence is null or fee_sub_junior_pence is null;
+create or replace function public.competition_fee_snapshot() returns trigger
+language plpgsql security definer set search_path = public
+as $$
+begin
+  new.fee_full_power_pence := coalesce(new.fee_full_power_pence, (select pence from public.federation_fees where key = 'full_power'), 1200);
+  new.fee_bench_only_pence := coalesce(new.fee_bench_only_pence, (select pence from public.federation_fees where key = 'bench_only'), 750);
+  new.fee_sub_junior_pence := coalesce(new.fee_sub_junior_pence, (select pence from public.federation_fees where key = 'sub_junior'), 450);
+  return new;
+end
+$$;
+drop trigger if exists competitions_fee_snapshot on public.competitions;
+create trigger competitions_fee_snapshot before insert on public.competitions for each row execute function public.competition_fee_snapshot();
+
 -- ---------------------------------------------------------------------------
 -- 3b. Discount codes
 --     Made in the editor, for one competition or for any competition. A code can be tied to one email address (so it
@@ -592,9 +615,8 @@ begin
     from public.payments p join public.entries e on e.id = p.entry_id
    where e.competition_id = c and p.status = 'succeeded';
   select py.id into fed from public.payees py where py.kind = 'federation' limit 1;
-  select k.host_payee_id, k.start_date into host, start from public.competitions k where k.id = c;
-  select coalesce(max(case when key = 'full_power' then pence end), 1200), coalesce(max(case when key = 'bench_only' then pence end), 750), coalesce(max(case when key = 'sub_junior' then pence end), 450)
-    into f_full, f_bench, f_sj from public.federation_fees;
+  select k.host_payee_id, k.start_date, coalesce(k.fee_full_power_pence, 1200), coalesce(k.fee_bench_only_pence, 750), coalesce(k.fee_sub_junior_pence, 450)
+    into host, start, f_full, f_bench, f_sj from public.competitions k where k.id = c;
 
   return query
   with live as (
@@ -1306,3 +1328,19 @@ end
 $$;
 revoke all on function public.save_payout_setup(uuid, jsonb) from public, anon;
 grant execute on function public.save_payout_setup(uuid, jsonb) to authenticated;
+
+-- Change what the federation keeps from each entry for ONE competition (entries team only). The defaults for new competitions are
+-- changed on the federation_fees table instead.
+create or replace function public.save_competition_fees(c uuid, p jsonb) returns void
+language plpgsql security definer set search_path = public
+as $$
+declare f integer := (p->>'full_power')::int; b integer := (p->>'bench_only')::int; j integer := (p->>'sub_junior')::int;
+begin
+  if not public.is_entries() then raise exception 'forbidden'; end if;
+  if not exists (select 1 from public.competitions where id = c) then raise exception 'not_found'; end if;
+  if f is null or b is null or j is null or f < 0 or b < 0 or j < 0 or f > 100000 or b > 100000 or j > 100000 then raise exception 'invalid:fees'; end if;
+  update public.competitions set fee_full_power_pence = f, fee_bench_only_pence = b, fee_sub_junior_pence = j where id = c;
+end
+$$;
+revoke all on function public.save_competition_fees(uuid, jsonb) from public, anon;
+grant execute on function public.save_competition_fees(uuid, jsonb) to authenticated;

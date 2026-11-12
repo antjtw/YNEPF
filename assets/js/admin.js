@@ -356,6 +356,7 @@
       panel.appendChild(el("h2", null, "Upcoming"));
       panel.appendChild(current.length ? compTable(current, taken) : el("p", { class: "empty" }, "Nothing upcoming."));
       if (past.length) { panel.appendChild(el("h2", null, "Past")); panel.appendChild(compTable(past, taken)); }
+      if (canEntry()) panel.appendChild(feesPanel());
       if (canEntry()) panel.appendChild(clubsPanel());
     }).catch(function (e) { panel.lastChild.textContent = friendly(e); });
   }
@@ -871,16 +872,17 @@
         var rs = rules.filter(function (r) { return r.category === cat && r.percent > 0; });
         return rs.length ? el("li", null, el("strong", null, CATEGORY_NAMES[cat] + ": "), rs.map(function (r) { return (r.payees ? r.payees.name : "?") + " " + r.percent + "%"; }).join(", ")) : null;
       }).filter(Boolean);
-      var fp = function (k, d) { return money(fees[k] === undefined ? d : fees[k]); };
+      var own = { full_power: c.fee_full_power_pence, bench_only: c.fee_bench_only_pence, sub_junior: c.fee_sub_junior_pence };
+      var fp = function (k, d) { return money(own[k] !== undefined && own[k] !== null ? own[k] : fees[k] === undefined ? d : fees[k]); };
       view.replaceChildren(
         el("div", { class: "actions", style: "margin-bottom:var(--space-3)" },
           btn("Set who gets paid", function () { setPayouts(c, rules, hostPayee ? hostPayee.name : "", function () { renderMoneyTab(view, c); }); }, "btn-primary"),
           rows.length ? btn("Record a payment sent", function () { recordPayout(c, rows, function () { renderMoneyTab(view, c); }); }, "btn-secondary") : null,
-          btn("Change the federation's amounts", function () { setFees(fees, function () { renderMoneyTab(view, c); }); })),
+          btn("Change this competition's amounts", function () { setCompetitionFees(c, own, fees, function () { renderMoneyTab(view, c); }); })),
         el("h2", null, "How the money is split"),
         el("p", null, hostPayee ? "Host: " + hostPayee.name + "." : el("strong", null, "No host set yet: all the entry money stays with the federation until you set one.")),
         el("p", null, "From each entry the federation keeps a fixed amount: ", el("strong", null, fp("full_power", 1200) + " for a full power entry, " + fp("bench_only", 750) + " for bench only and " + fp("sub_junior", 450) + " for a sub-junior"),
-          " (30% of the standard YNE prices, whatever the host charges). Novice, junior, masters and open entries pay the full power amount. The host receives the rest of the entry fee."),
+          " (these are this competition's own amounts, whatever the host charges). Novice, junior, masters and open entries pay the full power amount. The host receives the rest of the entry fee."),
         split.length ? el("ul", null, split) : null,
         el("p", { class: "help" }, "The federation absorbs discounts and free places (the host is still paid on the full entry fee) and all of Stripe's processing fees. So a discounted entry can leave the federation's share lower, or even below nothing."),
         el("h2", null, "Money to send"),
@@ -924,21 +926,51 @@
     });
   }
 
-  // The fixed amounts the federation keeps from each entry. They apply to every competition (and change the report for all of them).
-  function setFees(fees, done) {
+  // The fixed amounts the federation keeps from each entry. Each competition has its own copy (so changing them later never
+  // rewrites the report for a competition that has already happened); new competitions start with the defaults.
+  function feeFields() {
+    return [{ name: "full_power", label: "Full power entry (£)", type: "number", min: "0", required: true, half: true }, { name: "bench_only", label: "Bench only entry (£)", type: "number", min: "0", required: true, half: true },
+      { name: "sub_junior", label: "Sub-junior entry (£)", type: "number", min: "0", required: true, half: true }];
+  }
+  function feeValues(o, f) { function pick(k, d) { var v = o && o[k] !== undefined && o[k] !== null ? o[k] : f && f[k] !== undefined ? f[k] : d; return v / 100; } return { full_power: pick("full_power", 1200), bench_only: pick("bench_only", 750), sub_junior: pick("sub_junior", 450) }; }
+  function setCompetitionFees(c, own, defaults, done) {
     openForm({
-      title: "What the federation keeps from each entry", saveLabel: "Save",
-      intro: "A fixed amount from each entry, whatever the host charges: 30% of the standard YNE prices. Novice, junior, masters and open entries pay the full power amount. This changes the report for every competition, including entries already taken.",
-      values: { full_power: ((fees.full_power === undefined ? 1200 : fees.full_power) / 100), bench_only: ((fees.bench_only === undefined ? 750 : fees.bench_only) / 100), sub_junior: ((fees.sub_junior === undefined ? 450 : fees.sub_junior) / 100) },
-      fields: [
-        { name: "full_power", label: "Full power entry (£)", type: "number", min: "0", required: true, half: true }, { name: "bench_only", label: "Bench only entry (£)", type: "number", min: "0", required: true, half: true },
-        { name: "sub_junior", label: "Sub-junior entry (£)", type: "number", min: "0", required: true, half: true }
-      ],
+      title: "What the federation keeps: " + c.name, saveLabel: "Save",
+      intro: "A fixed amount from each entry in this competition, whatever the host charges. Novice, junior, masters and open entries pay the full power amount. This changes the report for this competition only, including entries already taken.",
+      values: feeValues(own, defaults), fields: feeFields(),
       onSave: function (v) {
-        return Promise.all(["full_power", "bench_only", "sub_junior"].map(function (k) { return sb.from("federation_fees").update({ pence: Math.round(v[k] * 100) }).eq("key", k).then(ok); }))
-          .then(function () { toast("Saved."); done(); });
+        return sb.rpc("save_competition_fees", { c: c.id, p: { full_power: Math.round(v.full_power * 100), bench_only: Math.round(v.bench_only * 100), sub_junior: Math.round(v.sub_junior * 100) } }).then(function (r) {
+          if (r.error) { var m = (r.error.message || "").trim(); throw new Error(m === "invalid:fees" ? "Enter amounts of zero or more." : m === "forbidden" ? "You do not have permission to change these." : friendly(r.error)); }
+          c.fee_full_power_pence = Math.round(v.full_power * 100); c.fee_bench_only_pence = Math.round(v.bench_only * 100); c.fee_sub_junior_pence = Math.round(v.sub_junior * 100);
+          toast("Saved."); done();
+        });
       }
     });
+  }
+  function setDefaultFees(defaults, done) {
+    openForm({
+      title: "What the federation keeps from each entry", saveLabel: "Save",
+      intro: "These are the amounts new competitions start with. Competitions that already exist keep the amounts they started with, so their reports do not change. To change one, open its Money tab.",
+      values: feeValues(null, defaults), fields: feeFields(),
+      onSave: function (v) {
+        return Promise.all(["full_power", "bench_only", "sub_junior"].map(function (k) { return sb.from("federation_fees").update({ pence: Math.round(v[k] * 100) }).eq("key", k).then(ok); }))
+          .then(function () { toast("Saved. New competitions will start with these amounts."); done(); });
+      }
+    });
+  }
+  // A small panel on the Calendar page (entries team and admins) showing the defaults.
+  function feesPanel() {
+    var box = el("div", { class: "panel", style: "margin-top:var(--space-6)" }, el("h2", { style: "margin-top:0" }, "What the federation keeps from each entry"), el("p", null, "Loading…"));
+    function load() { sb.from("federation_fees").select("key,pence").then(function (r) { return r.error ? [] : r.data || []; }, function () { return []; }).then(function (rows) {
+      var f = {}; rows.forEach(function (x) { f[x.key] = x.pence; });
+      var g = function (k, d) { return money(f[k] === undefined ? d : f[k]); };
+      box.replaceChildren(el("h2", { style: "margin-top:0" }, "What the federation keeps from each entry"),
+        el("p", null, g("full_power", 1200) + " for a full power entry, " + g("bench_only", 750) + " for bench only, " + g("sub_junior", 450) + " for a sub-junior. Novice, junior, masters and open entries pay the full power amount. The host receives the rest of the entry fee."),
+        el("p", { class: "help" }, "These are the amounts new competitions start with. Each competition keeps its own, so changing these never alters a past competition's report. Change one competition's amounts on its Money tab."),
+        el("p", null, btn("Change the defaults", function () { setDefaultFees(f, load); }, "btn-secondary")));
+    }); }
+    load();
+    return box;
   }
 
   function recordPayout(c, rows, done) {
