@@ -38,12 +38,13 @@ export function exactAge(dob: string, on: string): number {
 }
 export function pounds(pence: number): string { return "£" + (pence / 100).toFixed(2); }
 
-export function confirmationEmail(e: { name: string; competition: string; date: string; event: string; equipment: string; pence: number; under18: boolean; entriesEmail: string; refundsUntil?: string; category?: string; division?: string; club?: string; discountPence?: number }) {
+export function confirmationEmail(e: { name: string; competition: string; date: string; event: string; equipment: string; pence: number; under18: boolean; entriesEmail: string; refundsUntil?: string; category?: string; division?: string; club?: string; discountPence?: number; extras?: { name: string; option?: string; pence: number }[] }) {
   const lines = [
     `Hi ${e.name},`, "",
     `You are entered in ${e.competition} (${e.date}). Thank you!`, "",
     `Event: ${e.event}`, `Equipment: ${e.equipment}`, ...(e.category ? [`Category: ${e.category}`] : []), ...(e.division ? [`Federation or division: ${e.division}`] : []), ...(e.club ? [`Club: ${e.club}`] : []),
-    ...(e.discountPence ? [`Discount applied: ${pounds(e.discountPence)} off`] : []), `Paid: ${pounds(e.pence)}`, "",
+    ...(e.discountPence ? [`Discount applied: ${pounds(e.discountPence)} off`] : []),
+    ...((e.extras ?? []).map((x) => `Extra: ${x.name}${x.option ? ` (${x.option})` : ""}, ${pounds(x.pence)}`)), `Paid: ${pounds(e.pence)}`, "",
   ];
   if (e.under18) lines.push("Because you are under 18 on the day, a parent or guardian must be with you at the competition.", "");
   if (e.refundsUntil) lines.push(`Refunds are available until entries close on ${e.refundsUntil}. After that, entries cannot be refunded.`, "");
@@ -108,11 +109,13 @@ if (typeof Deno !== "undefined") {
         }).then((r) => { if (!r.ok) console.error("Resend failed", r.status); });
 
         if (state === "paid" && row) {
+          const xr = await (await db(`entry_addons?entry_id=eq.${entryId}&select=price_pence,addons(name),addon_options(label)`)).json().catch(() => []);
+          const extras = (Array.isArray(xr) ? xr : []).map((x: { price_pence: number; addons?: { name: string }; addon_options?: { label: string } | null }) => ({ name: x.addons?.name ?? "Extra", option: x.addon_options?.label, pence: x.price_pence }));
           const compYear = new Date(row.competitions.start_date).getFullYear(), age = exactAge(row.date_of_birth, row.competitions.start_date);
           await send([row.email, copy], `Your entry: ${row.competitions.name}`, confirmationEmail({
             name: row.full_name, competition: row.competitions.name, date: row.competitions.start_date,
             event: row.event === "bench_only" ? "Bench only" : "Full power", equipment: row.equipment === "equipped" ? "Equipped" : "Classic",
-            pence: row.price_pence, under18: age < 18, entriesEmail: copy, category: ageCategory(new Date(row.date_of_birth).getFullYear(), compYear), division: row.divisions ? row.divisions.name + (row.divisions.is_home ? "" : " (guest)") : undefined, club: row.club || undefined, discountPence: row.discount_pence || 0,
+            pence: row.price_pence, under18: age < 18, entriesEmail: copy, category: ageCategory(new Date(row.date_of_birth).getFullYear(), compYear), division: row.divisions ? row.divisions.name + (row.divisions.is_home ? "" : " (guest)") : undefined, club: row.club || undefined, discountPence: row.discount_pence || 0, extras,
             refundsUntil: row.competitions.entry_closes ? new Date(row.competitions.entry_closes).toLocaleString("en-GB", { timeZone: "Europe/London", dateStyle: "full", timeStyle: "short" }) : undefined,
           }));
         } else if (state === "no_place" && row && session.payment_intent) {

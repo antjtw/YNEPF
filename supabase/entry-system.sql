@@ -229,6 +229,10 @@ create table if not exists public.addon_images (            -- up to 4 per add-o
   sort_order integer not null default 0
 );
 
+-- Franchise competitions are run by a host, who is paid the entry fee less the federation's fixed amount. Competitions the
+-- federation runs itself are not: the federation keeps the whole entry fee (less nothing but Stripe's fees).
+alter table public.competitions add column if not exists is_franchise boolean not null default true;
+
 -- What the federation keeps from each entry: a fixed amount, 30% of the standard YNE entry prices, whatever the host charges.
 -- The host receives the rest of the entry fee (before any discount). Sub-junior entries pay the sub-junior amount; bench only
 -- entries the bench amount; everyone else (novice, junior, masters and open) the full power amount.
@@ -615,7 +619,7 @@ begin
     from public.payments p join public.entries e on e.id = p.entry_id
    where e.competition_id = c and p.status = 'succeeded';
   select py.id into fed from public.payees py where py.kind = 'federation' limit 1;
-  select k.host_payee_id, k.start_date, coalesce(k.fee_full_power_pence, 1200), coalesce(k.fee_bench_only_pence, 750), coalesce(k.fee_sub_junior_pence, 450)
+  select case when k.is_franchise then k.host_payee_id end, k.start_date, coalesce(k.fee_full_power_pence, 1200), coalesce(k.fee_bench_only_pence, 750), coalesce(k.fee_sub_junior_pence, 450)
     into host, start, f_full, f_bench, f_sj from public.competitions k where k.id = c;
 
   return query
@@ -857,6 +861,13 @@ declare
   v_code_id uuid;
   v_discount integer := 0;
   v_free boolean := false;
+  v_extras integer := 0;
+  v_lines jsonb := '[]'::jsonb;
+  v_x jsonb;
+  v_ad public.addons%rowtype;
+  v_opt public.addon_options%rowtype;
+  v_seen uuid[] := '{}';
+  v_entry_price integer;
 begin
   -- "TBC" and the like are accepted when someone does not have their number yet; they are not a number to compare.
   if v_bp ~ '^(tbc|tbd|n/?a|none|unknown|pending|\?+|-+|x+|0+)$' then v_bp := ''; end if;
@@ -954,6 +965,31 @@ begin
     if not (v_disc->>'ok')::boolean then raise exception 'discount_%', v_disc->>'error'; end if;
     v_code_id := (v_disc->>'id')::uuid; v_discount := (v_disc->>'discount_pence')::int; v_price := (v_disc->>'price_pence')::int;
   end if;
+  v_entry_price := v_price;
+
+  -- Extras (a photo package, merchandise): each one must belong to this competition, be in stock, and have a size if it has sizes.
+  -- Extras are not discounted. The entry's price_pence is the total the lifter pays: entry fee plus extras.
+  if jsonb_typeof(p->'extras') = 'array' then
+    if jsonb_array_length(p->'extras') > 10 then raise exception 'invalid:extras'; end if;
+    for v_x in select * from jsonb_array_elements(p->'extras') loop
+      begin select * into v_ad from public.addons where id = (v_x->>'id')::uuid and competition_id = c.id;
+      exception when others then raise exception 'invalid:extras'; end;
+      if not found or v_ad.id = any (v_seen) then raise exception 'invalid:extras'; end if;
+      v_seen := v_seen || v_ad.id;
+      v_opt := null;
+      if exists (select 1 from public.addon_options o where o.addon_id = v_ad.id) then
+        select * into v_opt from public.addon_options o where o.addon_id = v_ad.id and o.id = nullif(v_x->>'option_id', '')::uuid;
+        if v_opt.id is null then raise exception 'invalid:extras'; end if;
+      elsif coalesce(v_x->>'option_id', '') <> '' then raise exception 'invalid:extras'; end if;
+      if v_ad.stock is not null and (select coalesce(sum(ea.quantity), 0) from public.entry_addons ea join public.entries e on e.id = ea.entry_id
+           where ea.addon_id = v_ad.id and (e.status in ('paid', 'comped') or (e.status = 'held' and e.hold_expires_at > now()))) >= v_ad.stock then raise exception 'sold_out'; end if;
+      if v_opt.id is not null and v_opt.stock is not null and (select coalesce(sum(ea.quantity), 0) from public.entry_addons ea join public.entries e on e.id = ea.entry_id
+           where ea.option_id = v_opt.id and (e.status in ('paid', 'comped') or (e.status = 'held' and e.hold_expires_at > now()))) >= v_opt.stock then raise exception 'sold_out'; end if;
+      v_extras := v_extras + v_ad.price_pence;
+      v_lines := v_lines || jsonb_build_array(jsonb_build_object('addon_id', v_ad.id, 'option_id', v_opt.id, 'price', v_ad.price_pence));
+    end loop;
+  end if;
+  v_price := v_entry_price + v_extras;
   v_free := v_price = 0;
 
   v_expires := now() + make_interval(mins => s.hold_minutes);
@@ -963,14 +999,18 @@ begin
     values (c.id, case when v_free then 'comped' else 'held' end, 'web', v_stage, v_email, v_name, trim(coalesce(p->>'display_name', '')), trim(coalesce(p->>'bp_number', '')), v_dob, v_sex,
       v_d.id, v_club, trim(coalesce(p->>'instagram', '')),
       coalesce((p->>'photo_ok')::boolean, false), coalesce((p->>'photo_opt_out')::boolean, false), coalesce((p->>'eligibility_confirmed')::boolean, false), v_class, v_equip, v_event,
-      trim(coalesce(p->>'openipf_url', '')), v_price, case when v_free then null else v_expires end, v_guest, case when v_free then now() end, v_code_id, v_discount, v_price + v_discount)
+      trim(coalesce(p->>'openipf_url', '')), v_price, case when v_free then null else v_expires end, v_guest, case when v_free then now() end, v_code_id, v_discount, v_entry_price + v_discount)
     returning id into v_entry;
+  for v_x in select * from jsonb_array_elements(v_lines) loop
+    insert into public.entry_addons (entry_id, addon_id, option_id, quantity, price_pence)
+      values (v_entry, (v_x->>'addon_id')::uuid, nullif(v_x->>'option_id', '')::uuid, 1, (v_x->>'price')::int);
+  end loop;
   insert into public.entry_private (entry_id, guardian_name, guardian_phone, guardian_email, guardian_consent, access_needs, delete_after)
     values (v_entry,
       case when v_age < 18 then trim(p->>'guardian_name') else '' end, case when v_age < 18 then trim(p->>'guardian_phone') else '' end,
       case when v_age < 18 then trim(p->>'guardian_email') else '' end, v_age < 18, v_access, coalesce(c.end_date, c.start_date) + 30);
   if v_invite is not null then update public.invites set entry_id = v_entry where id = v_invite; end if;
-  return jsonb_build_object('entry_id', v_entry, 'price_pence', v_price, 'hold_expires_at', v_expires, 'competition', c.name, 'slug', c.slug, 'free', v_free, 'discount_pence', v_discount);
+  return jsonb_build_object('entry_id', v_entry, 'price_pence', v_price, 'hold_expires_at', v_expires, 'competition', c.name, 'slug', c.slug, 'free', v_free, 'discount_pence', v_discount, 'extras_pence', v_extras);
 end
 $$;
 revoke all on function public.start_entry(jsonb) from public, anon, authenticated;
@@ -1058,7 +1098,8 @@ begin
   end if;
 
   update public.competitions set entry_method = v_method,
-    entries_closed_manually = coalesce((p->>'entries_closed_manually')::boolean, false)
+    entries_closed_manually = coalesce((p->>'entries_closed_manually')::boolean, false),
+    is_franchise = coalesce((p->>'is_franchise')::boolean, is_franchise)
     where id = c;
   insert into public.entry_settings (competition_id, events, equipment, hold_minutes, openipf_mode, guest_delay_days, updated_at)
     values (c, case when cardinality(v_events) = 0 then array['full_power', 'bench_only'] else v_events end,
@@ -1289,21 +1330,24 @@ declare
   photog_name text := btrim(coalesce(p->>'photographer_name', ''));
   m_pct numeric := coalesce((p->>'host_merch_percent')::numeric, 100);
   p_pct numeric := coalesce((p->>'photographer_percent')::numeric, 100);
-  existing record;
+  existing record; franchise boolean;
 begin
   if not public.is_entries() then raise exception 'forbidden'; end if;
   if not exists (select 1 from public.competitions where id = c) then raise exception 'not_found'; end if;
-  if host_name = '' then raise exception 'invalid:host_name'; end if;
+  franchise := coalesce((select is_franchise from public.competitions where id = c), true);
+  if franchise and host_name = '' then raise exception 'invalid:host_name'; end if;
   if m_pct < 0 or m_pct > 100 or p_pct < 0 or p_pct > 100 then raise exception 'invalid:percent'; end if;
   select id into fed from public.payees where kind = 'federation' limit 1;
   if fed is null then insert into public.payees (name, kind) values ('YNEPF', 'federation') returning id into fed; end if;
 
-  select * into existing from public.payees where lower(name) = lower(host_name);
-  if found then
-    if existing.kind <> 'host' then raise exception 'invalid:payee_kind'; end if;
-    host := existing.id;
-  else
-    insert into public.payees (name, kind) values (host_name, 'host') returning id into host;
+  if host_name <> '' then
+    select * into existing from public.payees where lower(name) = lower(host_name);
+    if found then
+      if existing.kind <> 'host' then raise exception 'invalid:payee_kind'; end if;
+      host := existing.id;
+    else
+      insert into public.payees (name, kind) values (host_name, 'host') returning id into host;
+    end if;
   end if;
   if photog_name <> '' then
     select * into existing from public.payees where lower(name) = lower(photog_name);
@@ -1317,6 +1361,7 @@ begin
 
   update public.competitions set host_payee_id = host where id = c;     -- the host is paid the entry fee less the federation's fixed amount
   delete from public.payout_rules where competition_id = c;
+  if host is null then m_pct := 0; end if;          -- no host: the federation keeps any merchandise money
   insert into public.payout_rules (competition_id, category, payee_id, percent) values (c, 'merch', fed, 100 - m_pct);
   if m_pct > 0 then insert into public.payout_rules (competition_id, category, payee_id, percent) values (c, 'merch', host, m_pct); end if;
   if photog is not null then

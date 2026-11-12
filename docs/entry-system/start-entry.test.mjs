@@ -293,6 +293,34 @@ ok((await start({ email: "y2@example.com", date_of_birth: "2014-01-01", ...kid }
 ok((await db.query(`select public.age_category_on('2009-12-31'::date, '2027-03-13'::date) a, public.age_category_on('2008-01-01'::date, '2027-03-13'::date) b, public.age_category_on('2004-06-01'::date, '2027-03-13'::date) c, public.age_category_on('1987-06-01'::date, '2027-03-13'::date) d`)).rows[0].a === "SJ", "born in 2009 is a sub-junior in 2027 (turns 18), born in 2008 a junior (turns 19)");
 const cats = (await db.query(`select public.age_category_on('2008-12-31'::date, '2027-03-13'::date) b, public.age_category_on('2004-06-01'::date, '2027-03-13'::date) c, public.age_category_on('1987-06-01'::date, '2027-03-13'::date) d, public.age_category_on('1977-12-31'::date, '2027-03-13'::date) e`)).rows[0];
 ok(cats.b === "J" && cats.c === "J" && cats.d === "M1" && cats.e === "M2", `year of birth decides: 2008 and 2004 are juniors, 1987 is masters 1 and 1977 is masters 2 in 2027 (${JSON.stringify(cats)})`);
+
+// ---- extras (photo package, merchandise) ----
+await db.exec("reset role");
+await db.exec(`update public.entries set status='cancelled' where competition_id='${C}'; update public.competitions set capacity = 20 where id = '${C}'`);
+const PH = "aaaaaaaa-0000-0000-0000-000000000001", TS = "aaaaaaaa-0000-0000-0000-000000000002", OS = "bbbbbbbb-0000-0000-0000-000000000001", OM = "bbbbbbbb-0000-0000-0000-000000000002";
+await db.exec(`insert into public.addons (id, competition_id, kind, name, price_pence, stock) values ('${PH}','${C}','photo','White Lights Media photo package',4049,null), ('${TS}','${C}','merch','T-shirt',2000,1);
+ insert into public.addon_options (id, addon_id, label, stock) values ('${OS}','${TS}','Small',null), ('${OM}','${TS}','Medium',null);`);
+r = await start({ email: "x1@example.com", extras: [{ id: PH }] });
+ok(r.price_pence === 6000 + 4049 && r.extras_pence === 4049, "a £60 entry with the £40.49 photo package costs £100.49: " + JSON.stringify(r));
+let e1 = (await db.query(`select price_pence, list_price_pence, discount_pence from public.entries where id = '${r.entry_id}'`)).rows[0];
+ok(e1.price_pence === 10049 && e1.list_price_pence === 6000, "the entry keeps the total paid, and the list price is the entry fee alone");
+ok((await db.query(`select count(*)::int n, sum(price_pence)::int s from public.entry_addons where entry_id = '${r.entry_id}'`)).rows[0].s === 4049, "the extra is recorded against the entry");
+ok((await start({ email: "x2@example.com", extras: [{ id: PH }, { id: PH }] })).error === "invalid:extras", "the same extra twice is refused");
+ok((await start({ email: "x2@example.com", extras: [{ id: "cccccccc-0000-0000-0000-000000000009" }] })).error === "invalid:extras", "an extra that does not exist is refused");
+ok((await start({ email: "x2@example.com", extras: [{ id: TS }] })).error === "invalid:extras", "a T-shirt needs a size");
+ok((await start({ email: "x2@example.com", extras: [{ id: PH, option_id: OS }] })).error === "invalid:extras", "a size on something that has no sizes is refused");
+r = await start({ email: "x3@example.com", extras: [{ id: TS, option_id: OS }, { id: PH }] });
+ok(r.price_pence === 6000 + 2000 + 4049, "a T-shirt and a photo package are both added: " + r.price_pence);
+ok((await start({ email: "x4@example.com", extras: [{ id: TS, option_id: OM }] })).error === "sold_out", "when the stock is gone (one held), the next person is told it has sold out");
+await db.exec(`update public.entries set hold_expires_at = now() - interval '1 minute' where status = 'held'`);
+ok((await start({ email: "x4@example.com", extras: [{ id: TS, option_id: OM }] })).price_pence === 8000, "stock comes back when a hold expires");
+// a discount takes money off the entry only, never the extras
+await db.exec(`insert into public.discount_codes (code, kind, value, competition_id, active) values ('FULL', 'percent', 100, '${C}', true)`);
+r = await start({ email: "x5@example.com", discount_code: "FULL", extras: [{ id: PH }] });
+ok(r.price_pence === 4049 && r.free === false, "a 100% code frees the entry but the photo package is still paid for: " + JSON.stringify(r));
+await db.exec(`insert into public.discount_codes (code, kind, value, competition_id, active) values ('FULL2', 'percent', 100, '${C}', true)`);
+r = await start({ email: "x6@example.com", discount_code: "FULL2" });
+ok(r.free === true && r.price_pence === 0, "with no extras, a 100% code still makes a free entry");
 await db.exec("set role anon");
 try { await db.query(`select public.start_entry('{}'::jsonb)`); ok(false, "the browser cannot call it"); } catch { ok(true, "the browser (anon) cannot call start_entry"); }
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

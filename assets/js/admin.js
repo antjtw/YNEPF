@@ -332,7 +332,7 @@
     sb.from("competitions").select("*").eq("id", args[0]).maybeSingle().then(function (res) {
       var c = ok(res);
       if (!c) return panel.replaceChildren(panelHead("Not found"), el("p", null, "That item no longer exists."), backLink());
-      renderEditor(panel, c, c.kind === "event" ? "event" : "competition", args[1] === "entries" ? "entries" : args[1] === "discounts" ? "discounts" : args[1] === "money" ? "money" : "details");
+      renderEditor(panel, c, c.kind === "event" ? "event" : "competition", args[1] === "entries" ? "entries" : args[1] === "discounts" ? "discounts" : args[1] === "money" ? "money" : args[1] === "extras" ? "extras" : "details");
     }).catch(function (e) { panel.replaceChildren(el("p", { class: "form-error" }, friendly(e)), backLink()); });
   }
 
@@ -473,12 +473,14 @@
       var tabs = el("nav", { class: "admin-tabs subtabs", "aria-label": c.name }, el("a", { href: "#competitions/" + c.id, "aria-current": tab === "details" ? "page" : null }, "Details"));
       if (canEntry()) tabs.appendChild(el("a", { href: "#competitions/" + c.id + "/entries", "aria-current": tab === "entries" ? "page" : null }, "Entries"));
       if (canEntry()) tabs.appendChild(el("a", { href: "#competitions/" + c.id + "/discounts", "aria-current": tab === "discounts" ? "page" : null }, "Discounts"));
+      if (canEntry()) tabs.appendChild(el("a", { href: "#competitions/" + c.id + "/extras", "aria-current": tab === "extras" ? "page" : null }, "Extras"));
       if (canEntry()) tabs.appendChild(el("a", { href: "#competitions/" + c.id + "/money", "aria-current": tab === "money" ? "page" : null }, "Money"));
       panel.appendChild(tabs);
     }
     panel.appendChild(view);
     if (tab === "entries" && !isNew && !isEvent) return renderEntriesTab(view, c);
     if (tab === "discounts" && !isNew && !isEvent) return renderDiscountsTab(view, c);
+    if (tab === "extras" && !isNew && !isEvent) return renderExtrasTab(view, c);
     if (tab === "money" && !isNew && !isEvent) return renderMoneyTab(view, c);
     return isEvent ? renderEventForm(view, c, isNew) : renderCompetitionForm(view, c, isNew);
   }
@@ -541,6 +543,7 @@
         E({ name: "p_full", label: "Full power price (£)", type: "number", min: "0", half: true, show: isOnline }),
         E({ name: "p_bench", label: "Bench only price (£)", type: "number", min: "0", half: true, show: isOnline }),
         E({ name: "p_sj", label: "Sub-junior price, any event (£, optional)", type: "number", min: "0", show: isOnline, help: "If set, sub-juniors pay this whatever they lift." }),
+        E({ name: "is_franchise", label: "This is a franchise competition (run by a host)", type: "checkbox", show: isOnline, help: "Tick it when a host runs the competition: they receive the entry fee less the federation's fixed amount for each entry. Leave it unticked for a competition the federation runs itself: the federation keeps the whole entry fee." }),
         E({ name: "openipf_required", label: "Entry needs a qualifying total (the OpenIPF link becomes mandatory)", type: "checkbox", show: isOnline }),
         E({ name: "hold_minutes", label: "Minutes a place is held while paying", type: "number", min: "5", show: isOnline, help: "Between 5 and 30. A short hold stops places being parked." }),
         E({ name: "guest_delay_days", label: "Guests can enter this many days after entry opens", type: "number", min: "0", show: isOnline, help: "A guest is anyone outside the Yorkshire & North East division. Usually 14 (two weeks). They are told the date on the entry form." }),
@@ -577,7 +580,7 @@
         p_full: price(function (r) { return r.event === "full_power" && !r.age_category; }), p_bench: price(function (r) { return r.event === "bench_only" && !r.age_category; }),
         p_sj: price(function (r) { return r.age_category === "SJ"; }),
         openipf_required: settings.openipf_mode === "required", hold_minutes: settings.hold_minutes || 5, guest_delay_days: settings.guest_delay_days === undefined || settings.guest_delay_days === null ? 14 : settings.guest_delay_days,
-        entries_closed_manually: !!c.entries_closed_manually
+        entries_closed_manually: !!c.entries_closed_manually, is_franchise: isNew ? true : c.is_franchise !== false
       });
       var F = fields();
       var form = pageForm(F, values);
@@ -637,7 +640,7 @@
         step.then(function (id) {
           if (!canEntry()) return id;
           var p = {
-            entry_method: v.method === "online" ? "yne" : "external", hold_minutes: v.hold_minutes || 5, guest_delay_days: v.guest_delay_days === null ? 14 : v.guest_delay_days, entries_closed_manually: !!v.entries_closed_manually,
+            entry_method: v.method === "online" ? "yne" : "external", hold_minutes: v.hold_minutes || 5, guest_delay_days: v.guest_delay_days === null ? 14 : v.guest_delay_days, entries_closed_manually: !!v.entries_closed_manually, is_franchise: !!v.is_franchise,
             openipf_required: !!v.openipf_required,
             events: [v.ev_full && "full_power", v.ev_bench && "bench_only"].filter(Boolean), equipment: [v.eq_classic && "classic", v.eq_equipped && "equipped"].filter(Boolean),
             prices: { full_power: pence(v.p_full), bench_only: pence(v.p_bench), sub_junior: pence(v.p_sj) }
@@ -731,7 +734,7 @@
   function renderEntriesTab(view, c) {
     view.replaceChildren(el("p", null, "Loading…"));
     Promise.all([
-      sb.from("entries").select("*, weight_classes(label), divisions(name,is_home), entry_private(*), payments(*, refunds(*))").eq("competition_id", c.id).order("created_at", { ascending: true }),
+      sb.from("entries").select("*, weight_classes(label), divisions(name,is_home), entry_private(*), entry_addons(price_pence, addons(name), addon_options(label)), payments(*, refunds(*))").eq("competition_id", c.id).order("created_at", { ascending: true }),
       sb.from("divisions").select("id,name").order("sort_order"),
       sb.from("weight_classes").select("id,sex,label,sort_order").order("sort_order"),
       sb.from("clubs").select("name").eq("active", true).order("name")
@@ -805,7 +808,7 @@
             e.is_guest ? ["Membership checked", e.membership_checked ? "Yes" : "Not yet"] : null]),
           priv && priv.guardian_name ? el("div", null, el("h3", null, "Parent or guardian"), dlRows([["Name", priv.guardian_name], ["Phone", priv.guardian_phone], ["Email", priv.guardian_email], ["Consent given", priv.guardian_consent ? "Yes" : "No"]])) : null,
           el("h3", null, "Payment"),
-          dlRows([["Status", ENTRY_STATUS[e.status] || e.status], ["Amount", entryMoney(e.price_pence)], ["Entered", when(e.created_at)], ["Paid", when(e.paid_at)],
+          dlRows([["Status", ENTRY_STATUS[e.status] || e.status], ["Amount", entryMoney(e.price_pence)], (e.entry_addons || []).length ? ["Extras", e.entry_addons.map(function (x) { return (x.addons ? x.addons.name : "Extra") + (x.addon_options ? " (" + x.addon_options.label + ")" : "") + " " + money(x.price_pence); }).join(", ")] : null, ["Entered", when(e.created_at)], ["Paid", when(e.paid_at)],
             pay ? ["Card", (pay.card_brand || "card") + (pay.card_last4 ? " ending " + pay.card_last4 : "")] : null,
             pay && pay.receipt_url ? ["Receipt", el("a", { href: pay.receipt_url, target: "_blank", rel: "noopener" }, "Open the Stripe receipt")] : null,
             pay ? ["Stripe fee", entryMoney(pay.stripe_fee_pence)] : null,
@@ -851,6 +854,71 @@
   var CATEGORY_NAMES = { entry: "Entry money", merch: "Merchandise", photo: "Photo packages" };
   function money(p) { return (p < 0 ? "−" : "") + "£" + (Math.abs(p) / 100).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
+
+  // ---- Extras: a photo package, merchandise (a T-shirt in sizes) offered on the entry form ------------------
+  var EXTRA_KINDS = { photo: "Photo package", merch: "Merchandise" };
+  function renderExtrasTab(view, c) {
+    view.replaceChildren(el("p", null, "Loading…"));
+    Promise.all([
+      sb.from("addons").select("*, addon_options(id,label,stock,sort_order)").eq("competition_id", c.id).order("sort_order").order("name"),
+      sb.from("entry_addons").select("addon_id,option_id,quantity,entries!inner(competition_id,status,hold_expires_at)").eq("entries.competition_id", c.id)
+    ]).then(function (res) {
+      if (res[0].error) throw res[0].error;
+      var items = res[0].data || [], now = new Date();
+      var taken = (res[1].error ? [] : res[1].data || []).filter(function (x) { var e = x.entries; return e && (e.status === "paid" || e.status === "comped" || (e.status === "held" && new Date(e.hold_expires_at) > now)); });
+      function count(id) { return taken.filter(function (x) { return x.addon_id === id; }).reduce(function (n, x) { return n + x.quantity; }, 0); }
+      view.replaceChildren(
+        el("div", { class: "actions", style: "margin-bottom:var(--space-3)" }, btn("Add an extra", function () { editExtra(c, null, function () { renderExtrasTab(view, c); }); }, "btn-primary")),
+        el("p", { class: "panel-intro" }, "Extras are offered on the entry form, after the lifting questions, and added to what the lifter pays. Discount codes take money off the entry only, never the extras. A photo package is paid to the photographer you name on the Money tab."),
+        items.length ? el("div", { class: "table-scroll" }, el("table", { class: "admin-table" },
+          el("thead", null, el("tr", null, ["Extra", "Type", "Price", "Taken", "Actions"].map(function (h) { return el("th", { scope: "col" }, h); }))),
+          el("tbody", null, items.map(function (x) {
+            var sizes = (x.addon_options || []).slice().sort(function (p, q) { return p.sort_order - q.sort_order; }).map(function (o) { return o.label; });
+            var n = count(x.id);
+            return el("tr", null,
+              el("th", { scope: "row" }, x.name, el("small", null, [x.description, sizes.length && "Sizes: " + sizes.join(", ")].filter(Boolean).join(" · "))),
+              el("td", null, EXTRA_KINDS[x.kind] || x.kind), el("td", null, money(x.price_pence)),
+              el("td", null, n + (x.stock === null ? "" : " of " + x.stock)),
+              el("td", null, el("span", { class: "actions" },
+                btn("Edit", function () { editExtra(c, x, function () { renderExtrasTab(view, c); }); }),
+                n === 0 ? btn("Delete", function () { if (!window.confirm("Delete " + x.name + "?")) return; sb.from("addons").delete().eq("id", x.id).then(ok).then(function () { toast("Deleted."); renderExtrasTab(view, c); }).catch(function (e) { toast(friendly(e), "error"); }); }, "btn-danger") : null)));
+          })))) : el("p", { class: "empty" }, "No extras yet. Add the photo package, or anything else you sell with entries."));
+    }).catch(function (e) { view.replaceChildren(el("p", { class: "form-error" }, friendly(e))); });
+  }
+
+  function editExtra(c, x, done) {
+    var current = x ? (x.addon_options || []).slice().sort(function (p, q) { return p.sort_order - q.sort_order; }) : [];
+    openForm({
+      title: x ? "Change " + x.name : "Add an extra", saveLabel: "Save",
+      intro: "For example the White Lights Media photo package, or a T-shirt in sizes.",
+      values: x ? { kind: x.kind, name: x.name, description: x.description, price: poundsInput(x.price_pence), stock: x.stock === null ? "" : x.stock, sizes: current.map(function (o) { return o.label; }).join(", ") }
+                : { kind: "photo", name: "White Lights Media photo package", description: "", price: "", stock: "", sizes: "" },
+      fields: [
+        { name: "kind", label: "What kind is it?", type: "select", half: true, options: [{ value: "photo", label: "Photo package (paid to the photographer)" }, { value: "merch", label: "Merchandise (paid to the host)" }] },
+        { name: "price", label: "Price (£)", type: "number", min: "0", required: true, half: true },
+        { name: "name", label: "Name", required: true, help: "Shown on the entry form, on the payment page and in the confirmation email." },
+        { name: "description", label: "Short description (optional)", help: "One line shown under the name on the entry form." },
+        { name: "stock", label: "How many are available? (optional)", type: "number", min: "1", half: true, help: "Leave blank for no limit." },
+        { name: "sizes", label: "Sizes (optional)", half: true, help: "Separate with commas, for example S, M, L, XL. Leave blank if it has no sizes." }
+      ],
+      validate: function (v) { return v.price === null || v.price < 0 ? "Enter a price of zero or more." : null; },
+      onSave: function (v) {
+        var row = { competition_id: c.id, kind: v.kind, name: v.name, description: v.description || "", price_pence: pence(v.price), stock: v.stock === "" || v.stock === null ? null : Math.round(v.stock) };
+        var q = x ? sb.from("addons").update(row).eq("id", x.id).select("id").single() : sb.from("addons").insert(row).select("id").single();
+        return q.then(ok).then(function (d) {
+          var id = (Array.isArray(d) ? d[0] : d).id;
+          var labels = String(v.sizes || "").split(",").map(function (s) { return s.trim(); }).filter(function (s, i, all) { return s && all.indexOf(s) === i; });
+          var add = labels.filter(function (l) { return !current.some(function (o) { return o.label === l; }); });
+          var drop = current.filter(function (o) { return labels.indexOf(o.label) < 0; });
+          var kept = [];
+          return Promise.all(drop.map(function (o) { return sb.from("addon_options").delete().eq("id", o.id).then(function (r) { if (r.error) kept.push(o.label); }); }))
+            .then(function () { return add.length ? sb.from("addon_options").insert(add.map(function (l, i) { return { addon_id: id, label: l, sort_order: labels.indexOf(l) }; })).then(ok) : null; })
+            .then(function () { toast(kept.length ? "Saved. These sizes were kept because someone has already chosen them: " + kept.join(", ") + "." : "Saved."); done(); });
+        });
+      }
+    });
+  }
+
   function renderMoneyTab(view, c) {
     view.replaceChildren(el("p", null, "Loading…"));
     Promise.all([
@@ -861,7 +929,8 @@
       sb.from("federation_fees").select("key,pence")
     ]).then(function (res) {
       if (res[0].error) throw res[0].error;
-      var fees = {}; ((res[4].error ? [] : res[4].data) || []).forEach(function (f) { fees[f.key] = f.pence; });
+      var feeDefaults = {}; ((res[4].error ? [] : res[4].data) || []).forEach(function (f) { feeDefaults[f.key] = f.pence; });
+      var franchise = c.is_franchise !== false;
       var hostPayee = (res[3].data || []).filter(function (p) { return p.id === c.host_payee_id; })[0];
       var rows = res[0].data || [], rules = res[1].error ? [] : res[1].data || [], sent = res[2].error ? [] : res[2].data || [], payees = res[3].error ? [] : res[3].data || [];
       var gross = rows.reduce(function (n, r) { return n + r.gross_pence; }, 0), fees = rows.reduce(function (n, r) { return n + r.fee_pence; }, 0);
@@ -873,16 +942,16 @@
         return rs.length ? el("li", null, el("strong", null, CATEGORY_NAMES[cat] + ": "), rs.map(function (r) { return (r.payees ? r.payees.name : "?") + " " + r.percent + "%"; }).join(", ")) : null;
       }).filter(Boolean);
       var own = { full_power: c.fee_full_power_pence, bench_only: c.fee_bench_only_pence, sub_junior: c.fee_sub_junior_pence };
-      var fp = function (k, d) { return money(own[k] !== undefined && own[k] !== null ? own[k] : fees[k] === undefined ? d : fees[k]); };
+      var fp = function (k, d) { return money(own[k] !== undefined && own[k] !== null ? own[k] : feeDefaults[k] === undefined ? d : feeDefaults[k]); };
       view.replaceChildren(
         el("div", { class: "actions", style: "margin-bottom:var(--space-3)" },
-          btn("Set who gets paid", function () { setPayouts(c, rules, hostPayee ? hostPayee.name : "", function () { renderMoneyTab(view, c); }); }, "btn-primary"),
+          btn("Set who gets paid", function () { setPayouts(c, rules, hostPayee && franchise ? hostPayee.name : "", function () { renderMoneyTab(view, c); }); }, "btn-primary"),
           rows.length ? btn("Record a payment sent", function () { recordPayout(c, rows, function () { renderMoneyTab(view, c); }); }, "btn-secondary") : null,
-          btn("Change this competition's amounts", function () { setCompetitionFees(c, own, fees, function () { renderMoneyTab(view, c); }); })),
+          franchise ? btn("Change this competition's amounts", function () { setCompetitionFees(c, own, feeDefaults, function () { renderMoneyTab(view, c); }); }) : null),
         el("h2", null, "How the money is split"),
-        el("p", null, hostPayee ? "Host: " + hostPayee.name + "." : el("strong", null, "No host set yet: all the entry money stays with the federation until you set one.")),
-        el("p", null, "From each entry the federation keeps a fixed amount: ", el("strong", null, fp("full_power", 1200) + " for a full power entry, " + fp("bench_only", 750) + " for bench only and " + fp("sub_junior", 450) + " for a sub-junior"),
-          " (these are this competition's own amounts, whatever the host charges). Novice, junior, masters and open entries pay the full power amount. The host receives the rest of the entry fee."),
+        franchise ? el("p", null, hostPayee ? "Host: " + hostPayee.name + "." : el("strong", null, "No host set yet: all the entry money stays with the federation until you set one.")) : el("p", null, el("strong", null, "Run by the federation."), " Not a franchise competition: the federation keeps the whole entry fee, so there is no host to pay."),
+        franchise ? el("p", null, "From each entry the federation keeps a fixed amount: ", el("strong", null, fp("full_power", 1200) + " for a full power entry, " + fp("bench_only", 750) + " for bench only and " + fp("sub_junior", 450) + " for a sub-junior"),
+          " (these are this competition's own amounts, whatever the host charges). Novice, junior, masters and open entries pay the full power amount. The host receives the rest of the entry fee.") : null,
         split.length ? el("ul", null, split) : null,
         el("p", { class: "help" }, "The federation absorbs discounts and free places (the host is still paid on the full entry fee) and all of Stripe's processing fees. So a discounted entry can leave the federation's share lower, or even below nothing."),
         el("h2", null, "Money to send"),
@@ -903,20 +972,21 @@
   }
 
   function setPayouts(c, rules, hostName, done) {
+    var franchise = c.is_franchise !== false;
     function pct(cat, kind) { var r = rules.filter(function (x) { return x.category === cat && x.payees && x.payees.kind === kind; })[0]; return r ? r.percent : null; }
     function name(kind) { var r = rules.filter(function (x) { return x.payees && x.payees.kind === kind; })[0]; return r ? r.payees.name : ""; }
     openForm({
       title: "Who gets paid: " + c.name, saveLabel: "Save",
-      intro: "The host is paid the entry fee less the federation's fixed amount (shown on the Money tab). Merchandise and photo packages are shared by the percentages below. Changing this changes the report straight away, including for entries already taken.",
+      intro: (franchise ? "The host is paid the entry fee less the federation's fixed amount (shown on the Money tab). " : "This is not a franchise competition, so the federation keeps the whole entry fee. ") + "Merchandise and photo packages are shared by the percentages below. Changing this changes the report straight away, including for entries already taken.",
       values: { host_name: hostName || name("host"), host_merch_percent: pct("merch", "host") === null ? 100 : pct("merch", "host"),
         photographer_name: name("photographer") || "White Lights Media", photographer_percent: pct("photo", "photographer") === null ? 100 : pct("photo", "photographer") },
-      fields: [
+      fields: (franchise ? [
         { name: "host_name", label: "Host (the gym or venue)", required: true, help: "A name you have used before is found again; a new name adds a new host." },
-        { name: "host_merch_percent", label: "Host's share of merchandise (%)", type: "number", min: "0", half: true, help: "The federation keeps the rest." },
+        { name: "host_merch_percent", label: "Host's share of merchandise (%)", type: "number", min: "0", half: true, help: "The federation keeps the rest." }] : []).concat([
         { name: "photographer_name", label: "Photographer", half: true, help: "Leave blank if there are no photo packages." },
         { name: "photographer_percent", label: "Photographer's share of photo packages (%)", type: "number", min: "0", half: true }
-      ],
-      validate: function (v) { return [v.host_merch_percent, v.photographer_percent].some(function (x) { return x === null || x < 0 || x > 100; }) ? "Percentages must be between 0 and 100." : null; },
+      ]),
+      validate: function (v) { return [franchise ? v.host_merch_percent : 0, v.photographer_percent].some(function (x) { return x === null || x < 0 || x > 100; }) ? "Percentages must be between 0 and 100." : null; },
       onSave: function (v) {
         return sb.rpc("save_payout_setup", { c: c.id, p: { host_name: v.host_name, host_merch_percent: v.host_merch_percent, photographer_name: v.photographer_name, photographer_percent: v.photographer_percent } }).then(function (r) {
           if (r.error) { var m = (r.error.message || "").trim(); throw new Error(MONEY_ERRORS[m] || friendly(r.error)); }

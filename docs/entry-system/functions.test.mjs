@@ -54,4 +54,15 @@ assert(co.MESSAGES.discount_used && co.MESSAGES.discount_expired && co.MESSAGES.
 const t0 = 1_000_000; let allowed = 0; for (let i = 0; i < 12; i++) if (co.allowTry("1.2.3.4|a@b.co", t0 + i)) allowed++;
 assert.equal(allowed, 8, "only 8 discount code checks in 10 minutes per address, so codes cannot be guessed"); assert(co.allowTry("1.2.3.4|a@b.co", t0 + 11 * 60 * 1000), "...and it frees up again after the window"); assert(co.allowTry("9.9.9.9|z@b.co", t0), "other addresses are not affected");
 assert(es.validEntry("123e4567-e89b-12d3-a456-426614174000") && !es.validEntry("1; drop table"), "entry ids are checked");
+
+{ // extras: separate lines on the payment page, and in both confirmation emails
+  const sp = co.sessionParams({ entryId: "e", email: "a@b.co", name: "A", pence: 10049, competition: "C", siteUrl: "https://x.y", expiresAt: 1, extras: [{ name: "Photo package", pence: 4049 }] });
+  assert.strictEqual(sp["line_items[0][price_data][unit_amount]"], 6000, "the entry line is the total less the extras");
+  assert.strictEqual(sp["line_items[1][price_data][unit_amount]"], 4049); assert.strictEqual(sp["line_items[1][price_data][product_data][name]"], "Photo package");
+  assert.strictEqual(sp["line_items[0][price_data][unit_amount]"] + sp["line_items[1][price_data][unit_amount]"], 10049, "the lines add up to the total charged");
+  assert.strictEqual(co.sessionParams({ entryId: "e", email: "a@b.co", name: "A", pence: 6000, competition: "C", siteUrl: "https://x.y", expiresAt: 1 })["line_items[0][price_data][unit_amount]"], 6000, "no extras: unchanged");
+  const m = { name: "A", competition: "C", date: "d", event: "e", equipment: "q", pence: 10049, under18: false, entriesEmail: "x", extras: [{ name: "T-shirt", option: "Medium", pence: 2000 }, { name: "Photo package", pence: 4049 }] };
+  for (const mod of [co, wh]) { const t = mod.confirmationEmail(m); assert(t.includes("Extra: T-shirt (Medium), £20.00") && t.includes("Extra: Photo package, £40.49") && t.includes("Paid: £100.49"), "extras are listed in the email"); }
+  assert(!co.confirmationEmail({ ...m, extras: undefined }).includes("Extra:"), "no extras, no extra lines");
+}
 console.log("function helper tests passed");

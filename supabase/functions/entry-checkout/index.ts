@@ -31,6 +31,8 @@ export const MESSAGES: Record<string, string> = {
   discount_not_yours: "That discount code was made for a different email address.",
   duplicate_bp: "A lifter with that membership number has already entered. If this is a mistake, please contact the entries team.",
   "invalid:openipf": "Please enter your OpenIPF profile link, starting https://www.openipf.org/",
+  sold_out: "Sorry, one of the extras you chose has just sold out. Please go back, untick it and try again.",
+  "invalid:extras": "Something is wrong with the extras you chose. Please go back and check them.",
   no_price: "We could not work out a price for that combination. Please email the entries team.",
   "invalid:full_name": "Please enter your full name.",
   "invalid:email": "Please check your email address.",
@@ -56,7 +58,10 @@ export function formEncode(obj: Record<string, string | number>): string {
   return Object.entries(obj).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`).join("&");
 }
 
-export function sessionParams(o: { entryId: string; email: string; name: string; pence: number; competition: string; siteUrl: string; expiresAt: number; slug?: string }) {
+export function sessionParams(o: { entryId: string; email: string; name: string; pence: number; competition: string; siteUrl: string; expiresAt: number; slug?: string; extras?: { name: string; pence: number }[] }) {
+  const extras = o.extras ?? [], extrasPence = extras.reduce((n, x) => n + x.pence, 0);
+  const more: Record<string, string | number> = {};
+  extras.forEach((x, i) => { const k = `line_items[${i + 1}]`; more[`${k}[quantity]`] = 1; more[`${k}[price_data][currency]`] = "gbp"; more[`${k}[price_data][unit_amount]`] = x.pence; more[`${k}[price_data][product_data][name]`] = x.name; });
   return {
     ui_mode: "embedded",
     mode: "payment",
@@ -66,9 +71,10 @@ export function sessionParams(o: { entryId: string; email: string; name: string;
     expires_at: o.expiresAt,
     "line_items[0][quantity]": 1,
     "line_items[0][price_data][currency]": "gbp",
-    "line_items[0][price_data][unit_amount]": o.pence,
+    "line_items[0][price_data][unit_amount]": o.pence - extrasPence,
     "line_items[0][price_data][product_data][name]": `Entry: ${o.competition}`,
     "line_items[0][price_data][product_data][description]": o.name,
+    ...more,
     "metadata[entry_id]": o.entryId,
     "payment_intent_data[metadata][entry_id]": o.entryId,
   };
@@ -88,12 +94,13 @@ export function exactAge(dob: string, on: string): number {
 }
 export function pounds(pence: number): string { return "£" + (pence / 100).toFixed(2); }
 
-export function confirmationEmail(e: { name: string; competition: string; date: string; event: string; equipment: string; pence: number; under18: boolean; entriesEmail: string; refundsUntil?: string; category?: string; division?: string; club?: string; discountPence?: number }) {
+export function confirmationEmail(e: { name: string; competition: string; date: string; event: string; equipment: string; pence: number; under18: boolean; entriesEmail: string; refundsUntil?: string; category?: string; division?: string; club?: string; discountPence?: number; extras?: { name: string; option?: string; pence: number }[] }) {
   const lines = [
     `Hi ${e.name},`, "",
     `You are entered in ${e.competition} (${e.date}). Thank you!`, "",
     `Event: ${e.event}`, `Equipment: ${e.equipment}`, ...(e.category ? [`Category: ${e.category}`] : []), ...(e.division ? [`Federation or division: ${e.division}`] : []), ...(e.club ? [`Club: ${e.club}`] : []),
-    ...(e.discountPence ? [`Discount applied: ${pounds(e.discountPence)} off`] : []), `Paid: ${pounds(e.pence)}`, "",
+    ...(e.discountPence ? [`Discount applied: ${pounds(e.discountPence)} off`] : []),
+    ...((e.extras ?? []).map((x) => `Extra: ${x.name}${x.option ? ` (${x.option})` : ""}, ${pounds(x.pence)}`)), `Paid: ${pounds(e.pence)}`, "",
   ];
   if (e.under18) lines.push("Because you are under 18 on the day, a parent or guardian must be with you at the competition.", "");
   if (e.refundsUntil) lines.push(`Refunds are available until entries close on ${e.refundsUntil}. After that, entries cannot be refunded.`, "");
@@ -181,6 +188,10 @@ if (typeof Deno !== "undefined") {
     }
     const { entry_id, price_pence, competition, slug } = out as { entry_id: string; price_pence: number; competition: string; slug?: string };
 
+    // The extras this entry took (photo package, T-shirt ...), for the payment page and the email.
+    const extraRows = await (await fetch(`${url}/rest/v1/entry_addons?entry_id=eq.${entry_id}&select=price_pence,addons(name),addon_options(label)`, { headers: { apikey: svc, authorization: `Bearer ${svc}` } })).json().catch(() => []);
+    const extras = (Array.isArray(extraRows) ? extraRows : []).map((x: { price_pence: number; addons?: { name: string }; addon_options?: { label: string } | null }) => ({ name: x.addons?.name ?? "Extra", option: x.addon_options?.label, pence: x.price_pence }));
+
     // 2. A code that takes the whole price off makes this a free entry: it is already confirmed, so there is nothing to pay.
     if ((out as { free?: boolean }).free) {
       const [row] = await (await fetch(`${url}/rest/v1/entries?id=eq.${entry_id}&select=email,full_name,event,equipment,price_pence,discount_pence,date_of_birth,club,divisions(name,is_home),competitions(name,start_date,entry_closes)`, { headers: { apikey: svc, authorization: `Bearer ${svc}` } })).json();
@@ -193,7 +204,7 @@ if (typeof Deno !== "undefined") {
             name: row.full_name, competition: row.competitions.name, date: row.competitions.start_date, event: row.event === "bench_only" ? "Bench only" : "Full power",
             equipment: row.equipment === "equipped" ? "Equipped" : "Classic", pence: row.price_pence, under18: exactAge(row.date_of_birth, row.competitions.start_date) < 18, entriesEmail: copy,
             category: ageCategory(new Date(row.date_of_birth).getFullYear(), compYear), division: row.divisions ? row.divisions.name + (row.divisions.is_home ? "" : " (guest)") : undefined,
-            club: row.club || undefined, discountPence: row.discount_pence || 0 }) }),
+            club: row.club || undefined, discountPence: row.discount_pence || 0, extras }) }),
         });
         if (!sent.ok) console.error("Resend failed", sent.status);
       }
@@ -204,7 +215,7 @@ if (typeof Deno !== "undefined") {
     //    and is what decides whether the place is still ours (the webhook handles a late payment).
     const params = sessionParams({
       entryId: entry_id, email: String(body.email ?? "").trim().toLowerCase(), name: String(body.full_name ?? "").trim(),
-      pence: price_pence, competition, slug, siteUrl, expiresAt: Math.floor(Date.now() / 1000) + 31 * 60,
+      pence: price_pence, competition, slug, siteUrl, extras: extras.map((x) => ({ name: x.option ? `${x.name} (${x.option})` : x.name, pence: x.pence })), expiresAt: Math.floor(Date.now() / 1000) + 31 * 60,
     });
     const res = await fetch("https://api.stripe.com/v1/checkout/sessions", {
       method: "POST",

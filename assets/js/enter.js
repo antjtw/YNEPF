@@ -87,9 +87,46 @@
   }
   function pounds(p) { return "£" + (p / 100).toFixed(p % 100 ? 2 : 0); }
 
+  // ---- extras (photo package, merchandise) ----------------------------------------------------------
+  // v.extras maps an extra's id to "yes" (no sizes) or to the chosen size's id. Nothing here moves on the page: each extra is
+  // always on screen as a tick box or a drop-down.
+  function chosenExtras() {
+    return (ctx.extras || []).filter(function (x) { return v.extras && v.extras[x.id]; }).map(function (x) {
+      var opt = (x.addon_options || []).filter(function (o) { return o.id === v.extras[x.id]; })[0];
+      return { id: x.id, name: x.name, price_pence: x.price_pence, option_id: opt ? opt.id : null, option: opt ? opt.label : "" };
+    });
+  }
+  function extrasNow() { return chosenExtras().reduce(function (n, x) { return n + x.price_pence; }, 0); }
+  function extrasField() {
+    var items = ctx.extras || [];
+    if (!items.length) return null;
+    v.extras = v.extras || {};
+    return el("fieldset", { class: "field", id: "extras-field" },
+      el("legend", null, "Extras (optional)"),
+      el("p", { class: "help", id: "extras-help" }, "You can add these to your entry. Discount codes only apply to the entry fee."),
+      items.map(function (x, i) {
+        var opts = (x.addon_options || []).slice().sort(function (p, q) { return p.sort_order - q.sort_order; });
+        var label = x.name + ", " + pounds(x.price_pence);
+        if (opts.length) {
+          return el("div", { class: "field" },
+            el("label", { for: "extra-" + i }, label),
+            x.description ? el("p", { class: "help", id: "extra-" + i + "-help" }, x.description) : null,
+            el("select", { id: "extra-" + i, name: "extra-" + i, "aria-describedby": x.description ? "extra-" + i + "-help" : false,
+              onchange: function (e) { v.extras[x.id] = e.target.value; refreshTotals(); } },
+              el("option", { value: "" }, "No thank you"), opts.map(function (o) { return el("option", { value: o.id, selected: v.extras[x.id] === o.id }, "Size " + o.label); })));
+        }
+        return el("div", { class: "check-field form-touch" },
+          el("label", { class: "check-label", for: "extra-" + i },
+            el("input", { id: "extra-" + i, name: "extra-" + i, type: "checkbox", checked: !!v.extras[x.id], "aria-describedby": x.description ? "extra-" + i + "-hint" : false,
+              onchange: function (e) { v.extras[x.id] = e.target.checked ? "yes" : ""; refreshTotals(); } }),
+            el("span", null, label)),
+          x.description ? el("p", { class: "help", id: "extra-" + i + "-hint" }, x.description) : null);
+      }));
+  }
+
   // ---- discount code -------------------------------------------------------------------------------
   // The price to pay: the discount (if a code has been applied) taken off.
-  function totalNow() { var a = v.discount_applied; if (a) return a.price_pence; return priceNow(); }
+  function totalNow() { var a = v.discount_applied, base = a ? a.price_pence : priceNow(); return base === null ? null : base + extrasNow(); }
   function refreshTotals() {
     var t = totalNow(), free = t === 0;
     var tl = document.getElementById("total-line"); if (tl) tl.replaceChildren(document.createTextNode("Total to pay: "), el("strong", null, t === null ? "—" : pounds(t)));
@@ -271,6 +308,7 @@
       ctx.settings.openipf_mode === "hidden" ? null : text("openipf_url", "OpenIPF profile link", ctx.settings.openipf_mode === "required"
         ? { max: 300, help: "Entry to this competition needs a qualifying total, so we need your link from openipf.org (it looks like https://www.openipf.org/u/yourname)." }
         : { optional: true, max: 300, help: "If you have one, paste your link from openipf.org. We use it to check qualification." }),
+      extrasField(),
       el("p", { class: "lede", id: "fee-line", role: "status" }, feeText())
     ];
   }
@@ -300,6 +338,7 @@
     rows.push(row("Photos and videos", PHOTO_NAMES[v.photo_choice], "about"),
       row("Event", EVENT_NAMES[v.event], "lifting"), row("Equipment", EQUIP_NAMES[v.equipment], "lifting"), row("Weight class", cls ? cls.label + " kg" : "", "lifting"));
     if (trim(v.openipf_url)) rows.push(row("OpenIPF profile", trim(v.openipf_url), "lifting"));
+    chosenExtras().forEach(function (x) { rows.push(row(x.name + (x.option ? " (size " + x.option + ")" : ""), pounds(x.price_pence), "lifting")); });
     return [
       el("h2", null, "Check your answers"),
       el("dl", { class: "summary-list" }, rows),
@@ -353,6 +392,7 @@
       photo_ok: v.photo_choice === "yes", photo_opt_out: v.photo_choice === "never" };
     if (invite) o.invite = invite;
     if (v.discount_applied) o.discount_code = v.discount_applied.code;
+    var ex = chosenExtras(); if (ex.length) o.extras = ex.map(function (x) { return x.option_id ? { id: x.id, option_id: x.option_id } : { id: x.id }; });
     if (ageOnDay() < 18) { o.guardian_name = trim(v.guardian_name); o.guardian_phone = trim(v.guardian_phone); o.guardian_email = trim(v.guardian_email); o.guardian_consent = !!v.guardian_consent; }
     return o;
   }
@@ -450,7 +490,8 @@
         db.from("weight_classes").select("*").eq("active", true).order("sort_order"),
         db.from("divisions").select("*").order("sort_order"),
         db.rpc("places_left", { c: comp.id }),
-        db.from("clubs").select("name,region").eq("active", true).order("name")
+        db.from("clubs").select("name,region").eq("active", true).order("name"),
+        db.from("addons").select("id,kind,name,description,price_pence,stock,sort_order,addon_options(id,label,sort_order)").eq("competition_id", comp.id).order("sort_order").order("name")
       ]).then(function (a) {
         var st = a[0].data, settings = a[1].data;
         if (st) st.places_left = a[6].data;
@@ -469,7 +510,7 @@
         }
         if (st.places_left < 1) return stop("This competition is full", "<p>Sorry, all places have gone." + (comp.waitlist_url ? " <a href='" + encodeURI(comp.waitlist_url) + "'>Join the waiting list</a>." : "") + "</p>");
         if (!(a[5].data || []).length) return stop("Enter " + comp.name, "<p>We could not load the list of federations, so entries cannot be taken just now. Please try again later or <a href='contact.html'>contact the entries team</a>.</p>");
-        ctx = { comp: comp, settings: settings, rules: a[3].data || [], classes: a[4].data || [], divisions: a[5].data || [], clubs: a[7].data || [] };
+        ctx = { comp: comp, settings: settings, rules: a[3].data || [], classes: a[4].data || [], divisions: a[5].data || [], clubs: a[7].data || [], extras: (a[8] && a[8].data) || [] };
         document.getElementById("hold-minutes").textContent = settings.hold_minutes;
         lede.textContent += ". " + st.places_left + (st.places_left === 1 ? " place" : " places") + " left.";
         if (priority) { status.hidden = false; status.innerHTML = "<p><strong>Priority entry.</strong> You are using a personal priority link. General entry opens on " + new Date(comp.entry_opens).toLocaleString("en-GB", { timeZone: Y.TZ, dateStyle: "full", timeStyle: "short" }) + ".</p>"; }

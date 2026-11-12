@@ -133,6 +133,10 @@ Codes are made in the editor: open a competition, then the **Discounts** tab, th
 
 ## Part 5e: The money tab
 
+On the competition's **Details** tab, tick **This is a franchise competition** when a host runs it. Leave it unticked for a competition the federation runs itself: the federation then keeps the whole entry fee and there is no host to pay.
+
+The **Extras** tab is where you add the photo package and any merchandise (name, price, optional stock and sizes). They appear on the entry form and are paid with the entry. Discounts never apply to them.
+
 Each competition has a **Money** tab (entries team and admins). Press **Set who gets paid** to name the host; the host is paid the entry fee less the federation's fixed amount (£12 full power, £7.50 bench only, £4.50 sub-junior (full power; sub-junior bench only pays the bench amount), changed for that competition with **Change this competition's amounts**; the amounts new competitions start with are on the Calendar page under **What the federation keeps from each entry**, and changing those never alters competitions that already exist). The federation absorbs discounts, free places and Stripe's fees. The report shows what each person is owed and what is still to send; **Record a payment sent** notes when you have paid someone. It needs the newest all-in-one SQL (the report refuses anyone who is not on the entries team).
 
 ---

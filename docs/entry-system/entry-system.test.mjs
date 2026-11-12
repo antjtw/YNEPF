@@ -205,6 +205,25 @@ await setup(U.entries, { host_name: "leeds gym", host_merch_percent: 100 });
 ok((await db.query(`select count(*)::int n from public.payees where lower(name) = 'leeds gym'`)).rows[0].n === 1, "a host is found by name, not made twice");
 ok((await db.query(`select count(*)::int n from public.payout_rules where competition_id = '${CC}' and category = 'photo'`)).rows[0].n === 0, "saving again replaces the old split (no photographer this time)");
 await db.exec("reset role");
+
+// a competition the federation runs itself (not a franchise): it keeps the whole entry fee, and the photo package goes to the photographer
+await db.exec("reset role");
+await db.exec(`update public.entries set status='cancelled'; update public.competitions set is_franchise = false where id = '${COMP}'`);
+await mkEntry({ addon: { id: "a2", price: 4049 } });          // £40 entry + £40.49 photo package
+await mkEntry({});                                              // £40 entry
+await mkEntry({ price: 2000, discount: 2000, list: 4000 });     // £20 paid of £40: the federation just receives £20
+s = byName(await settle());
+ok(!s["Implexus Gym"] || (s["Implexus Gym"].e === 0 && s["Implexus Gym"].g === 0), "not a franchise: the host is owed nothing for entries");
+ok(s["YNEPF"].e === 4000 + 4000 + 2000 && s["YNEPF"].p === 0, "the federation keeps all of the entry money (£100): " + JSON.stringify(s["YNEPF"]));
+ok(s["White Lights Media"].p === 4049 && s["White Lights Media"].g === 4049, "the photo package money goes to the photographer: " + JSON.stringify(s["White Lights Media"]));
+await db.exec(`update public.competitions set is_franchise = true where id = '${COMP}'`);
+s = byName(await settle()); ok(s["Implexus Gym"] && s["Implexus Gym"].e > 0, "switch it back to a franchise and the host is paid again");
+// payout setup for a competition that is not a franchise: no host needed
+await db.exec(`insert into public.competitions (id, name, start_date, capacity, published, slug, is_franchise) values ('77777777-7777-7777-7777-777777777777','Own Open','2027-07-01',20,true,'own',false)`);
+await as(U.entries);
+let ownSetup; try { ownSetup = (await db.query(`select public.save_payout_setup('77777777-7777-7777-7777-777777777777', '{"photographer_name":"White Lights Media","photographer_percent":100}'::jsonb) r`)).rows[0].r; } catch (e) { ownSetup = { error: e.message }; }
+await db.exec("reset role");
+ok(ownSetup.host_id === null && ownSetup.photographer_id, "no host is needed when it is not a franchise: " + JSON.stringify(ownSetup));
 // the money report: only the entries team (admins included) can ask for it
 const askSettlement = async (who) => { await as(who); try { await db.query(`select * from public.competition_settlement('11111111-1111-1111-1111-111111111111')`); return "allowed"; } catch (e) { return /forbidden|permission denied/.test(e.message) ? "refused" : e.message; } };
 ok((await askSettlement(null)) === "refused" && (await askSettlement(U.editor)) === "refused" && (await askSettlement(U.contrib)) === "refused" && (await askSettlement(U.rando)) === "refused", "the public, editors, contributors and other signed-in people are refused the money report");
