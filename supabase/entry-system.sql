@@ -60,6 +60,7 @@ create table if not exists public.hosts (
 );
 
 alter table public.competitions add column if not exists host_id uuid references public.hosts (id);
+alter table public.competitions add column if not exists host_payee_id uuid references public.payees (id);          -- who receives the host's share of entry money
 
 -- ---------------------------------------------------------------------------
 -- 2. Reference data (editable by admins, read by everyone)
@@ -228,6 +229,15 @@ create table if not exists public.addon_images (            -- up to 4 per add-o
   sort_order integer not null default 0
 );
 
+-- What the federation keeps from each entry: a fixed amount, 30% of the standard YNE entry prices, whatever the host charges.
+-- The host receives the rest of the entry fee (before any discount). Sub-junior entries pay the sub-junior amount; bench only
+-- entries the bench amount; everyone else (novice, junior, masters and open) the full power amount.
+create table if not exists public.federation_fees (
+  key text primary key check (key in ('full_power', 'bench_only', 'sub_junior')),
+  pence integer not null check (pence >= 0)
+);
+insert into public.federation_fees (key, pence) values ('full_power', 1200), ('bench_only', 750), ('sub_junior', 450) on conflict (key) do nothing;
+
 -- ---------------------------------------------------------------------------
 -- 3b. Discount codes
 --     Made in the editor, for one competition or for any competition. A code can be tied to one email address (so it
@@ -304,6 +314,8 @@ create table if not exists public.entries (
 alter table public.entries add column if not exists membership_checked boolean not null default false;
 alter table public.entries add column if not exists discount_code_id uuid references public.discount_codes (id) on delete set null;
 alter table public.entries add column if not exists discount_pence integer not null default 0;
+-- The entry fee before any discount, which is what the host's share is worked out from (the federation absorbs discounts).
+alter table public.entries add column if not exists list_price_pence integer;
 alter table public.entries add column if not exists entry_note text not null default '';
 create index if not exists entries_competition_status on public.entries (competition_id, status);
 create index if not exists entries_email on public.entries (email);
@@ -572,24 +584,44 @@ language plpgsql stable security definer set search_path = public
 as $$
 #variable_conflict use_column
 declare
-  fees bigint; policy text; fed uuid;
+  fees bigint; fed uuid; host uuid; start date; f_full integer; f_bench integer; f_sj integer;
 begin
   -- Who is owed what is for the entries team only. (This function reads past the row level rules, so it checks for itself.)
   if not public.is_entries() then raise exception 'forbidden'; end if;
   select coalesce(sum(p.stripe_fee_pence), 0) into fees
     from public.payments p join public.entries e on e.id = p.entry_id
    where e.competition_id = c and p.status = 'succeeded';
-  select stripe_fee_policy into policy from public.entry_settings where competition_id = c;
-  policy := coalesce(policy, 'federation');
   select py.id into fed from public.payees py where py.kind = 'federation' limit 1;
+  select k.host_payee_id, k.start_date into host, start from public.competitions k where k.id = c;
+  select coalesce(max(case when key = 'full_power' then pence end), 1200), coalesce(max(case when key = 'bench_only' then pence end), 750), coalesce(max(case when key = 'sub_junior' then pence end), 450)
+    into f_full, f_bench, f_sj from public.federation_fees;
 
   return query
-  with live as (select e.id, e.price_pence from public.entries e where e.competition_id = c and e.status in ('paid', 'comped')),
-  money as (
-    select 'entry'::text as category,
-           coalesce((select sum(l.price_pence) from live l), 0) - coalesce((select sum(ea.price_pence) from public.entry_addons ea join live l on l.id = ea.entry_id), 0) as pence
+  with live as (
+    select e.id, e.price_pence, e.discount_pence, e.list_price_pence, e.event, e.date_of_birth,
+           coalesce((select sum(ea.price_pence) from public.entry_addons ea where ea.entry_id = e.id), 0) as addons
+      from public.entries e where e.competition_id = c and e.status in ('paid', 'comped')
+  ),
+  -- Entry money. cash is what the lifter actually paid for the entry; list is the entry fee before any discount. The federation
+  -- keeps its fixed amount (never more than the fee), the host is paid the rest of the full fee, and the federation absorbs any
+  -- discount: its share is whatever is left of the cash after the host has been paid (negative for a discounted entry).
+  per_entry as (
+    select l.id, l.price_pence - l.addons as cash,
+           coalesce(l.list_price_pence, l.price_pence - l.addons + l.discount_pence) as list,
+           case when public.age_category_on(l.date_of_birth, start) = 'SJ' then f_sj when l.event = 'bench_only' then f_bench else f_full end as std_fee
+      from live l
+  ),
+  entry_parts as (
+    select pe.id, pe.cash, case when host is null then 0 else pe.list - least(pe.list, pe.std_fee) end as host_pence from per_entry pe
+  ),
+  entry_rows as (
+    select host as payee_id, coalesce(sum(ep.host_pence), 0)::bigint as pence from entry_parts ep where host is not null
     union all
-    select a.kind, coalesce(sum(ea.price_pence), 0)
+    select fed, (coalesce(sum(ep.cash), 0) - coalesce(sum(ep.host_pence), 0))::bigint from entry_parts ep
+  ),
+  -- Merchandise and photo packages are shared by percentages set for the competition.
+  money as (
+    select a.kind as category, coalesce(sum(ea.price_pence), 0) as pence
       from (values ('merch'), ('photo')) as a(kind)
       left join public.addons ad on ad.competition_id = c and ad.kind = a.kind
       left join public.entry_addons ea on ea.addon_id = ad.id and ea.entry_id in (select id from live)
@@ -599,8 +631,8 @@ begin
     select r.payee_id, m.category, r.percent, m.pence as category_pence, round(m.pence * r.percent / 100.0)::bigint as pence
       from money m join public.payout_rules r on r.competition_id = c and r.category = m.category
   ),
-  -- Rounding each share can leave a penny over or short. When a category's shares add up to 100%,
-  -- the difference goes to the payee with the biggest share, so the category always adds up exactly.
+  -- Rounding each share can leave a penny over or short. When a category's shares add up to 100%, the difference goes to
+  -- the payee with the biggest share, so the category always adds up exactly.
   split as (
     select payee_id, category,
            pence + case when sum(percent) over (partition by category) = 100
@@ -608,27 +640,23 @@ begin
                         then category_pence - sum(pence) over (partition by category) else 0 end as pence
       from raw
   ),
-  per_payee as (
-    select s.payee_id,
-           sum(case when s.category = 'entry' then s.pence else 0 end)::bigint as entry_pence,
-           sum(case when s.category = 'merch' then s.pence else 0 end)::bigint as merch_pence,
-           sum(case when s.category = 'photo' then s.pence else 0 end)::bigint as photo_pence,
-           sum(s.pence)::bigint as gross_pence
-      from split s group by s.payee_id
+  parts as (
+    select er.payee_id, 'entry'::text as category, er.pence from entry_rows er
+    union all select s.payee_id, s.category, s.pence from split s
   ),
-  total as (select coalesce(sum(gross_pence), 0)::bigint as g from per_payee),
-  shared as (
-    select pp.*,
-      case when policy = 'pro_rata' and (select g from total) > 0 then floor(fees * pp.gross_pence::numeric / (select g from total))::bigint
-           when policy = 'federation' and pp.payee_id = fed then fees
-           else 0 end as fee_pence
-    from per_payee pp
+  per_payee as (
+    select pt.payee_id,
+           sum(case when pt.category = 'entry' then pt.pence else 0 end)::bigint as entry_pence,
+           sum(case when pt.category = 'merch' then pt.pence else 0 end)::bigint as merch_pence,
+           sum(case when pt.category = 'photo' then pt.pence else 0 end)::bigint as photo_pence,
+           sum(pt.pence)::bigint as gross_pence
+      from parts pt group by pt.payee_id
   )
-  select s.payee_id, py.name, py.kind, s.entry_pence, s.merch_pence, s.photo_pence, s.gross_pence,
-         -- any pence left over from rounding goes to the federation, so the rows always add up
-         (s.fee_pence + case when s.payee_id = fed then fees - (select coalesce(sum(x.fee_pence), 0) from shared x) else 0 end)::bigint,
-         (s.gross_pence - s.fee_pence - case when s.payee_id = fed then fees - (select coalesce(sum(x.fee_pence), 0) from shared x) else 0 end)::bigint
-    from shared s join public.payees py on py.id = s.payee_id
+  -- Stripe's fees (on every payment, refunded ones too) are all paid by the federation.
+  select pp.payee_id, py.name, py.kind, pp.entry_pence, pp.merch_pence, pp.photo_pence, pp.gross_pence,
+         (case when pp.payee_id = fed then fees else 0 end)::bigint,
+         (pp.gross_pence - case when pp.payee_id = fed then fees else 0 end)::bigint
+    from per_payee pp join public.payees py on py.id = pp.payee_id
    order by (py.kind = 'federation'), py.name;
 end;
 $$;
@@ -726,7 +754,7 @@ begin
   end loop;
   -- Everything about people and money: the entries team only (admins included).
   -- payees and hosts are here because they hold contact emails and our commercial split.
-  foreach t in array array['discount_codes', 'payees', 'hosts', 'entries', 'entry_private', 'entry_addons', 'payments', 'refunds', 'stripe_events', 'waiting_list', 'offers',
+  foreach t in array array['federation_fees', 'discount_codes', 'payees', 'hosts', 'entries', 'entry_private', 'entry_addons', 'payments', 'refunds', 'stripe_events', 'waiting_list', 'offers',
                            'invites', 'email_log', 'payout_rules', 'payouts', 'lifting_orders', 'lo_sessions', 'lo_flights',
                            'lo_assignments', 'competition_redirects', 'rota_slots', 'rota_signups', 'points_ledger'] loop
     execute format('alter table public.%I enable row level security', t);
@@ -762,7 +790,7 @@ grant select on public.entries_public, public.waiting_list_public, public.compet
 grant select, insert, update, delete on
   public.entry_settings, public.entry_stages, public.price_rules, public.addons, public.addon_options, public.addon_images,
   public.qualifying_totals, public.weight_classes, public.divisions, public.payees, public.hosts, public.volunteer_roles,
-  public.discount_codes, public.entries, public.entry_private, public.entry_addons, public.payments, public.refunds, public.stripe_events,
+  public.federation_fees, public.discount_codes, public.entries, public.entry_private, public.entry_addons, public.payments, public.refunds, public.stripe_events,
   public.waiting_list, public.offers, public.invites, public.email_templates, public.email_log, public.payout_rules,
   public.payouts, public.lifting_orders, public.lo_sessions, public.lo_flights, public.lo_assignments,
   public.competition_redirects, public.rota_slots, public.rota_signups, public.points_ledger
@@ -909,11 +937,11 @@ begin
   v_expires := now() + make_interval(mins => s.hold_minutes);
   insert into public.entries (competition_id, status, source, stage_id, email, full_name, display_name, bp_number, date_of_birth, sex,
       division_id, club, instagram, photo_ok, photo_opt_out, eligibility_confirmed, weight_class_id, equipment, event,
-      openipf_url, price_pence, hold_expires_at, is_guest, paid_at, discount_code_id, discount_pence)
+      openipf_url, price_pence, hold_expires_at, is_guest, paid_at, discount_code_id, discount_pence, list_price_pence)
     values (c.id, case when v_free then 'comped' else 'held' end, 'web', v_stage, v_email, v_name, trim(coalesce(p->>'display_name', '')), trim(coalesce(p->>'bp_number', '')), v_dob, v_sex,
       v_d.id, v_club, trim(coalesce(p->>'instagram', '')),
       coalesce((p->>'photo_ok')::boolean, false), coalesce((p->>'photo_opt_out')::boolean, false), coalesce((p->>'eligibility_confirmed')::boolean, false), v_class, v_equip, v_event,
-      trim(coalesce(p->>'openipf_url', '')), v_price, case when v_free then null else v_expires end, v_guest, case when v_free then now() end, v_code_id, v_discount)
+      trim(coalesce(p->>'openipf_url', '')), v_price, case when v_free then null else v_expires end, v_guest, case when v_free then now() end, v_code_id, v_discount, v_price + v_discount)
     returning id into v_entry;
   insert into public.entry_private (entry_id, guardian_name, guardian_phone, guardian_email, guardian_consent, access_needs, delete_after)
     values (v_entry,
@@ -1111,10 +1139,11 @@ begin
   v_over := public.places_left(c) < 1;
 
   insert into public.entries (competition_id, status, source, email, full_name, display_name, bp_number, date_of_birth, sex, division_id, club, instagram,
-      photo_ok, photo_opt_out, weight_class_id, equipment, event, openipf_url, price_pence, paid_at, is_guest, entry_note)
+      photo_ok, photo_opt_out, weight_class_id, equipment, event, openipf_url, price_pence, paid_at, is_guest, entry_note, list_price_pence)
     values (c, case when v_mode = 'comped' then 'comped' else 'paid' end, 'manual', v_email, v_name, trim(coalesce(p->>'display_name', '')), trim(coalesce(p->>'bp_number', '')), v_dob, v_sex,
       v_div.id, trim(coalesce(p->>'club', '')), trim(coalesce(p->>'instagram', '')), coalesce((p->>'photo_ok')::boolean, false), coalesce((p->>'photo_opt_out')::boolean, false),
-      v_class, v_equip, v_event, trim(coalesce(p->>'openipf_url', '')), v_price, now(), not v_div.is_home, trim(coalesce(p->>'note', '')))
+      v_class, v_equip, v_event, trim(coalesce(p->>'openipf_url', '')), v_price, now(), not v_div.is_home, trim(coalesce(p->>'note', '')),
+      case when v_mode = 'comped' then coalesce(public.entry_price(c, v_dob, v_event, v_equip), 0) else v_price end)
     returning id into v_entry;
   insert into public.entry_private (entry_id, guardian_name, guardian_phone, guardian_email, guardian_consent, delete_after)
     values (v_entry, case when v_age < 18 then trim(p->>'guardian_name') else '' end, case when v_age < 18 then trim(p->>'guardian_phone') else '' end,
@@ -1236,7 +1265,6 @@ declare
   fed uuid; host uuid; photog uuid;
   host_name text := btrim(coalesce(p->>'host_name', ''));
   photog_name text := btrim(coalesce(p->>'photographer_name', ''));
-  e_pct numeric := coalesce((p->>'host_entry_percent')::numeric, 100);
   m_pct numeric := coalesce((p->>'host_merch_percent')::numeric, 100);
   p_pct numeric := coalesce((p->>'photographer_percent')::numeric, 100);
   existing record;
@@ -1244,7 +1272,7 @@ begin
   if not public.is_entries() then raise exception 'forbidden'; end if;
   if not exists (select 1 from public.competitions where id = c) then raise exception 'not_found'; end if;
   if host_name = '' then raise exception 'invalid:host_name'; end if;
-  if e_pct < 0 or e_pct > 100 or m_pct < 0 or m_pct > 100 or p_pct < 0 or p_pct > 100 then raise exception 'invalid:percent'; end if;
+  if m_pct < 0 or m_pct > 100 or p_pct < 0 or p_pct > 100 then raise exception 'invalid:percent'; end if;
   select id into fed from public.payees where kind = 'federation' limit 1;
   if fed is null then insert into public.payees (name, kind) values ('YNEPF', 'federation') returning id into fed; end if;
 
@@ -1265,10 +1293,9 @@ begin
     end if;
   end if;
 
+  update public.competitions set host_payee_id = host where id = c;     -- the host is paid the entry fee less the federation's fixed amount
   delete from public.payout_rules where competition_id = c;
-  insert into public.payout_rules (competition_id, category, payee_id, percent) values
-    (c, 'entry', fed, 100 - e_pct), (c, 'merch', fed, 100 - m_pct);
-  if e_pct > 0 then insert into public.payout_rules (competition_id, category, payee_id, percent) values (c, 'entry', host, e_pct); end if;
+  insert into public.payout_rules (competition_id, category, payee_id, percent) values (c, 'merch', fed, 100 - m_pct);
   if m_pct > 0 then insert into public.payout_rules (competition_id, category, payee_id, percent) values (c, 'merch', host, m_pct); end if;
   if photog is not null then
     insert into public.payout_rules (competition_id, category, payee_id, percent) values (c, 'photo', fed, 100 - p_pct);

@@ -21,6 +21,7 @@ const ok = (c, n) => { c ? pass++ : fail++; console.log((c ? "PASS " : "FAIL ") 
 const as = async (who) => { await db.exec("reset role"); if (who) { await db.query(`select set_config('request.uid','${who}',false)`); await db.exec("set role authenticated"); } else await db.exec("set role anon"); };
 const can = async (q) => { try { await db.query(q); return true; } catch (e) { return false; } };
 const rows = async (q) => (await db.query(q)).rows;
+const clearEntries = async () => { await db.exec("reset role"); await db.exec(`delete from public.refunds`); await db.exec(`delete from public.payments`); await db.exec(`delete from public.entries`); };
 ok(true, "the draft builds on the real schema, and re-running it is safe");
 
 // ---- people: one of each role, plus a stranger
@@ -70,7 +71,7 @@ ok((await rows(`select public.age_on('2008-06-01','2026-03-14') a`))[0].a === 17
 ok((await rows(`select public.age_on('2008-03-14','2026-03-14') a`))[0].a === 18, "turns 18 on the day: 18");
 
 // ---- places: held entries only count while their hold lasts
-await db.exec(`delete from public.entries`);
+await clearEntries();
 const e = (st, extra = "") => db.exec(`insert into public.entries (competition_id, email, full_name, date_of_birth, sex, status ${extra ? ", hold_expires_at" : ""}) values ('11111111-1111-1111-1111-111111111111', 'a' || gen_random_uuid() || '@x.com', 'N', '1990-01-01', 'F', '${st}' ${extra ? ", " + extra : ""})`);
 const left = async () => (await rows(`select public.places_left('11111111-1111-1111-1111-111111111111') n`))[0].n;
 ok(await left() === 3, "capacity 3, nobody in: 3 left");
@@ -80,7 +81,7 @@ await e("comped"); ok(await left() === 0, "a comped entry takes a place: none le
 await e("paid"); ok(await left() === 0, "never below zero");
 
 // ---- audit log: who, what, before and after; cannot be changed
-await db.exec("reset role"); await db.query(`select set_config('request.uid','',false)`); await db.exec(`delete from public.entries`);
+await db.exec("reset role"); await db.query(`select set_config('request.uid','',false)`); await clearEntries();
 await db.exec(`insert into public.entries (id, competition_id, email, full_name, date_of_birth, sex, status, club) values ('33333333-3333-3333-3333-333333333333','11111111-1111-1111-1111-111111111111','z@x.com','Zed','1990-01-01','M','paid','Hull')`);
 await as(U.entries); await db.exec(`update public.entries set club='York' where id='33333333-3333-3333-3333-333333333333'`);
 await as(U.entries);
@@ -95,65 +96,99 @@ ok(gaud.length === 2 && gaud.every((g) => !g.b.includes("Parent") && !g.a.includ
 await as(U.entries);
 ok(!(await can(`delete from public.audit_log`)) && !(await can(`update public.audit_log set actor_email='x'`)) && !(await can(`insert into public.audit_log (table_name, action) values ('x','insert')`)), "nobody can change, delete or forge audit entries");
 
-// ---- the settlement: money to send, adds up exactly
-await db.exec("reset role"); await db.exec(`delete from public.entries`);
+// ---- the settlement: the federation keeps a fixed amount per entry, the host gets the rest, the federation absorbs discounts
+await clearEntries();
 const id = (n) => `00000000-0000-0000-0000-0000000000${n}`;
+const COMP = "11111111-1111-1111-1111-111111111111";
 await db.exec(`update public.payees set id = '${id("f1")}' where kind = 'federation'`);   // the federation is already there: the install adds it
 await db.exec(`insert into public.payees (id, name, kind) values ('${id("f2")}','Implexus Gym','host'),('${id("f3")}','White Lights Media','photographer')`);
-await db.exec(`insert into public.entry_settings (competition_id, stripe_fee_policy) values ('11111111-1111-1111-1111-111111111111','federation')`);
+ok((await rows(`select key, pence from public.federation_fees order by key`)).map((r) => r.key + ":" + r.pence).join() === "bench_only:750,full_power:1200,sub_junior:450", "the federation's fixed amounts start as £12 full power, £7.50 bench only, £4.50 sub-junior");
+await db.exec(`update public.competitions set host_payee_id = '${id("f2")}' where id = '${COMP}'`);
 await db.exec(`insert into public.payout_rules (competition_id, category, payee_id, percent) values
-  ('11111111-1111-1111-1111-111111111111','entry','${id("f2")}',80),('11111111-1111-1111-1111-111111111111','entry','${id("f1")}',20),
-  ('11111111-1111-1111-1111-111111111111','merch','${id("f2")}',100),('11111111-1111-1111-1111-111111111111','merch','${id("f1")}',0),
-  ('11111111-1111-1111-1111-111111111111','photo','${id("f3")}',100),('11111111-1111-1111-1111-111111111111','photo','${id("f1")}',0)`);
-await db.exec(`insert into public.addons (id, competition_id, kind, name, price_pence) values ('${id("a1")}','11111111-1111-1111-1111-111111111111','merch','T-shirt',2000),('${id("a2")}','11111111-1111-1111-1111-111111111111','photo','Photo pack',1000)`);
-// 10 entries at £40; entries 1 and 2 add a T-shirt; entries 3, 4, 5 add photos; entry 10 is refunded (Stripe keeps its fee)
-for (let i = 1; i <= 10; i++) {
-  const eid = `00000000-0000-0000-0000-0000000001${String(i).padStart(2, "0")}`;
-  const add = i <= 2 ? 2000 : i <= 5 ? 1000 : 0, total = 4000 + add;
-  await db.exec(`insert into public.entries (id, competition_id, email, full_name, date_of_birth, sex, status, price_pence) values ('${eid}','11111111-1111-1111-1111-111111111111','l${i}@x.com','L${i}','1990-01-01','M','${i === 10 ? "refunded" : "paid"}', ${total})`);
-  if (i <= 2) await db.exec(`insert into public.entry_addons (entry_id, addon_id, price_pence) values ('${eid}','${id("a1")}',2000)`);
-  else if (i <= 5) await db.exec(`insert into public.entry_addons (entry_id, addon_id, price_pence) values ('${eid}','${id("a2")}',1000)`);
-  await db.exec(`insert into public.payments (entry_id, stripe_session_id, amount_pence, stripe_fee_pence, status) values ('${eid}','cs_${i}',${total},${Math.round(total * 0.015 + 20)},'succeeded')`);
-}
-const settle = async () => rows(`select payee_name, payee_kind, entry_pence::int e, merch_pence::int m, photo_pence::int p, gross_pence::int g, fee_pence::int f, net_pence::int n from public.competition_settlement('11111111-1111-1111-1111-111111111111')`);
-let s = await settle();
-const by = Object.fromEntries(s.map((r) => [r.payee_name, r]));
-// takings of the 9 live entries: entry money 9 x 4000 = 36000; merch 2 x 2000 = 4000; photos 3 x 1000 = 3000
-ok(by["Implexus Gym"].e === 28800 && by["Implexus Gym"].m === 4000, "host: 80% of entry money (28,800) plus 100% of merchandise (4,000)");
-ok(by["White Lights Media"].p === 3000 && by["White Lights Media"].g === 3000, "photographer: 100% of photo packages (3,000)");
-ok(by["YNEPF"].e === 7200 && by["YNEPF"].g === 7200, "federation: 20% of entry money (7,200)");
-const feeTotal = (await rows(`select sum(stripe_fee_pence)::int f from public.payments`))[0].f;
-ok(by["YNEPF"].f === feeTotal && by["Implexus Gym"].f === 0 && by["White Lights Media"].f === 0, `policy "federation pays the fees": all ${feeTotal}p of Stripe fees (including the refunded entry's) come out of the federation's share`);
-ok(s.reduce((a, r) => a + r.n, 0) === 36000 + 4000 + 3000 - feeTotal, "the rows add up exactly: takings less fees");
-ok(by["YNEPF"].n === 7200 - feeTotal && by["Implexus Gym"].n === 32800 && by["White Lights Media"].n === 3000, "money to send: host 32,800 and photographer 3,000; the federation keeps what is left after fees");
-await db.exec(`update public.entry_settings set stripe_fee_policy='pro_rata' where competition_id='11111111-1111-1111-1111-111111111111'`);
-s = await settle();
-ok(s.reduce((a, r) => a + r.n, 0) === 43000 - feeTotal && s.reduce((a, r) => a + r.f, 0) === feeTotal, `policy "shared pro rata": fees are shared by size of takings, and still add up exactly (${s.map((r) => r.payee_name + " fee " + r.f).join(", ")})`);
-// awkward percentages never lose a penny
-await db.exec(`delete from public.payout_rules where category='entry'`);
-await db.exec(`insert into public.payout_rules (competition_id, category, payee_id, percent) values ('11111111-1111-1111-1111-111111111111','entry','${id("f2")}',33.33),('11111111-1111-1111-1111-111111111111','entry','${id("f3")}',33.33),('11111111-1111-1111-1111-111111111111','entry','${id("f1")}',33.34)`);
-s = await settle();
-ok(s.reduce((a, r) => a + r.e, 0) === 36000, "thirds that do not divide evenly still add up to exactly the takings: " + s.map((r) => r.e).join(" + "));
-// nothing paid yet
+  ('${COMP}','merch','${id("f2")}',100),('${COMP}','merch','${id("f1")}',0),('${COMP}','photo','${id("f3")}',100),('${COMP}','photo','${id("f1")}',0)`);
+await db.exec(`insert into public.addons (id, competition_id, kind, name, price_pence) values ('${id("a1")}','${COMP}','merch','T-shirt',2000),('${id("a2")}','${COMP}','photo','Photo pack',1000)`);
+let n = 0;
+const mkEntry = async (o) => {
+  n++; const eid = `00000000-0000-0000-0000-0000000002${String(n).padStart(2, "0")}`;
+  const e = { dob: "1990-01-01", event: "full_power", status: "paid", price: 4000, list: "null", discount: 0, addon: null, fee: 70, ...o };
+  const total = e.price + (e.addon ? e.addon.price : 0);
+  await db.exec(`insert into public.entries (id, competition_id, email, full_name, date_of_birth, sex, status, event, price_pence, discount_pence, list_price_pence) values ('${eid}','${COMP}','s${n}@x.com','S${n}','${e.dob}','M','${e.status}','${e.event}', ${total}, ${e.discount}, ${e.list})`);
+  if (e.addon) await db.exec(`insert into public.entry_addons (entry_id, addon_id, price_pence) values ('${eid}','${id(e.addon.id)}',${e.addon.price})`);
+  if (total > 0) await db.exec(`insert into public.payments (entry_id, stripe_session_id, amount_pence, stripe_fee_pence, status) values ('${eid}','cs_s${n}',${total},${e.fee},'succeeded')`);
+  return eid;
+};
+const settle = async () => rows(`select payee_name, payee_kind, entry_pence::int e, merch_pence::int m, photo_pence::int p, gross_pence::int g, fee_pence::int f, net_pence::int n from public.competition_settlement('${COMP}')`);
+const byName = (s) => Object.fromEntries(s.map((r) => [r.payee_name, r]));
+// the worked example: a £40 full power entry: the federation keeps £12 and the host receives £28
+await mkEntry({});
+let s1 = byName(await settle());
+ok(s1["Implexus Gym"].e === 2800 && s1["YNEPF"].e === 1200, "a £40 full power entry: the host receives £28 and the federation keeps £12: " + JSON.stringify(s1));
+// ...and a £20 T-shirt goes wholly to the host: £48 in total
+await clearEntries();
+await mkEntry({ addon: { id: "a1", price: 2000 } });
+s1 = byName(await settle());
+ok(s1["Implexus Gym"].e === 2800 && s1["Implexus Gym"].m === 2000 && s1["Implexus Gym"].g === 4800 && s1["YNEPF"].g === 1200, "with a £20 T-shirt the host receives £48 in total, and the federation still keeps £12");
+// each kind of entry: bench, sub-junior, master (full power rate), and a discounted one
+await clearEntries();
+await mkEntry({ event: "bench_only", price: 2500 });                                  // bench: federation £7.50, host £17.50
+await mkEntry({ dob: "2010-03-03", price: 1500 });                                    // sub-junior: federation £4.50, host £10.50
+await mkEntry({ dob: "1960-03-03" });                                                 // master: full power rate: £12 / £28
+await mkEntry({ price: 2000, discount: 2000, list: 4000 });                           // paid £20 of £40: host still £28, the federation absorbs £8
+await mkEntry({ addon: { id: "a2", price: 1000 } });                                  // photo pack £10 goes to the photographer
+await mkEntry({ status: "refunded", price: 4000 });                                   // refunded: not counted (Stripe still keeps its fee)
+let s = await settle(); let by = byName(s);
+ok(by["Implexus Gym"].e === 1750 + 1050 + 2800 + 2800 + 2800, "host entry money: 17.50 + 10.50 + 28 + 28 + 28 = £114: " + by["Implexus Gym"].e);
+ok(by["YNEPF"].e === (750 + 450 + 1200 + (2000 - 2800) + 1200), "the federation's entry money: 7.50 + 4.50 + 12 - 8 (the discount it absorbs) + 12: " + by["YNEPF"].e);
+ok(by["White Lights Media"].p === 1000 && by["White Lights Media"].g === 1000, "the photographer gets the whole of the photo packages");
+const fees = (await rows(`select sum(stripe_fee_pence)::int f from public.payments p join public.entries e on e.id = p.entry_id where e.competition_id = '${COMP}'`))[0].f;
+ok(by["YNEPF"].f === fees && by["Implexus Gym"].f === 0 && by["White Lights Media"].f === 0, `the federation pays all ${fees}p of Stripe fees, including on the refunded entry`);
+const cash = 2500 + 1500 + 4000 + 2000 + 5000;   // what the live entries actually paid (the refunded one is excluded)
+ok(s.reduce((a, r) => a + r.n, 0) === cash - fees, "the rows add up exactly: cash taken less fees: " + s.reduce((a, r) => a + r.n, 0) + " = " + (cash - fees));
+// a free place (a comped entry) is the full price to the host: the federation absorbs it
+const freeId = await mkEntry({ status: "comped", price: 0, list: 4000 });
+const sFree = byName(await settle());
+ok(sFree["Implexus Gym"].e === by["Implexus Gym"].e + 2800 && sFree["YNEPF"].e === by["YNEPF"].e - 2800, "a free place pays the host in full (£28) and the federation absorbs it");
+// older entries have no list price saved: it is worked out from what was paid plus the discount
+await db.exec(`update public.entries set list_price_pence = null where price_pence = 2000 and discount_pence = 2000`);
+ok(byName(await settle())["Implexus Gym"].e === sFree["Implexus Gym"].e, "an entry with no saved list price uses what was paid plus the discount");
+// a fee below the federation's amount: the host cannot be paid a negative amount
+await clearEntries();
+await mkEntry({ price: 1000, fee: 0 });
+s = byName(await settle());
+ok(s["Implexus Gym"].e === 0 && s["YNEPF"].e === 1000, "if the entry fee is less than the federation's amount, the federation keeps the lot and the host is not paid a negative amount");
+// the fixed amounts can be changed
+await clearEntries(); await db.exec(`update public.federation_fees set pence = 1500 where key = 'full_power'`);
+await mkEntry({});
+s = byName(await settle()); ok(s["Implexus Gym"].e === 2500 && s["YNEPF"].e === 1500, "changing the federation's fixed amount changes the split");
+await db.exec(`update public.federation_fees set pence = 1200 where key = 'full_power'`);
+// with no host set, all the entry money stays with the federation
+await db.exec(`update public.competitions set host_payee_id = null where id = '${COMP}'`);
+s = byName(await settle()); ok(!s["Implexus Gym"] || s["Implexus Gym"].e === 0, "with no host set, the host gets no entry money (it stays with the federation)");
+await db.exec(`update public.competitions set host_payee_id = '${id("f2")}' where id = '${COMP}'`);
+// nothing paid
 await db.exec(`update public.entries set status='cancelled'`);
-s = await settle(); ok(s.every((r) => r.g === 0 && r.n <= 0), "no paid entries: nothing is owed");
+s = await settle(); ok(s.every((r) => r.e === 0 && r.m === 0 && r.p === 0), "no paid entries: nothing is owed");
+// only the entries team may change the fixed amounts
+const askFees = async (who) => { await as(who); try { return (await db.query(`update public.federation_fees set pence = pence where key = 'full_power'`)).affectedRows; } catch (e) { return -1; } finally { await db.exec("reset role"); } };
+ok((await askFees(U.editor)) <= 0 && (await askFees(null)) <= 0 && (await askFees(U.entries)) === 1, "only the entries team can change the federation's fixed amounts");
 
-// setting up who gets paid, then the report adds up
+// setting up who gets paid (host, merchandise, photos), then the report adds up
 await db.exec("reset role");
 const CC = "44444444-4444-4444-4444-444444444444";
 await db.exec(`insert into public.competitions (id, name, start_date, capacity, published, slug) values ('${CC}','Payout Open','2027-06-01',20,true,'payout')`);
 const setup = async (who, o) => { await as(who); try { return (await db.query(`select public.save_payout_setup('${CC}', $1::jsonb) r`, [JSON.stringify(o)])).rows[0].r; } catch (e) { return { error: e.message }; } finally { await db.exec("reset role"); } };
 ok((await setup(U.editor, { host_name: "Leeds Gym" })).error === "forbidden" && (await setup(null, { host_name: "x" })).error !== undefined, "only the entries team can set who gets paid");
-ok((await setup(U.entries, { host_name: "" })).error === "invalid:host_name" && (await setup(U.entries, { host_name: "X", host_entry_percent: 120 })).error === "invalid:percent", "a host is needed, and percentages are 0 to 100");
-ok((await setup(U.entries, { host_name: "Leeds Gym", host_entry_percent: 80, host_merch_percent: 100, photographer_name: "White Lights Media", photographer_percent: 100 })).host_id, "the setup is saved");
-await db.exec(`insert into public.entries (competition_id, email, full_name, date_of_birth, sex, status, price_pence) values ('${CC}','p1@x.com','P1','1990-01-01','M','paid',4000),('${CC}','p2@x.com','P2','1990-01-01','M','paid',2000),('${CC}','p3@x.com','P3','1990-01-01','M','comped',0)`);
+ok((await setup(U.entries, { host_name: "" })).error === "invalid:host_name" && (await setup(U.entries, { host_name: "X", host_merch_percent: 120 })).error === "invalid:percent", "a host is needed, and percentages are 0 to 100");
+ok((await setup(U.entries, { host_name: "Leeds Gym", host_merch_percent: 100, photographer_name: "White Lights Media", photographer_percent: 100 })).host_id, "the setup is saved");
+ok((await db.query(`select host_payee_id is not null h from public.competitions where id = '${CC}'`)).rows[0].h, "the competition now knows its host");
+await db.exec(`insert into public.entries (competition_id, email, full_name, date_of_birth, sex, status, event, price_pence) values ('${CC}','p1@x.com','P1','1990-01-01','M','paid','full_power',4000),('${CC}','p2@x.com','P2','1990-01-01','M','paid','full_power',2000),('${CC}','p3@x.com','P3','1990-01-01','M','comped','full_power',0)`);
 await db.exec(`insert into public.payments (entry_id, stripe_session_id, amount_pence, stripe_fee_pence, status) select id, 'cs_pay_' || email, price_pence, 70, 'succeeded' from public.entries where competition_id = '${CC}' and price_pence > 0`);
 await as(U.entries);
 const money = (await db.query(`select payee_name n, payee_kind k, gross_pence::int g, fee_pence::int f, net_pence::int net from public.competition_settlement('${CC}')`)).rows;
 const mh = Object.fromEntries(money.map((r) => [r.n, r]));
-ok(mh["Leeds Gym"].g === 4800 && mh["YNEPF"].g === 1200 && mh["Leeds Gym"].f === 0 && mh["YNEPF"].f === 140 && mh["YNEPF"].net === 1060 && mh["Leeds Gym"].net === 4800, "the 80/20 split of £60 takings, the federation bearing the £1.40 of Stripe fees: " + JSON.stringify(money));
-ok(money.reduce((n, r) => n + r.net, 0) === 6000 - 140, "the report adds up: takings less fees");
-await setup(U.entries, { host_name: "leeds gym", host_entry_percent: 100, host_merch_percent: 100 });
+ok(mh["Leeds Gym"].g === 2800 + 800 && mh["YNEPF"].g === 6000 - 3600 && mh["YNEPF"].f === 140 && mh["YNEPF"].net === 2400 - 140 && mh["Leeds Gym"].net === 3600, "£40 entry (host £28), a £20 entry (host £8, as the fee is only £20 and the federation keeps £12) and a free place with no saved price (host £0): " + JSON.stringify(money));
+ok(money.reduce((a, r) => a + r.net, 0) === 6000 - 140, "the report adds up: takings less fees");
+await setup(U.entries, { host_name: "leeds gym", host_merch_percent: 100 });
 ok((await db.query(`select count(*)::int n from public.payees where lower(name) = 'leeds gym'`)).rows[0].n === 1, "a host is found by name, not made twice");
 ok((await db.query(`select count(*)::int n from public.payout_rules where competition_id = '${CC}' and category = 'photo'`)).rows[0].n === 0, "saving again replaces the old split (no photographer this time)");
 await db.exec("reset role");

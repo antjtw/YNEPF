@@ -181,6 +181,7 @@ const manual = async (who, o) => { await db.exec("reset role"); await db.query(`
 ok((await manual("editor", {})).error === "forbidden", "an editor cannot add manual entries");
 ok((await manual(null, {})).error !== undefined, "the public cannot");
 r = await manual("entries", {});
+ok(r.entry_id && (await db.query(`select list_price_pence l from public.entries where id='${r.entry_id}'`)).rows[0].l === 6000, "a free place by hand is remembered at the full price, which the federation absorbs");
 ok(r.entry_id && (await db.query(`select status s, source so, price_pence p from public.entries where id='${r.entry_id}'`)).rows[0].s === "comped", "the entries team can add a free entry, even though entry is closed and not yet open (their decision)");
 ok((await manual("entries", {})).error === "already_entered", "the same email cannot be added twice");
 r = await manual("entries", { email: "pat@example.com", mode: "paid_elsewhere", price_pence: 4000 });
@@ -217,6 +218,7 @@ r = await price(c20.code, { email: "samsmith@example.com" });
 ok(r.price_pence === 4000 && r.discount_pence === 2000 && r.free === false, "£20 off a £60 entry makes it £40: " + JSON.stringify(r));
 ok((await price(c20.code.toLowerCase())).error === "discount_used", "a one-use code cannot be used a second time (held places count), and case does not matter");
 r = await price(half.code); ok(r.price_pence === 3000, "half price of £60 is £30");
+ok((await db.query(`select price_pence p, discount_pence d, list_price_pence l from public.entries where id='${r.entry_id}'`)).rows.map((x) => x.p + "/" + x.d + "/" + x.l).join() === "3000/3000/6000", "the entry remembers the full price (6000), the discount (3000) and what was paid (3000): the host is paid on the full price");
 ok((await price(free.code, { email: "someone@example.com" })).error === "discount_not_yours", "a code tied to an email only works for that email");
 r = await price(free.code, { email: "vic@example.com" });
 const fr = (await db.query(`select status s, price_pence p, discount_pence d, paid_at is not null pa, hold_expires_at h from public.entries where id='${r.entry_id}'`)).rows[0];

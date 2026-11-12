@@ -848,7 +848,7 @@
   var MONEY_ERRORS = { forbidden: "You do not have permission to change who gets paid.", "invalid:host_name": "Enter the name of the host (the gym or venue).", "invalid:percent": "Percentages must be between 0 and 100.",
     "invalid:payee_kind": "That name is already used for a different kind of payee. Use a different name." };
   var CATEGORY_NAMES = { entry: "Entry money", merch: "Merchandise", photo: "Photo packages" };
-  function money(p) { return "£" + (p / 100).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function money(p) { return (p < 0 ? "−" : "") + "£" + (Math.abs(p) / 100).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
   function renderMoneyTab(view, c) {
     view.replaceChildren(el("p", null, "Loading…"));
@@ -856,28 +856,35 @@
       sb.rpc("competition_settlement", { c: c.id }),
       sb.from("payout_rules").select("*, payees(name,kind)").eq("competition_id", c.id),
       sb.from("payouts").select("*, payees(name)").eq("competition_id", c.id).order("paid_on", { ascending: false }),
-      sb.from("payees").select("id,name,kind")
+      sb.from("payees").select("id,name,kind"),
+      sb.from("federation_fees").select("key,pence")
     ]).then(function (res) {
       if (res[0].error) throw res[0].error;
+      var fees = {}; ((res[4].error ? [] : res[4].data) || []).forEach(function (f) { fees[f.key] = f.pence; });
+      var hostPayee = (res[3].data || []).filter(function (p) { return p.id === c.host_payee_id; })[0];
       var rows = res[0].data || [], rules = res[1].error ? [] : res[1].data || [], sent = res[2].error ? [] : res[2].data || [], payees = res[3].error ? [] : res[3].data || [];
       var gross = rows.reduce(function (n, r) { return n + r.gross_pence; }, 0), fees = rows.reduce(function (n, r) { return n + r.fee_pence; }, 0);
       var fed = rows.filter(function (r) { return r.payee_kind === "federation"; });
       var toSend = rows.filter(function (r) { return r.payee_kind !== "federation"; }).reduce(function (n, r) { return n + r.net_pence; }, 0);
       function sentTo(r) { return sent.filter(function (s) { return s.payee_id === r.payee_id; }).reduce(function (n, s) { return n + s.amount_pence; }, 0); }
-      var split = ["entry", "merch", "photo"].map(function (cat) {
+      var split = ["merch", "photo"].map(function (cat) {
         var rs = rules.filter(function (r) { return r.category === cat && r.percent > 0; });
         return rs.length ? el("li", null, el("strong", null, CATEGORY_NAMES[cat] + ": "), rs.map(function (r) { return (r.payees ? r.payees.name : "?") + " " + r.percent + "%"; }).join(", ")) : null;
       }).filter(Boolean);
-
+      var fp = function (k, d) { return money(fees[k] === undefined ? d : fees[k]); };
       view.replaceChildren(
         el("div", { class: "actions", style: "margin-bottom:var(--space-3)" },
-          btn("Set who gets paid", function () { setPayouts(c, rules, function () { renderMoneyTab(view, c); }); }, "btn-primary"),
-          rows.length ? btn("Record a payment sent", function () { recordPayout(c, rows, function () { renderMoneyTab(view, c); }); }, "btn-secondary") : null),
+          btn("Set who gets paid", function () { setPayouts(c, rules, hostPayee ? hostPayee.name : "", function () { renderMoneyTab(view, c); }); }, "btn-primary"),
+          rows.length ? btn("Record a payment sent", function () { recordPayout(c, rows, function () { renderMoneyTab(view, c); }); }, "btn-secondary") : null,
+          btn("Change the federation's amounts", function () { setFees(fees, function () { renderMoneyTab(view, c); }); })),
         el("h2", null, "How the money is split"),
-        split.length ? el("ul", null, split) : el("p", { class: "empty" }, "Not set up yet. Press “Set who gets paid” to say who the host is and how the entry money is shared."),
-        el("p", { class: "help" }, "Stripe's processing fees come out of the federation's share. Discounted and free entries bring in less money, and everyone's share is worked out on what was actually taken."),
+        el("p", null, hostPayee ? "Host: " + hostPayee.name + "." : el("strong", null, "No host set yet: all the entry money stays with the federation until you set one.")),
+        el("p", null, "From each entry the federation keeps a fixed amount: ", el("strong", null, fp("full_power", 1200) + " for a full power entry, " + fp("bench_only", 750) + " for bench only and " + fp("sub_junior", 450) + " for a sub-junior"),
+          " (30% of the standard YNE prices, whatever the host charges). Novice, junior, masters and open entries pay the full power amount. The host receives the rest of the entry fee."),
+        split.length ? el("ul", null, split) : null,
+        el("p", { class: "help" }, "The federation absorbs discounts and free places (the host is still paid on the full entry fee) and all of Stripe's processing fees. So a discounted entry can leave the federation's share lower, or even below nothing."),
         el("h2", null, "Money to send"),
-        el("p", { class: "panel-intro" }, "Taken so far: " + money(gross) + ". Stripe fees: " + money(fees) + ". To send to others: " + money(toSend) + ". The federation keeps " + money(fed.reduce(function (n, r) { return n + r.net_pence; }, 0)) + ". Figures update as entries come in."),
+        el("p", { class: "panel-intro" }, "Taken so far: " + money(gross) + ". Stripe fees: " + money(fees) + ". To send to others: " + money(toSend) + ". The federation's share after fees: " + money(fed.reduce(function (n, r) { return n + r.net_pence; }, 0)) + ". Figures update as entries come in."),
         rows.length ? el("div", { class: "table-scroll" }, el("table", { class: "admin-table" },
           el("thead", null, el("tr", null, ["Who", "Entry money", "Merchandise", "Photos", "Share", "Stripe fees", "To send", "Sent", "Still to send"].map(function (h) { return el("th", { scope: "col" }, h); }))),
           el("tbody", null, rows.map(function (r) {
@@ -893,27 +900,43 @@
     }).catch(function (e) { view.replaceChildren(el("p", { class: "form-error" }, friendly(e).replace(/^forbidden$/, "You do not have permission to see the money report."))); });
   }
 
-  function setPayouts(c, rules, done) {
+  function setPayouts(c, rules, hostName, done) {
     function pct(cat, kind) { var r = rules.filter(function (x) { return x.category === cat && x.payees && x.payees.kind === kind; })[0]; return r ? r.percent : null; }
     function name(kind) { var r = rules.filter(function (x) { return x.payees && x.payees.kind === kind; })[0]; return r ? r.payees.name : ""; }
     openForm({
       title: "Who gets paid: " + c.name, saveLabel: "Save",
-      intro: "The host gets their share of the entry money and the federation keeps the rest. Merchandise and photo packages are split the same way. Changing this changes the report straight away, including for entries already taken.",
-      values: { host_name: name("host"), host_entry_percent: pct("entry", "host") === null ? 80 : pct("entry", "host"), host_merch_percent: pct("merch", "host") === null ? 100 : pct("merch", "host"),
+      intro: "The host is paid the entry fee less the federation's fixed amount (shown on the Money tab). Merchandise and photo packages are shared by the percentages below. Changing this changes the report straight away, including for entries already taken.",
+      values: { host_name: hostName || name("host"), host_merch_percent: pct("merch", "host") === null ? 100 : pct("merch", "host"),
         photographer_name: name("photographer") || "White Lights Media", photographer_percent: pct("photo", "photographer") === null ? 100 : pct("photo", "photographer") },
       fields: [
         { name: "host_name", label: "Host (the gym or venue)", required: true, help: "A name you have used before is found again; a new name adds a new host." },
-        { name: "host_entry_percent", label: "Host's share of entry money (%)", type: "number", min: "0", half: true, help: "The federation keeps the rest." },
-        { name: "host_merch_percent", label: "Host's share of merchandise (%)", type: "number", min: "0", half: true },
+        { name: "host_merch_percent", label: "Host's share of merchandise (%)", type: "number", min: "0", half: true, help: "The federation keeps the rest." },
         { name: "photographer_name", label: "Photographer", half: true, help: "Leave blank if there are no photo packages." },
         { name: "photographer_percent", label: "Photographer's share of photo packages (%)", type: "number", min: "0", half: true }
       ],
-      validate: function (v) { return [v.host_entry_percent, v.host_merch_percent, v.photographer_percent].some(function (x) { return x === null || x < 0 || x > 100; }) ? "Percentages must be between 0 and 100." : null; },
+      validate: function (v) { return [v.host_merch_percent, v.photographer_percent].some(function (x) { return x === null || x < 0 || x > 100; }) ? "Percentages must be between 0 and 100." : null; },
       onSave: function (v) {
-        return sb.rpc("save_payout_setup", { c: c.id, p: { host_name: v.host_name, host_entry_percent: v.host_entry_percent, host_merch_percent: v.host_merch_percent, photographer_name: v.photographer_name, photographer_percent: v.photographer_percent } }).then(function (r) {
+        return sb.rpc("save_payout_setup", { c: c.id, p: { host_name: v.host_name, host_merch_percent: v.host_merch_percent, photographer_name: v.photographer_name, photographer_percent: v.photographer_percent } }).then(function (r) {
           if (r.error) { var m = (r.error.message || "").trim(); throw new Error(MONEY_ERRORS[m] || friendly(r.error)); }
           toast("Saved."); done();
         });
+      }
+    });
+  }
+
+  // The fixed amounts the federation keeps from each entry. They apply to every competition (and change the report for all of them).
+  function setFees(fees, done) {
+    openForm({
+      title: "What the federation keeps from each entry", saveLabel: "Save",
+      intro: "A fixed amount from each entry, whatever the host charges: 30% of the standard YNE prices. Novice, junior, masters and open entries pay the full power amount. This changes the report for every competition, including entries already taken.",
+      values: { full_power: ((fees.full_power === undefined ? 1200 : fees.full_power) / 100), bench_only: ((fees.bench_only === undefined ? 750 : fees.bench_only) / 100), sub_junior: ((fees.sub_junior === undefined ? 450 : fees.sub_junior) / 100) },
+      fields: [
+        { name: "full_power", label: "Full power entry (£)", type: "number", min: "0", required: true, half: true }, { name: "bench_only", label: "Bench only entry (£)", type: "number", min: "0", required: true, half: true },
+        { name: "sub_junior", label: "Sub-junior entry (£)", type: "number", min: "0", required: true, half: true }
+      ],
+      onSave: function (v) {
+        return Promise.all(["full_power", "bench_only", "sub_junior"].map(function (k) { return sb.from("federation_fees").update({ pence: Math.round(v[k] * 100) }).eq("key", k).then(ok); }))
+          .then(function () { toast("Saved."); done(); });
       }
     });
   }
@@ -1094,7 +1117,7 @@
     openForm({
       title: "Cancel or refund: " + e.full_name, saveLabel: "Confirm",
       intro: (paid ? "Paid " + entryMoney(paid) + (refunded ? ", already refunded " + entryMoney(refunded) : "") + ". " : "") + (canRefund ? "Stripe keeps its processing fee on a refund, so the federation bears that cost. " : "") +
-        (closed ? "Entries have closed. The entry form tells lifters refunds stop at closing, so a refund now is the entries team's call. " : "") + "The lifter is emailed unless you untick the box. This cannot be undone.",
+        (closed ? "Entries have closed, so refunds are not normally given now. Use this only for unforeseen circumstances. " : "") + "The lifter is emailed unless you untick the box. This cannot be undone.",
       values: { action: options[0].value, amount: "", reason: "", notify: true },
       fields: [
         { name: "action", label: "What would you like to do?", type: "select", options: options },
