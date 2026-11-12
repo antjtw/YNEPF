@@ -726,7 +726,7 @@
   function renderEntriesTab(view, c) {
     view.replaceChildren(el("p", null, "Loading…"));
     Promise.all([
-      sb.from("entries").select("*, weight_classes(label), divisions(name,is_home), entry_private(*), payments(*)").eq("competition_id", c.id).order("created_at", { ascending: true }),
+      sb.from("entries").select("*, weight_classes(label), divisions(name,is_home), entry_private(*), payments(*, refunds(*))").eq("competition_id", c.id).order("created_at", { ascending: true }),
       sb.from("divisions").select("id,name").order("sort_order"),
       sb.from("weight_classes").select("id,sex,label,sort_order").order("sort_order"),
       sb.from("clubs").select("name").eq("active", true).order("name")
@@ -803,13 +803,16 @@
           dlRows([["Status", ENTRY_STATUS[e.status] || e.status], ["Amount", entryMoney(e.price_pence)], ["Entered", when(e.created_at)], ["Paid", when(e.paid_at)],
             pay ? ["Card", (pay.card_brand || "card") + (pay.card_last4 ? " ending " + pay.card_last4 : "")] : null,
             pay && pay.receipt_url ? ["Receipt", el("a", { href: pay.receipt_url, target: "_blank", rel: "noopener" }, "Open the Stripe receipt")] : null,
-            pay ? ["Stripe fee", entryMoney(pay.stripe_fee_pence)] : null]),
+            pay ? ["Stripe fee", entryMoney(pay.stripe_fee_pence)] : null,
+            e.status === "cancelled" || e.status === "refunded" ? ["Cancelled", when(e.cancelled_at) + (e.cancel_reason ? ": " + e.cancel_reason : "")] : null]),
+          pay && (pay.refunds || []).length ? el("ul", { class: "history-list" }, pay.refunds.map(function (r) { return el("li", null, el("strong", null, entryMoney(r.amount_pence) + " refunded"), " · " + when(r.created_at) + " · " + (r.created_by || "") + (r.reason ? " · " + r.reason : "")); })) : null,
           e.entry_note ? el("div", null, el("h3", null, "Private note"), el("p", null, e.entry_note)) : null,
           el("div", { class: "actions", style: "margin-top:var(--space-4)" },
             btn("Edit", function () { editEntry(e, c, refs, reload); }, "btn-secondary"),
             e.is_guest ? btn(e.membership_checked ? "Mark membership unchecked" : "Mark membership checked", function () {
               sb.from("entries").update({ membership_checked: !e.membership_checked }).eq("id", e.id).then(ok).then(function () { toast("Updated."); reload(); }).catch(function (er) { toast(friendly(er), "error"); });
             }) : null,
+            e.status === "paid" || e.status === "comped" || e.status === "held" ? btn("Cancel or refund…", function () { cancelOrRefund(e, c, reload); }, "btn-danger") : null,
             btn("Show history", function () { showHistory(body, e); }))].filter(Boolean));
       }
 
@@ -832,6 +835,50 @@
         el("div", { class: "entry-toolbar" }, q, st, so, g, dp), count, list);
       draw();
     }).catch(function (e) { view.replaceChildren(el("p", { class: "form-error" }, friendly(e))); });
+  }
+
+  // Cancel an entry and/or refund through Stripe. The entry-refund function checks the caller is on the entries team,
+  // moves the money, records who did it and why, frees the place, and emails the lifter.
+  function cancelOrRefund(e, c, reload) {
+    var pays = (e.payments || []).filter(function (p) { return p.status === "succeeded"; }), pay = pays[0];
+    var paid = pay ? pay.amount_pence : 0, refunded = pay ? (pay.refunds || []).reduce(function (n, r) { return n + r.amount_pence; }, 0) : 0, left = Math.max(paid - refunded, 0);
+    var canRefund = e.status === "paid" && left > 0;
+    var options = canRefund ? [
+      { value: "full", label: "Cancel the entry and refund " + entryMoney(left) + " in full" },
+      { value: "partcancel", label: "Cancel the entry and refund part of it" },
+      { value: "part", label: "Keep the entry and refund part of it" },
+      { value: "cancel", label: "Cancel the entry with no refund" }] : [{ value: "cancel", label: "Cancel the entry" + (e.status === "held" ? " (they have not paid)" : e.status === "comped" ? " (it is free)" : "") }];
+    var closed = c.entry_closes && new Date(c.entry_closes) <= new Date();
+    openForm({
+      title: "Cancel or refund: " + e.full_name, saveLabel: "Confirm",
+      intro: (paid ? "Paid " + entryMoney(paid) + (refunded ? ", already refunded " + entryMoney(refunded) : "") + ". " : "") + (canRefund ? "Stripe keeps its processing fee on a refund, so the federation bears that cost. " : "") +
+        (closed ? "Entries have closed. The entry form tells lifters refunds stop at closing, so a refund now is the entries team's call. " : "") + "The lifter is emailed unless you untick the box. This cannot be undone.",
+      values: { action: options[0].value, amount: "", reason: "", notify: true },
+      fields: [
+        { name: "action", label: "What would you like to do?", type: "select", options: options },
+        canRefund ? { name: "amount", label: "Amount to refund, for the part options (£)", type: "number", min: "0", help: "Up to " + entryMoney(left) + ". Leave blank for the full amount." } : null,
+        { name: "reason", label: "Reason", type: "textarea", rows: 3, required: true, help: "Kept in the history, and included in the email to the lifter." },
+        { name: "notify", label: "Email the lifter", type: "checkbox" }
+      ].filter(Boolean),
+      validate: function (v) {
+        if ((v.action === "part" || v.action === "partcancel")) {
+          if (v.amount === null || v.amount <= 0) return "Enter how much to refund.";
+          if (Math.round(v.amount * 100) > left) return "That is more than the " + entryMoney(left) + " left to refund.";
+        }
+        return null;
+      },
+      onSave: function (v) {
+        var pence = v.action === "full" ? left : (v.action === "part" || v.action === "partcancel") ? Math.round(v.amount * 100) : 0;
+        return sb.auth.getSession().then(function (s) {
+          var token = s && s.data && s.data.session && s.data.session.access_token;
+          return fetch((window.YNEPF_CONFIG.supabaseUrl || "").replace(/\/$/, "") + "/functions/v1/entry-refund", {
+            method: "POST", headers: { "Content-Type": "application/json", apikey: window.YNEPF_CONFIG.supabaseAnonKey || "", Authorization: "Bearer " + (token || "") },
+            body: JSON.stringify({ entry_id: e.id, refund_pence: pence, cancel: v.action !== "part", reason: v.reason, notify: !!v.notify })
+          });
+        }).then(function (r) { return r.json().catch(function () { return {}; }).then(function (b) { if (!r.ok) throw new Error(b.message || "That did not work. Please try again."); return b; }); })
+          .then(function (b) { toast(b.refunded_pence ? entryMoney(b.refunded_pence) + " refunded." : "Entry cancelled."); reload(); });
+      }
+    });
   }
 
   // The changes made to one entry, from the audit log.

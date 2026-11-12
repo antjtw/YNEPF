@@ -113,6 +113,18 @@ Until it is deployed, the confirmation page shows "Still confirming" after about
 
 ---
 
+## Part 5c: Cancelling and refunding entries
+
+The **Cancel or refund** button on each entry in the editor uses a function, `entry-refund`. It checks the person is signed in and on the entries team before anything happens, sends the refund to Stripe, records who did it and why, frees the place, and emails the lifter.
+
+1. In Supabase, **Edge Functions > Deploy a new function > Via editor**. Name it `entry-refund`, paste in `supabase/functions/entry-refund/index.ts`, switch **Verify JWT** **off** (it checks the login itself), and **Deploy**.
+2. Replace `stripe-webhook` with the newest file from the branch (it now also notices refunds made inside Stripe).
+3. In Stripe (test mode first): **Developers > Webhooks**, open your destination, and add the event **`charge.refunded`** to the ones it listens for.
+
+Stripe keeps its processing fee on a refund, so the federation bears that cost (it is already counted in the money report). A refund can be made after entries close: the entry form tells lifters refunds stop at closing, so it is the entries team's call.
+
+---
+
 ## Part 5b: The club list
 
 Lifters in English divisions can choose their club (it is optional) from the English Powerlifting Association's list of approved clubs, copied from the EPA website. Only club **names** are copied, never contact details. Lifters from other nations have no club question, and clubs from other bodies are not included.

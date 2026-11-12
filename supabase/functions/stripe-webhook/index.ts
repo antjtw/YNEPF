@@ -125,6 +125,22 @@ if (typeof Deno !== "undefined") {
           await send([row.email, copy], `Your payment for ${row.competitions.name} has been refunded`,
             `Hi ${row.full_name},\n\nSorry: your payment arrived after your place was released and the competition has since filled, so we have refunded you in full (${pounds(row.price_pence)}). It can take a few days to reach your account.\n\nYou can join the waiting list on the competition page.\n\nYNEPF`);
         }
+      } else if (event.type === "charge.refunded") {
+        // A refund made in Stripe itself (or by our own refund function): make sure it is recorded here too.
+        const charge = event.data.object, pi = charge.payment_intent;
+        if (pi) {
+          const [pay] = await (await db(`payments?stripe_payment_intent=eq.${encodeURIComponent(pi)}&select=id,amount_pence,entry_id`)).json();
+          if (pay) {
+            const list = await stripe(`refunds?payment_intent=${encodeURIComponent(pi)}&limit=100`);
+            for (const r of (list.data ?? [])) {
+              if (r.status === "failed" || r.status === "canceled") continue;
+              // Ours are recorded first with the reason and who did it; this only adds ones we have not seen.
+              await db("refunds?on_conflict=stripe_refund_id", { method: "POST", headers: { prefer: "resolution=ignore-duplicates,return=minimal" }, body: JSON.stringify({ payment_id: pay.id, stripe_refund_id: r.id, amount_pence: r.amount, reason: "Refunded in Stripe", created_by: "stripe" }) });
+            }
+            const total = (list.data ?? []).filter((r: { status: string }) => r.status !== "failed" && r.status !== "canceled").reduce((n: number, r: { amount: number }) => n + r.amount, 0);
+            if (total >= pay.amount_pence) await db(`entries?id=eq.${pay.entry_id}&status=eq.paid`, { method: "PATCH", headers: { prefer: "return=minimal" }, body: JSON.stringify({ status: "refunded", cancelled_at: new Date().toISOString(), cancel_reason: "Refunded in Stripe" }) });
+          }
+        }
       } else if (event.type === "checkout.session.expired") {
         await db(`payments?stripe_session_id=eq.${encodeURIComponent(session.id)}`, { method: "PATCH", headers: { prefer: "return=minimal" }, body: JSON.stringify({ status: "expired" }) });
         if (entryId) await db(`entries?id=eq.${entryId}&status=eq.held`, { method: "PATCH", headers: { prefer: "return=minimal" }, body: JSON.stringify({ status: "cancelled", cancelled_at: new Date().toISOString(), cancel_reason: "checkout expired" }) });

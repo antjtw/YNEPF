@@ -32,4 +32,18 @@ assert.equal(es.statusFrom([]), "unknown", "no such payment"); assert.equal(es.s
 assert.equal(es.statusFrom([{ status: "succeeded", entries: { status: "paid" } }]), "paid"); assert.equal(es.statusFrom([{ status: "succeeded", entries: [{ status: "comped" }] }]), "paid", "joined rows can come as a list");
 assert.equal(es.statusFrom([{ status: "succeeded", entries: { status: "refunded" } }]), "refunded");
 assert(es.validSession("cs_test_a1B2c3D4e5") && !es.validSession("../etc") && !es.validSession("cs_"), "only real-looking session ids are looked up");
+const rf = await import("../../supabase/functions/entry-refund/index.ts");
+const P = (o) => rf.refundPlan({ entryStatus: "paid", paidPence: 4000, refundedPence: 0, refundPence: 0, cancel: true, ...o });
+assert.deepEqual([P({ refundPence: 4000 }).finalStatus, P({ refundPence: 4000 }).refundPence], ["refunded", 4000], "a full refund ends the entry as refunded");
+assert.equal(P({ refundPence: 1000, cancel: true }).finalStatus, "cancelled", "a part refund and cancel: cancelled");
+assert.equal(P({ refundPence: 1000, cancel: false }).finalStatus, "paid", "a goodwill part refund keeps the entry");
+assert.equal(P({ refundPence: 0, cancel: true }).finalStatus, "cancelled", "cancel with no refund");
+assert.equal(P({ refundPence: 4000, cancel: false }).finalStatus, "refunded", "refunding everything always ends the entry, even if cancel was not asked for");
+assert.equal(P({ refundPence: 3500, refundedPence: 1000 }).error, "That is more than is left to refund (30.00 pounds).", "cannot refund more than is left");
+assert.equal(P({ refundPence: 3000, refundedPence: 1000 }).finalStatus, "refunded", "the last of the money ends it");
+assert(P({ refundPence: 0, cancel: false }).error, "nothing to do is refused");
+assert(P({ entryStatus: "cancelled", refundPence: 100 }).error && P({ entryStatus: "refunded" }).error, "an already cancelled or refunded entry cannot be changed again");
+assert(P({ entryStatus: "comped", refundPence: 100 }).error, "a free entry has no payment to refund"); assert.equal(P({ entryStatus: "comped", paidPence: 0 }).finalStatus, "cancelled", "a free entry can be cancelled");
+assert(P({ refundPence: -5 }).error && P({ refundPence: 12.5 }).error, "only whole positive pence");
+assert(rf.refundEmail({ name: "A", competition: "C", refundedPence: 4000, cancelled: true, reason: "Injury", entriesEmail: "x" }).includes("refunded £40.00 to the card"), "refund email");
 console.log("function helper tests passed");
