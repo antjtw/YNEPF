@@ -172,6 +172,28 @@ await db.exec("set role anon");
 try { await db.query(`select * from public.create_priority_invites('${C}', array['x@example.com'])`); ok(false, "anon cannot make priority links"); } catch { ok(true, "the public cannot make priority links"); }
 await db.exec("reset role");
 await db.exec(`update public.competitions set entry_opens = null where id='${C}'; update public.entries set status='cancelled' where competition_id='${C}'`);
+// ---- manual entries (the entries team adding or comping someone)
+await db.exec("reset role");
+await db.exec(`update public.entries set status='cancelled' where competition_id='${C}'; update public.competitions set entry_opens = now() + interval '5 days', entry_closes = now() - interval '1 day' where id='${C}'`);
+const UU = { entries: "00000000-0000-0000-0000-00000000000b", editor: "00000000-0000-0000-0000-00000000000c" };
+const manual = async (who, o) => { await db.exec("reset role"); await db.query(`select set_config('request.uid','${who ? UU[who] : ""}',false)`); await db.exec(who ? "set role authenticated" : "set role anon");
+  try { return (await db.query(`select public.add_manual_entry('${C}', $1::jsonb) r`, [JSON.stringify({ full_name: "Fran Free", email: "fran@example.com", date_of_birth: "1990-01-01", sex: "M", weight_class_id: wcM, division_id: homeDiv, event: "full_power", equipment: "classic", mode: "comped", ...o })])).rows[0].r; } catch (e) { return { error: e.message }; } finally { await db.exec("reset role"); } };
+ok((await manual("editor", {})).error === "forbidden", "an editor cannot add manual entries");
+ok((await manual(null, {})).error !== undefined, "the public cannot");
+r = await manual("entries", {});
+ok(r.entry_id && (await db.query(`select status s, source so, price_pence p from public.entries where id='${r.entry_id}'`)).rows[0].s === "comped", "the entries team can add a free entry, even though entry is closed and not yet open (their decision)");
+ok((await manual("entries", {})).error === "already_entered", "the same email cannot be added twice");
+r = await manual("entries", { email: "pat@example.com", mode: "paid_elsewhere", price_pence: 4000 });
+const pe = (await db.query(`select status s, price_pence p, source so from public.entries where id='${r.entry_id}'`)).rows[0];
+ok(pe.s === "paid" && pe.p === 4000 && pe.so === "manual", "paid another way is recorded as paid, for the money report");
+ok((await manual("entries", { email: "x@example.com", mode: "paid_elsewhere" })).error === "invalid:price", "an amount is needed for paid another way");
+ok((await manual("entries", { email: "k@example.com", date_of_birth: "2010-05-05" })).error === "invalid:guardian", "an under-18 needs guardian details");
+ok((await manual("entries", { email: "k@example.com", date_of_birth: "2010-05-05", guardian_name: "P", guardian_phone: "1", guardian_email: "p@example.com" })).entry_id, "...and is added once they are given");
+ok((await manual("entries", { email: "bad", full_name: "B" })).error === "invalid:email", "same checks as the form: email");
+ok((await manual("entries", { email: "d@example.com", division_id: "" })).error === "invalid:division", "same checks as the form: division");
+ok((await manual("entries", { email: "w@example.com", weight_class_id: wcF })).error === "invalid:weight_class", "same checks as the form: class matches category");
+ok((await manual("entries", { email: "o@example.com" })).over_capacity === true, "adding past the number of places is allowed but flagged (capacity is 2)");
+await db.exec(`update public.entries set status='cancelled' where competition_id='${C}'; update public.competitions set entry_opens = null, entry_closes = null where id='${C}'`);
 // ---- save_entry_settings (the entries team's admin screen)
 await db.exec("reset role");
 const U = { entries: "00000000-0000-0000-0000-00000000000b", editor: "00000000-0000-0000-0000-00000000000c" };

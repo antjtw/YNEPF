@@ -1018,3 +1018,68 @@ end
 $$;
 revoke all on function public.create_priority_invites(uuid, text[]) from public, anon;
 grant execute on function public.create_priority_invites(uuid, text[]) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 19. Manual entries (entries team only)
+--     For lifters who are given a free place, or who paid another way (cash, bank transfer, a payment link). The same
+--     checks on the person and the class as the entry form, but not the opening times, the guest delay or the hold:
+--     this is the entries team deciding. A free entry has no money; "paid elsewhere" records the amount for the
+--     money report with no Stripe fee.  mode: 'comped' | 'paid_elsewhere'
+-- ---------------------------------------------------------------------------
+create or replace function public.add_manual_entry(c uuid, p jsonb) returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare
+  comp public.competitions%rowtype;
+  v_email text := lower(trim(coalesce(p->>'email', '')));
+  v_name text := trim(coalesce(p->>'full_name', ''));
+  v_dob date;
+  v_sex text := p->>'sex';
+  v_class uuid := nullif(p->>'weight_class_id', '')::uuid;
+  v_mode text := coalesce(p->>'mode', 'comped');
+  v_price integer := case when coalesce(p->>'mode', 'comped') = 'paid_elsewhere' then coalesce((p->>'price_pence')::int, -1) else 0 end;
+  v_event text := p->>'event';
+  v_equip text := p->>'equipment';
+  v_age integer;
+  v_div public.divisions%rowtype;
+  v_entry uuid;
+  v_over boolean;
+begin
+  if not public.is_entries() then raise exception 'forbidden'; end if;
+  select * into comp from public.competitions where id = c for update;
+  if not found then raise exception 'not_found'; end if;
+  if v_mode not in ('comped', 'paid_elsewhere') then raise exception 'invalid:mode'; end if;
+  if v_name = '' then raise exception 'invalid:full_name'; end if;
+  if v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then raise exception 'invalid:email'; end if;
+  begin v_dob := (p->>'date_of_birth')::date; exception when others then raise exception 'invalid:date_of_birth'; end;
+  if v_dob is null or v_dob > comp.start_date or v_dob < date '1900-01-01' then raise exception 'invalid:date_of_birth'; end if;
+  if public.age_category_on(v_dob, comp.start_date) = 'under14' then raise exception 'invalid:too_young'; end if;
+  if v_sex not in ('M', 'F') then raise exception 'invalid:sex'; end if;
+  if v_event not in ('full_power', 'bench_only') then raise exception 'invalid:event'; end if;
+  if v_equip not in ('classic', 'equipped') then raise exception 'invalid:equipment'; end if;
+  if v_price < 0 then raise exception 'invalid:price'; end if;
+  if v_class is null or not exists (select 1 from public.weight_classes w where w.id = v_class and w.sex = v_sex and w.active
+      and (w.min_age_category = '' or w.min_age_category = public.age_category_on(v_dob, comp.start_date))) then raise exception 'invalid:weight_class'; end if;
+  select * into v_div from public.divisions where id = nullif(p->>'division_id', '')::uuid;
+  if not found then raise exception 'invalid:division'; end if;
+  v_age := public.age_on(v_dob, comp.start_date);
+  if v_age < 18 and (coalesce(trim(p->>'guardian_name'), '') = '' or coalesce(trim(p->>'guardian_phone'), '') = '' or coalesce(trim(p->>'guardian_email'), '') = '') then
+    raise exception 'invalid:guardian';
+  end if;
+  if exists (select 1 from public.entries where competition_id = c and email = v_email and status in ('paid', 'comped', 'held')) then raise exception 'already_entered'; end if;
+  v_over := public.places_left(c) < 1;
+
+  insert into public.entries (competition_id, status, source, email, full_name, display_name, bp_number, date_of_birth, sex, division_id, club, instagram,
+      photo_ok, photo_opt_out, weight_class_id, equipment, event, openipf_url, price_pence, paid_at, is_guest, entry_note)
+    values (c, case when v_mode = 'comped' then 'comped' else 'paid' end, 'manual', v_email, v_name, trim(coalesce(p->>'display_name', '')), trim(coalesce(p->>'bp_number', '')), v_dob, v_sex,
+      v_div.id, trim(coalesce(p->>'club', '')), trim(coalesce(p->>'instagram', '')), coalesce((p->>'photo_ok')::boolean, false), coalesce((p->>'photo_opt_out')::boolean, false),
+      v_class, v_equip, v_event, trim(coalesce(p->>'openipf_url', '')), v_price, now(), not v_div.is_home, trim(coalesce(p->>'note', '')))
+    returning id into v_entry;
+  insert into public.entry_private (entry_id, guardian_name, guardian_phone, guardian_email, guardian_consent, delete_after)
+    values (v_entry, case when v_age < 18 then trim(p->>'guardian_name') else '' end, case when v_age < 18 then trim(p->>'guardian_phone') else '' end,
+            case when v_age < 18 then trim(p->>'guardian_email') else '' end, v_age < 18, coalesce(comp.end_date, comp.start_date) + 30);
+  return jsonb_build_object('entry_id', v_entry, 'over_capacity', v_over);
+end
+$$;
+revoke all on function public.add_manual_entry(uuid, jsonb) from public, anon;
+grant execute on function public.add_manual_entry(uuid, jsonb) to authenticated;

@@ -827,6 +827,7 @@
 
       view.replaceChildren(
         el("div", { class: "actions", style: "margin-bottom:var(--space-3)" },
+          btn("Add entry", function () { addEntry(c, refs, reload); }, "btn-primary"),
           btn("Download CSV", function () { downloadEntries(c); }, "btn-secondary"),
           c.entry_method === "yne" ? btn("Priority entry", function () { editPriority(c); }) : null,
           c.slug ? el("a", { class: "btn btn-secondary", href: "../entries?c=" + encodeURIComponent(c.slug), target: "_blank", rel: "noopener" }, "Public list") : null),
@@ -835,6 +836,53 @@
         el("div", { class: "entry-toolbar" }, q, st, so, g, dp), count, list);
       draw();
     }).catch(function (e) { view.replaceChildren(el("p", { class: "form-error" }, friendly(e))); });
+  }
+
+  // Add someone by hand: a free place, or someone who paid another way. The database applies the same checks on the person
+  // and the class as the entry form, but not the opening times (this is the entries team's decision).
+  var MANUAL_ERRORS = {
+    forbidden: "You do not have permission to add entries.", already_entered: "That email address is already entered in this competition.", "invalid:full_name": "Enter their full name.",
+    "invalid:email": "Check the email address.", "invalid:date_of_birth": "Check the date of birth.", "invalid:too_young": "Lifters must be at least 14 in the year of the competition.",
+    "invalid:sex": "Choose men's or women's.", "invalid:event": "Choose an event.", "invalid:equipment": "Choose the equipment.", "invalid:price": "Enter how much they paid.",
+    "invalid:weight_class": "That weight class does not match the category (or the age, for the sub-junior classes).", "invalid:division": "Choose their federation or division.",
+    "invalid:guardian": "Lifters under 18 need a parent or guardian's name, phone and email."
+  };
+  function addEntry(c, refs, reload) {
+    var classOptions = refs.classes.map(function (w) { return { value: w.id, label: (w.sex === "M" ? "Men's " : "Women's ") + w.label + " kg" }; });
+    openForm({
+      title: "Add an entry: " + c.name, saveLabel: "Add entry",
+      intro: "For someone who has been given a free place, or who paid another way (cash, bank transfer or a payment link). The same checks apply as on the entry form, but not the opening times or the guest delay. No email is sent.",
+      values: { mode: "comped", sex: "M", event: "full_power", equipment: "classic", photo: "no", division_id: refs.divisions[0] && refs.divisions[0].id, weight_class_id: classOptions[0] && classOptions[0].value },
+      fields: [
+        { name: "mode", label: "How is this entry paid?", type: "select", options: [{ value: "comped", label: "Free place (comped)" }, { value: "paid_elsewhere", label: "Paid another way" }] },
+        { name: "price", label: "Amount paid (£), if paid another way", type: "number", min: "0", half: true },
+        { name: "note", label: "Note", required: true, half: true, help: "How they paid, or why the place is free. Kept privately." },
+        { name: "full_name", label: "Full name", required: true, half: true }, { name: "email", label: "Email address", type: "email", required: true, half: true },
+        { name: "date_of_birth", label: "Date of birth", type: "date", required: true, half: true }, { name: "sex", label: "Category", type: "select", options: [{ value: "M", label: "Men's" }, { value: "F", label: "Women's" }], half: true },
+        { name: "weight_class_id", label: "Weight class", type: "select", options: classOptions, half: true }, { name: "division_id", label: "Federation or division", type: "select", options: refs.divisions.map(function (d) { return { value: d.id, label: d.name }; }), half: true },
+        { name: "event", label: "Event", type: "select", options: [{ value: "full_power", label: "Full power" }, { value: "bench_only", label: "Bench only" }], half: true },
+        { name: "equipment", label: "Equipment", type: "select", options: [{ value: "classic", label: "Classic" }, { value: "equipped", label: "Equipped" }], half: true },
+        { name: "club", label: "Club (optional)", type: "select", options: [{ value: "", label: "No club" }].concat(refs.clubs.map(function (x) { return { value: x.name, label: x.name }; })), half: true },
+        { name: "bp_number", label: "Membership number", half: true }, { name: "instagram", label: "Instagram handle (no @)", half: true },
+        { name: "photo", label: "Photos and videos", type: "select", options: [{ value: "yes", label: "Consents to promotional use" }, { value: "no", label: "Does not consent" }, { value: "never", label: "Do not photograph or film" }], half: true },
+        { name: "guardian_name", label: "Parent or guardian name (if under 18)", half: true }, { name: "guardian_phone", label: "Their phone", half: true }, { name: "guardian_email", label: "Their email", type: "email" }
+      ],
+      validate: function (v) {
+        if (v.mode === "paid_elsewhere" && (v.price === null || v.price < 0)) return "Enter how much they paid.";
+        var w = refs.classes.filter(function (x) { return x.id === v.weight_class_id; })[0];
+        if (w && w.sex !== v.sex) return "That weight class is for " + (w.sex === "M" ? "men" : "women") + ". Change the category or the class.";
+        return null;
+      },
+      onSave: function (v) {
+        var p = { mode: v.mode, price_pence: v.mode === "paid_elsewhere" ? Math.round(v.price * 100) : 0, note: v.note, full_name: v.full_name, email: v.email, date_of_birth: v.date_of_birth, sex: v.sex,
+          weight_class_id: v.weight_class_id, division_id: v.division_id, event: v.event, equipment: v.equipment, club: v.club, bp_number: v.bp_number, instagram: String(v.instagram || "").replace(/^@/, ""),
+          photo_ok: v.photo === "yes", photo_opt_out: v.photo === "never", guardian_name: v.guardian_name, guardian_phone: v.guardian_phone, guardian_email: v.guardian_email };
+        return sb.rpc("add_manual_entry", { c: c.id, p: p }).then(function (r) {
+          if (r.error) { var m = (r.error.message || "").trim(); throw new Error(MANUAL_ERRORS[m] || friendly(r.error)); }
+          toast(r.data && r.data.over_capacity ? "Entry added. Note: this is more than the number of places." : "Entry added.", r.data && r.data.over_capacity ? "error" : undefined); reload();
+        });
+      }
+    });
   }
 
   // Cancel an entry and/or refund through Stripe. The entry-refund function checks the caller is on the entries team,
