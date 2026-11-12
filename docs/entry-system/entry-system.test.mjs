@@ -98,7 +98,8 @@ ok(!(await can(`delete from public.audit_log`)) && !(await can(`update public.au
 // ---- the settlement: money to send, adds up exactly
 await db.exec("reset role"); await db.exec(`delete from public.entries`);
 const id = (n) => `00000000-0000-0000-0000-0000000000${n}`;
-await db.exec(`insert into public.payees (id, name, kind) values ('${id("f1")}','YNEPF','federation'),('${id("f2")}','Implexus Gym','host'),('${id("f3")}','White Lights Media','photographer')`);
+await db.exec(`update public.payees set id = '${id("f1")}' where kind = 'federation'`);   // the federation is already there: the install adds it
+await db.exec(`insert into public.payees (id, name, kind) values ('${id("f2")}','Implexus Gym','host'),('${id("f3")}','White Lights Media','photographer')`);
 await db.exec(`insert into public.entry_settings (competition_id, stripe_fee_policy) values ('11111111-1111-1111-1111-111111111111','federation')`);
 await db.exec(`insert into public.payout_rules (competition_id, category, payee_id, percent) values
   ('11111111-1111-1111-1111-111111111111','entry','${id("f2")}',80),('11111111-1111-1111-1111-111111111111','entry','${id("f1")}',20),
@@ -137,4 +138,28 @@ ok(s.reduce((a, r) => a + r.e, 0) === 36000, "thirds that do not divide evenly s
 await db.exec(`update public.entries set status='cancelled'`);
 s = await settle(); ok(s.every((r) => r.g === 0 && r.n <= 0), "no paid entries: nothing is owed");
 
+// setting up who gets paid, then the report adds up
+await db.exec("reset role");
+const CC = "44444444-4444-4444-4444-444444444444";
+await db.exec(`insert into public.competitions (id, name, start_date, capacity, published, slug) values ('${CC}','Payout Open','2027-06-01',20,true,'payout')`);
+const setup = async (who, o) => { await as(who); try { return (await db.query(`select public.save_payout_setup('${CC}', $1::jsonb) r`, [JSON.stringify(o)])).rows[0].r; } catch (e) { return { error: e.message }; } finally { await db.exec("reset role"); } };
+ok((await setup(U.editor, { host_name: "Leeds Gym" })).error === "forbidden" && (await setup(null, { host_name: "x" })).error !== undefined, "only the entries team can set who gets paid");
+ok((await setup(U.entries, { host_name: "" })).error === "invalid:host_name" && (await setup(U.entries, { host_name: "X", host_entry_percent: 120 })).error === "invalid:percent", "a host is needed, and percentages are 0 to 100");
+ok((await setup(U.entries, { host_name: "Leeds Gym", host_entry_percent: 80, host_merch_percent: 100, photographer_name: "White Lights Media", photographer_percent: 100 })).host_id, "the setup is saved");
+await db.exec(`insert into public.entries (competition_id, email, full_name, date_of_birth, sex, status, price_pence) values ('${CC}','p1@x.com','P1','1990-01-01','M','paid',4000),('${CC}','p2@x.com','P2','1990-01-01','M','paid',2000),('${CC}','p3@x.com','P3','1990-01-01','M','comped',0)`);
+await db.exec(`insert into public.payments (entry_id, stripe_session_id, amount_pence, stripe_fee_pence, status) select id, 'cs_pay_' || email, price_pence, 70, 'succeeded' from public.entries where competition_id = '${CC}' and price_pence > 0`);
+await as(U.entries);
+const money = (await db.query(`select payee_name n, payee_kind k, gross_pence::int g, fee_pence::int f, net_pence::int net from public.competition_settlement('${CC}')`)).rows;
+const mh = Object.fromEntries(money.map((r) => [r.n, r]));
+ok(mh["Leeds Gym"].g === 4800 && mh["YNEPF"].g === 1200 && mh["Leeds Gym"].f === 0 && mh["YNEPF"].f === 140 && mh["YNEPF"].net === 1060 && mh["Leeds Gym"].net === 4800, "the 80/20 split of £60 takings, the federation bearing the £1.40 of Stripe fees: " + JSON.stringify(money));
+ok(money.reduce((n, r) => n + r.net, 0) === 6000 - 140, "the report adds up: takings less fees");
+await setup(U.entries, { host_name: "leeds gym", host_entry_percent: 100, host_merch_percent: 100 });
+ok((await db.query(`select count(*)::int n from public.payees where lower(name) = 'leeds gym'`)).rows[0].n === 1, "a host is found by name, not made twice");
+ok((await db.query(`select count(*)::int n from public.payout_rules where competition_id = '${CC}' and category = 'photo'`)).rows[0].n === 0, "saving again replaces the old split (no photographer this time)");
+await db.exec("reset role");
+// the money report: only the entries team (admins included) can ask for it
+const askSettlement = async (who) => { await as(who); try { await db.query(`select * from public.competition_settlement('11111111-1111-1111-1111-111111111111')`); return "allowed"; } catch (e) { return /forbidden|permission denied/.test(e.message) ? "refused" : e.message; } };
+ok((await askSettlement(null)) === "refused" && (await askSettlement(U.editor)) === "refused" && (await askSettlement(U.contrib)) === "refused" && (await askSettlement(U.rando)) === "refused", "the public, editors, contributors and other signed-in people are refused the money report");
+ok((await askSettlement(U.entries)) === "allowed" && (await askSettlement(U.admin)) === "allowed", "the entries team and admins can see it");
+await db.exec("reset role");
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

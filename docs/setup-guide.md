@@ -131,6 +131,12 @@ Codes are made in the editor: open a competition, then the **Discounts** tab, th
 
 ---
 
+## Part 5e: The money tab
+
+Each competition has a **Money** tab (entries team and admins). Press **Set who gets paid** to name the host and set their share of the entry money; the federation keeps the rest. The report then shows, for each person, what they are owed, less nothing, and the federation's share less Stripe's fees. **Record a payment sent** notes when you have paid someone, so the report shows what is still to send. It needs the newest all-in-one SQL (the report now refuses anyone who is not on the entries team).
+
+---
+
 ## Part 5b: The club list
 
 Lifters in English divisions can choose their club (it is optional) from the English Powerlifting Association's list of approved clubs, copied from the EPA website. Only club **names** are copied, never contact details. Lifters from other nations have no club question, and clubs from other bodies are not included.

@@ -574,6 +574,8 @@ as $$
 declare
   fees bigint; policy text; fed uuid;
 begin
+  -- Who is owed what is for the entries team only. (This function reads past the row level rules, so it checks for itself.)
+  if not public.is_entries() then raise exception 'forbidden'; end if;
   select coalesce(sum(p.stripe_fee_pence), 0) into fees
     from public.payments p join public.entries e on e.id = p.entry_id
    where e.competition_id = c and p.status = 'succeeded';
@@ -630,7 +632,8 @@ begin
    order by (py.kind = 'federation'), py.name;
 end;
 $$;
-grant execute on function public.competition_settlement(uuid) to authenticated;   -- entries team and admins only (checked in the app and by RLS on the tables it reads)
+revoke all on function public.competition_settlement(uuid) from public, anon;
+grant execute on function public.competition_settlement(uuid) to authenticated;   -- and the function itself checks the caller is on the entries team
 
 -- ---------------------------------------------------------------------------
 -- 12. Volunteers, points and priority entry (phase 3)
@@ -1205,7 +1208,7 @@ begin
   select coalesce(email, 'unknown') into v_who from auth.users where id = auth.uid();
   loop
     u := replace(gen_random_uuid()::text, '-', '');
-    v_code := v_prefix || '-' || v_label || '-' || (select string_agg(substr(alphabet, (('x' || substr(u, i * 2 - 1, 2))::bit(8)::int % 32) + 1, 1), '') from generate_series(1, 6) i);
+    v_code := v_prefix || '-' || v_label || '-' || (select string_agg(substr(alphabet, (('x' || substr(u, i * 2 - 1, 2))::bit(8)::int % length(alphabet)) + 1, 1), '') from generate_series(1, 6) i);
     exit when not exists (select 1 from public.discount_codes where code_key = upper(v_code));
     tries := tries + 1; if tries > 20 then raise exception 'could not make a unique code'; end if;
   end loop;
@@ -1217,3 +1220,62 @@ end
 $$;
 revoke all on function public.create_discount_code(uuid, jsonb) from public, anon;
 grant execute on function public.create_discount_code(uuid, jsonb) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 21. Who gets paid (entries team only)
+--     Sets, for one competition, how the money is split. The host gets host_entry_percent of the entry money and the
+--     federation keeps the rest; merchandise goes mostly or wholly to the host; photo packages go to the photographer.
+--     The federation always has a row (even at 0%) so it receives any Stripe fee pence left over in the report.
+-- ---------------------------------------------------------------------------
+insert into public.payees (name, kind) select 'YNEPF', 'federation' where not exists (select 1 from public.payees where kind = 'federation');
+
+create or replace function public.save_payout_setup(c uuid, p jsonb) returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare
+  fed uuid; host uuid; photog uuid;
+  host_name text := btrim(coalesce(p->>'host_name', ''));
+  photog_name text := btrim(coalesce(p->>'photographer_name', ''));
+  e_pct numeric := coalesce((p->>'host_entry_percent')::numeric, 100);
+  m_pct numeric := coalesce((p->>'host_merch_percent')::numeric, 100);
+  p_pct numeric := coalesce((p->>'photographer_percent')::numeric, 100);
+  existing record;
+begin
+  if not public.is_entries() then raise exception 'forbidden'; end if;
+  if not exists (select 1 from public.competitions where id = c) then raise exception 'not_found'; end if;
+  if host_name = '' then raise exception 'invalid:host_name'; end if;
+  if e_pct < 0 or e_pct > 100 or m_pct < 0 or m_pct > 100 or p_pct < 0 or p_pct > 100 then raise exception 'invalid:percent'; end if;
+  select id into fed from public.payees where kind = 'federation' limit 1;
+  if fed is null then insert into public.payees (name, kind) values ('YNEPF', 'federation') returning id into fed; end if;
+
+  select * into existing from public.payees where lower(name) = lower(host_name);
+  if found then
+    if existing.kind <> 'host' then raise exception 'invalid:payee_kind'; end if;
+    host := existing.id;
+  else
+    insert into public.payees (name, kind) values (host_name, 'host') returning id into host;
+  end if;
+  if photog_name <> '' then
+    select * into existing from public.payees where lower(name) = lower(photog_name);
+    if found then
+      if existing.kind <> 'photographer' then raise exception 'invalid:payee_kind'; end if;
+      photog := existing.id;
+    else
+      insert into public.payees (name, kind) values (photog_name, 'photographer') returning id into photog;
+    end if;
+  end if;
+
+  delete from public.payout_rules where competition_id = c;
+  insert into public.payout_rules (competition_id, category, payee_id, percent) values
+    (c, 'entry', fed, 100 - e_pct), (c, 'merch', fed, 100 - m_pct);
+  if e_pct > 0 then insert into public.payout_rules (competition_id, category, payee_id, percent) values (c, 'entry', host, e_pct); end if;
+  if m_pct > 0 then insert into public.payout_rules (competition_id, category, payee_id, percent) values (c, 'merch', host, m_pct); end if;
+  if photog is not null then
+    insert into public.payout_rules (competition_id, category, payee_id, percent) values (c, 'photo', fed, 100 - p_pct);
+    if p_pct > 0 then insert into public.payout_rules (competition_id, category, payee_id, percent) values (c, 'photo', photog, p_pct); end if;
+  end if;
+  return jsonb_build_object('host_id', host, 'federation_id', fed, 'photographer_id', photog);
+end
+$$;
+revoke all on function public.save_payout_setup(uuid, jsonb) from public, anon;
+grant execute on function public.save_payout_setup(uuid, jsonb) to authenticated;
