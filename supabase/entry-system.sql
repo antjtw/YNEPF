@@ -276,6 +276,9 @@ create table if not exists public.entries (
   cancelled_at timestamptz,
   cancel_reason text not null default ''
 );
+-- Added for the entries desk: whether the entries team has checked the membership number (for guests), and a private note.
+alter table public.entries add column if not exists membership_checked boolean not null default false;
+alter table public.entries add column if not exists entry_note text not null default '';
 create index if not exists entries_competition_status on public.entries (competition_id, status);
 create index if not exists entries_email on public.entries (email);
 create index if not exists entries_bp_number on public.entries (bp_number) where bp_number <> '';
@@ -489,10 +492,12 @@ begin
     select coalesce(u.email, 'unknown') into who from auth.users u where u.id = auth.uid();
   end if;
   rid := coalesce((to_jsonb(coalesce(new, old))->>'id'), (to_jsonb(coalesce(new, old))->>'entry_id'), '');
+  -- Guardian details are kept for 30 days after the competition but the audit log is kept for years, so for that table
+  -- the log records that something changed (and who by), never the details themselves.
   insert into public.audit_log (actor_id, actor_email, table_name, row_id, action, before, after)
   values (auth.uid(), coalesce(who, 'system'), tg_table_name, rid, lower(tg_op),
-          case when tg_op <> 'INSERT' then to_jsonb(old) end,
-          case when tg_op <> 'DELETE' then to_jsonb(new) end);
+          case when tg_op <> 'INSERT' then case when tg_table_name = 'entry_private' then '{"redacted": "personal details"}'::jsonb else to_jsonb(old) end end,
+          case when tg_op <> 'DELETE' then case when tg_table_name = 'entry_private' then '{"redacted": "personal details"}'::jsonb else to_jsonb(new) end end);
   return coalesce(new, old);
 end;
 $$;

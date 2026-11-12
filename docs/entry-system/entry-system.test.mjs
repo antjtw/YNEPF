@@ -86,6 +86,13 @@ await as(U.entries); await db.exec(`update public.entries set club='York' where 
 await as(U.entries);
 const aud = await rows(`select actor_email, action, before->>'club' b, after->>'club' a from public.audit_log where table_name='entries' and row_id='33333333-3333-3333-3333-333333333333' order by id`);
 ok(aud.length === 2 && aud[0].action === "insert" && aud[0].actor_email === "system" && aud[1].action === "update" && aud[1].actor_email === "entries@example.com" && aud[1].b === "Hull" && aud[1].a === "York", "the audit log records who changed what, with before and after: " + JSON.stringify(aud[1]));
+await db.exec("reset role");
+await db.exec(`insert into public.entries (id, competition_id, email, full_name, date_of_birth, sex, status) values ('66666666-6666-6666-6666-666666666666','11111111-1111-1111-1111-111111111111','kid@example.com','Kid','2010-01-01','M','paid')`);
+await db.exec(`insert into public.entry_private (entry_id, guardian_name) values ('66666666-6666-6666-6666-666666666666','Parent Person')`);
+await db.exec(`update public.entry_private set guardian_name = 'Secret Guardian' where entry_id = '66666666-6666-6666-6666-666666666666'`);
+const gaud = await rows(`select action, coalesce(before::text, '') b, coalesce(after::text, '') a from public.audit_log where table_name='entry_private' and row_id='66666666-6666-6666-6666-666666666666' order by id`);
+ok(gaud.length === 2 && gaud.every((g) => !g.b.includes("Parent") && !g.a.includes("Parent") && !g.a.includes("Secret")) && gaud[1].a.includes("redacted"), "the audit log records that a guardian record changed, but never the guardian's details");
+await as(U.entries);
 ok(!(await can(`delete from public.audit_log`)) && !(await can(`update public.audit_log set actor_email='x'`)) && !(await can(`insert into public.audit_log (table_name, action) values ('x','insert')`)), "nobody can change, delete or forge audit entries");
 
 // ---- the settlement: money to send, adds up exactly

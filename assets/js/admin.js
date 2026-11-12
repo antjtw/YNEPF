@@ -699,32 +699,205 @@
   }
 
   // ---- entries tab ------------------------------------------------------------------
+  // ---- entries desk ------------------------------------------------------------------
+  // A list you can search, filter and sort. Each entry is a summary line that opens into the full record, with the
+  // actions the entries team needs. Every change is written to the audit log by the database.
   var ENTRY_STATUS = { held: "Paying", paid: "Paid", comped: "Free", cancelled: "Cancelled", refunded: "Refunded" };
+  var STATUS_TAG = { held: "tag tag-closed", paid: "tag tag-open", comped: "tag tag-open", cancelled: "tag tag-full", refunded: "tag tag-full" };
+  var PLACEHOLDER_BP = /^(tbc|tbd|n\/?a|none|unknown|pending|\?+|-+|x+|0+)$/i;
+  function one(x) { return Array.isArray(x) ? x[0] : x; }
+  function photoWord(e) { return e.photo_opt_out ? "Do not photograph or film" : e.photo_ok ? "Consents to promotional use" : "Does not consent to promotional use"; }
+  function isLive(e, now) { return e.status === "paid" || e.status === "comped" || (e.status === "held" && new Date(e.hold_expires_at) > now); }
+  function when(iso) { return iso ? new Date(iso).toLocaleString("en-GB", { timeZone: Y.TZ, dateStyle: "medium", timeStyle: "short" }) : ""; }
+
+  // Entries that share an email or a real membership number with another live entry.
+  function duplicateIds(rows) {
+    var now = new Date(), byKey = {}, out = {};
+    rows.filter(function (e) { return isLive(e, now); }).forEach(function (e) {
+      var keys = ["e:" + String(e.email).toLowerCase()];
+      var bp = String(e.bp_number || "").trim().toLowerCase();
+      if (bp && !PLACEHOLDER_BP.test(bp)) keys.push("b:" + bp);
+      keys.forEach(function (k) { (byKey[k] = byKey[k] || []).push(e.id); });
+    });
+    Object.keys(byKey).forEach(function (k) { if (byKey[k].length > 1) byKey[k].forEach(function (id) { out[id] = true; }); });
+    return out;
+  }
+
   function renderEntriesTab(view, c) {
     view.replaceChildren(el("p", null, "Loading…"));
-    sb.from("entries").select("*, weight_classes(label), divisions(name)").eq("competition_id", c.id).order("created_at", { ascending: true }).then(function (res) {
-      var rows = ok(res);
+    Promise.all([
+      sb.from("entries").select("*, weight_classes(label), divisions(name,is_home), entry_private(*), payments(*)").eq("competition_id", c.id).order("created_at", { ascending: true }),
+      sb.from("divisions").select("id,name").order("sort_order"),
+      sb.from("weight_classes").select("id,sex,label,sort_order").order("sort_order"),
+      sb.from("clubs").select("name").eq("active", true).order("name")
+    ]).then(function (res) {
+      var rows = ok(res[0]), refs = { divisions: res[1].data || [], classes: res[2].data || [], clubs: res[3].data || [] };
+      var dup = duplicateIds(rows), now = new Date();
+      var S = { q: "", status: "entered", guests: false, dupes: false, sort: "newest" };
       var live = rows.filter(function (e) { return e.status === "paid" || e.status === "comped"; });
       var total = live.reduce(function (n, e) { return n + e.price_pence; }, 0);
+      var toCheck = rows.filter(function (e) { return e.is_guest && !e.membership_checked && isLive(e, now); }).length;
+      var list = el("div", { class: "entry-list" }), count = el("p", { class: "help", role: "status" });
+
+      function reload() { renderEntriesTab(view, c); }
+      function matches(e) {
+        if (S.status === "entered" && !(e.status === "paid" || e.status === "comped")) return false;
+        if (S.status === "paying" && !(e.status === "held")) return false;
+        if (S.status === "gone" && !(e.status === "cancelled" || e.status === "refunded")) return false;
+        if (S.guests && !(e.is_guest && isLive(e, now))) return false;
+        if (S.dupes && !dup[e.id]) return false;
+        if (S.q) {
+          var hay = [e.full_name, e.display_name, e.email, e.club, e.bp_number, e.instagram].join(" ").toLowerCase();
+          if (S.q.toLowerCase().split(/\s+/).some(function (w) { return w && hay.indexOf(w) < 0; })) return false;
+        }
+        return true;
+      }
+      var SORTS = {
+        newest: function (a, b) { return new Date(b.created_at) - new Date(a.created_at); },
+        name: function (a, b) { return String(a.full_name).localeCompare(String(b.full_name)); },
+        class: function (a, b) { return (a.sex === b.sex ? 0 : a.sex === "F" ? -1 : 1) || (parseFloat(one(a.weight_classes) && one(a.weight_classes).label) || 999) - (parseFloat(one(b.weight_classes) && one(b.weight_classes).label) || 999) || String(a.full_name).localeCompare(String(b.full_name)); },
+        category: function (a, b) { return String(catFor(a.date_of_birth, c.start_date)).localeCompare(String(catFor(b.date_of_birth, c.start_date))) || String(a.full_name).localeCompare(String(b.full_name)); }
+      };
+      function draw() {
+        var shown = rows.filter(matches).sort(SORTS[S.sort]);
+        count.textContent = shown.length + " shown of " + rows.length + " records.";
+        list.replaceChildren.apply(list, shown.length ? shown.map(entryRow) : [el("p", { class: "empty" }, rows.length ? "Nothing matches those filters." : "No entries yet.")]);
+      }
+
+      function entryRow(e) {
+        var wc = one(e.weight_classes), dv = one(e.divisions), cat = CAT_LABEL[catFor(e.date_of_birth, c.start_date)];
+        var summary = el("summary", null,
+          el("span", { class: "entry-name" }, el("strong", null, e.full_name), el("small", null, e.email)),
+          el("span", { class: "entry-lift" }, [(e.sex === "M" ? "Men's " : "Women's ") + (wc ? wc.label + " kg" : ""), cat, e.event === "bench_only" ? "Bench only" : "Full power", e.equipment === "equipped" ? "Equipped" : "Classic"].filter(Boolean).join(" · ")),
+          el("span", { class: "entry-flags" }, el("span", { class: STATUS_TAG[e.status] || "tag" }, ENTRY_STATUS[e.status] || e.status),
+            e.is_guest && !e.membership_checked ? [" ", el("span", { class: "tag tag-position" }, "Guest: check")] : null,
+            dup[e.id] ? [" ", el("span", { class: "tag tag-full" }, "Possible duplicate")] : null),
+          el("span", { class: "entry-money" }, entryMoney(e.price_pence)));
+        var body = el("div", { class: "entry-body" });
+        var d = el("details", { class: "entry-row" }, summary, body);
+        var filled = false;
+        d.addEventListener("toggle", function () { if (d.open && !filled) { filled = true; fillBody(body, e, d); } });
+        return d;
+      }
+
+      function dlRows(pairs) {
+        return el("dl", { class: "entry-dl" }, pairs.filter(Boolean).map(function (p) { return [el("dt", null, p[0]), el("dd", null, p[1] === "" || p[1] === null || p[1] === undefined ? "Not given" : p[1])]; }));
+      }
+      function fillBody(body, e, d) {
+        var wc = one(e.weight_classes), dv = one(e.divisions), priv = one(e.entry_private), pays = (e.payments || []).filter(function (p) { return p.status === "succeeded"; });
+        var pay = pays[0];
+        var age = (function () { var b = new Date(e.date_of_birth), s = new Date(c.start_date), a = s.getUTCFullYear() - b.getUTCFullYear(); if (s.getUTCMonth() < b.getUTCMonth() || (s.getUTCMonth() === b.getUTCMonth() && s.getUTCDate() < b.getUTCDate())) a--; return a; })();
+        body.replaceChildren.apply(body, [
+          el("h3", null, "Lifter"),
+          dlRows([["Name on public lists", e.display_name || e.full_name], ["Email", el("a", { href: "mailto:" + e.email }, e.email)],
+            ["Date of birth", e.date_of_birth + " (age " + age + " on the day)"], ["Age category", CAT_LABEL[catFor(e.date_of_birth, c.start_date)]],
+            ["Instagram", e.instagram ? "@" + e.instagram : ""], ["Photos", photoWord(e)]]),
+          el("h3", null, "Lifting"),
+          dlRows([["Category", e.sex === "M" ? "Men's" : "Women's"], ["Weight class", wc ? wc.label + " kg" : ""], ["Event", e.event === "bench_only" ? "Bench only" : "Full power"], ["Equipment", e.equipment === "equipped" ? "Equipped" : "Classic"],
+            ["OpenIPF", e.openipf_url ? el("a", { href: e.openipf_url, target: "_blank", rel: "noopener" }, e.openipf_url) : ""], ["Can break records", e.can_break_records ? "Yes" : "No"]]),
+          el("h3", null, "Federation and membership"),
+          dlRows([["Federation or division", dv ? dv.name + (dv.is_home ? "" : " (guest)") : ""], ["Club", e.club], ["Membership number", e.bp_number],
+            e.is_guest ? ["Membership checked", e.membership_checked ? "Yes" : "Not yet"] : null]),
+          priv && priv.guardian_name ? el("div", null, el("h3", null, "Parent or guardian"), dlRows([["Name", priv.guardian_name], ["Phone", priv.guardian_phone], ["Email", priv.guardian_email], ["Consent given", priv.guardian_consent ? "Yes" : "No"]])) : null,
+          el("h3", null, "Payment"),
+          dlRows([["Status", ENTRY_STATUS[e.status] || e.status], ["Amount", entryMoney(e.price_pence)], ["Entered", when(e.created_at)], ["Paid", when(e.paid_at)],
+            pay ? ["Card", (pay.card_brand || "card") + (pay.card_last4 ? " ending " + pay.card_last4 : "")] : null,
+            pay && pay.receipt_url ? ["Receipt", el("a", { href: pay.receipt_url, target: "_blank", rel: "noopener" }, "Open the Stripe receipt")] : null,
+            pay ? ["Stripe fee", entryMoney(pay.stripe_fee_pence)] : null]),
+          e.entry_note ? el("div", null, el("h3", null, "Private note"), el("p", null, e.entry_note)) : null,
+          el("div", { class: "actions", style: "margin-top:var(--space-4)" },
+            btn("Edit", function () { editEntry(e, c, refs, reload); }, "btn-secondary"),
+            e.is_guest ? btn(e.membership_checked ? "Mark membership unchecked" : "Mark membership checked", function () {
+              sb.from("entries").update({ membership_checked: !e.membership_checked }).eq("id", e.id).then(ok).then(function () { toast("Updated."); reload(); }).catch(function (er) { toast(friendly(er), "error"); });
+            }) : null,
+            btn("Show history", function () { showHistory(body, e); }))].filter(Boolean));
+      }
+
+      // Toolbar
+      var q = el("input", { type: "search", id: "entry-search", placeholder: "Search name, email or club", "aria-label": "Search entries", oninput: function (ev) { S.q = ev.target.value.trim(); draw(); } });
+      var st = el("select", { id: "entry-status", "aria-label": "Show", onchange: function (ev) { S.status = ev.target.value; draw(); } },
+        [["entered", "Entered (paid and free)"], ["paying", "Paying now"], ["gone", "Cancelled and refunded"], ["all", "Everything"]].map(function (o) { return el("option", { value: o[0] }, o[1]); }));
+      var so = el("select", { id: "entry-sort", "aria-label": "Sort by", onchange: function (ev) { S.sort = ev.target.value; draw(); } },
+        [["newest", "Newest first"], ["name", "Name A to Z"], ["class", "Weight class"], ["category", "Age category"]].map(function (o) { return el("option", { value: o[0] }, o[1]); }));
+      var g = el("label", { class: "inline-check" }, el("input", { type: "checkbox", onchange: function (ev) { S.guests = ev.target.checked; draw(); } }), " Guests to check");
+      var dp = el("label", { class: "inline-check" }, el("input", { type: "checkbox", onchange: function (ev) { S.dupes = ev.target.checked; draw(); } }), " Possible duplicates");
+
       view.replaceChildren(
         el("div", { class: "actions", style: "margin-bottom:var(--space-3)" },
           btn("Download CSV", function () { downloadEntries(c); }, "btn-secondary"),
           c.entry_method === "yne" ? btn("Priority entry", function () { editPriority(c); }) : null,
           c.slug ? el("a", { class: "btn btn-secondary", href: "../entries?c=" + encodeURIComponent(c.slug), target: "_blank", rel: "noopener" }, "Public list") : null),
-        el("p", { class: "panel-intro" }, live.length + " entered of " + (c.capacity || "?") + " places. Entry money taken: " + entryMoney(total) + "."),
-        rows.length ? el("div", { class: "table-scroll" }, el("table", { class: "admin-table" },
-          el("thead", null, el("tr", null, ["Name", "Details", "Status", "Paid"].map(function (h) { return el("th", { scope: "col" }, h); }))),
-          el("tbody", null, rows.map(function (e) {
-            return el("tr", null,
-              el("th", { scope: "row" }, e.full_name, el("small", null, e.email)),
-              el("td", null, [(e.sex === "M" ? "Men's " : "Women's ") + (e.weight_classes ? e.weight_classes.label + " kg" : ""), CAT_LABEL[catFor(e.date_of_birth, c.start_date)], e.event === "bench_only" ? "Bench only" : "Full power", e.equipment].join(" · "),
-                el("small", null, [e.club, e.bp_number && "BP " + e.bp_number].filter(Boolean).join(" · ")),
-                e.divisions ? el("small", null, e.divisions.name, e.is_guest ? [" ", el("span", { class: "tag tag-position" }, "Guest: check membership")] : null) : null,
-                null),
-              el("td", null, ENTRY_STATUS[e.status] || e.status),
-              el("td", null, entryMoney(e.price_pence), e.paid_at ? el("small", null, new Date(e.paid_at).toLocaleString("en-GB", { timeZone: Y.TZ, dateStyle: "medium", timeStyle: "short" })) : null));
-          })))) : el("p", { class: "empty" }, "No entries yet."));
+        el("p", { class: "panel-intro" }, live.length + " entered of " + (c.capacity || "?") + " places. Entry money taken: " + entryMoney(total) + "." +
+          (toCheck ? " " + toCheck + (toCheck === 1 ? " guest" : " guests") + " to check." : "") + (Object.keys(dup).length ? " " + Object.keys(dup).length + " entries share an email or membership number with another." : "")),
+        el("div", { class: "entry-toolbar" }, q, st, so, g, dp), count, list);
+      draw();
     }).catch(function (e) { view.replaceChildren(el("p", { class: "form-error" }, friendly(e))); });
+  }
+
+  // The changes made to one entry, from the audit log.
+  var HISTORY_SKIP = { id: 1, created_at: 1, hold_expires_at: 1 };
+  function showHistory(body, e) {
+    var box = el("div", { class: "entry-history" }, el("h3", null, "History"), el("p", null, "Loading…"));
+    body.appendChild(box);
+    sb.from("audit_log").select("*").eq("table_name", "entries").eq("row_id", e.id).order("at", { ascending: false }).limit(30).then(ok).then(function (rows) {
+      box.replaceChildren(el("h3", null, "History"), rows.length ? el("ul", { class: "history-list" }, rows.map(function (r) {
+        var what = r.action === "insert" ? "Entry created" : r.action === "delete" ? "Entry deleted" : (function () {
+          var b = r.before || {}, a = r.after || {}, ch = Object.keys(a).filter(function (k) { return !HISTORY_SKIP[k] && JSON.stringify(a[k]) !== JSON.stringify(b[k]); });
+          return ch.length ? "Changed " + ch.map(function (k) { return k.replace(/_/g, " ") + " (" + (b[k] === null || b[k] === "" ? "empty" : b[k]) + " → " + (a[k] === null || a[k] === "" ? "empty" : a[k]) + ")"; }).join(", ") : "Updated";
+        })();
+        return el("li", null, el("strong", null, when(r.at)), " · " + (r.actor_email || "system") + " · " + what);
+      })) : el("p", { class: "empty" }, "No history recorded."));
+    }).catch(function (er) { box.replaceChildren(el("h3", null, "History"), el("p", { class: "form-error" }, friendly(er))); });
+  }
+
+  // Edit any detail of an entry. The database logs who changed what.
+  function editEntry(e, c, refs, done) {
+    var priv = one(e.entry_private);
+    var classOptions = refs.classes.map(function (w) { return { value: w.id, label: (w.sex === "M" ? "Men's " : "Women's ") + w.label + " kg" }; });
+    var clubs = refs.clubs.map(function (x) { return x.name; });
+    if (e.club && clubs.indexOf(e.club) < 0) clubs.unshift(e.club);
+    var fields = [
+      { name: "full_name", label: "Full name", required: true },
+      { name: "display_name", label: "Name on public lists (optional)", help: "Leave blank to use the full name." },
+      { name: "email", label: "Email address", type: "email", required: true, half: true },
+      { name: "date_of_birth", label: "Date of birth", type: "date", required: true, half: true },
+      { name: "sex", label: "Category", type: "select", options: [{ value: "M", label: "Men's" }, { value: "F", label: "Women's" }], half: true },
+      { name: "weight_class_id", label: "Weight class", type: "select", options: classOptions, half: true },
+      { name: "event", label: "Event", type: "select", options: [{ value: "full_power", label: "Full power" }, { value: "bench_only", label: "Bench only" }], half: true },
+      { name: "equipment", label: "Equipment", type: "select", options: [{ value: "classic", label: "Classic" }, { value: "equipped", label: "Equipped" }], half: true },
+      { name: "division_id", label: "Federation or division", type: "select", options: refs.divisions.map(function (d) { return { value: d.id, label: d.name }; }), half: true },
+      { name: "club", label: "Club", type: "select", options: [{ value: "", label: "No club" }].concat(clubs.map(function (n) { return { value: n, label: n }; })), half: true },
+      { name: "bp_number", label: "Membership number", half: true },
+      { name: "instagram", label: "Instagram handle (no @)", half: true },
+      { name: "openipf_url", label: "OpenIPF link", type: "url" },
+      { name: "photo", label: "Photos and videos", type: "select", options: [{ value: "yes", label: "Consents to promotional use" }, { value: "no", label: "Does not consent" }, { value: "never", label: "Do not photograph or film" }] },
+      { name: "membership_checked", label: "Membership number checked", type: "checkbox", half: true },
+      { name: "can_break_records", label: "Can break records", type: "checkbox", half: true },
+      { name: "entry_note", label: "Private note (entries team only)", type: "textarea", rows: 3 }
+    ];
+    if (priv && priv.guardian_name !== undefined && (priv.guardian_name || priv.guardian_phone || priv.guardian_email)) {
+      fields.push({ name: "guardian_name", label: "Parent or guardian name", half: true }, { name: "guardian_phone", label: "Their phone", half: true }, { name: "guardian_email", label: "Their email", type: "email" });
+    }
+    openForm({
+      title: "Edit entry: " + e.full_name, saveLabel: "Save changes",
+      values: Object.assign({}, e, { photo: e.photo_opt_out ? "never" : e.photo_ok ? "yes" : "no", guardian_name: priv && priv.guardian_name, guardian_phone: priv && priv.guardian_phone, guardian_email: priv && priv.guardian_email, display_name: e.display_name || "" }),
+      fields: fields,
+      validate: function (v) {
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.email)) return "Enter a valid email address.";
+        var w = refs.classes.filter(function (x) { return x.id === v.weight_class_id; })[0];
+        if (w && w.sex !== v.sex) return "That weight class is for " + (w.sex === "M" ? "men" : "women") + ". Change the category or the class.";
+        if (v.openipf_url && !/^https:\/\//i.test(v.openipf_url)) return "The OpenIPF link must start with https://";
+        return null;
+      },
+      onSave: function (v) {
+        var row = { full_name: v.full_name, display_name: v.display_name, email: v.email.toLowerCase(), date_of_birth: v.date_of_birth, sex: v.sex, weight_class_id: v.weight_class_id,
+          event: v.event, equipment: v.equipment, division_id: v.division_id || null, club: v.club, bp_number: v.bp_number, instagram: String(v.instagram || "").replace(/^@/, ""), openipf_url: v.openipf_url,
+          photo_ok: v.photo === "yes", photo_opt_out: v.photo === "never", membership_checked: !!v.membership_checked, can_break_records: !!v.can_break_records, entry_note: v.entry_note };
+        var chain = sb.from("entries").update(row).eq("id", e.id).then(ok);
+        if (v.guardian_name !== undefined) chain = chain.then(function () { return sb.from("entry_private").update({ guardian_name: v.guardian_name, guardian_phone: v.guardian_phone, guardian_email: v.guardian_email }).eq("entry_id", e.id).then(ok); });
+        return chain.then(function () { toast("Entry saved."); done(); });
+      }
+    });
   }
 
   function csvCell(v) { v = v === null || v === undefined ? "" : String(v); if (/^[=+\-@\t\r]/.test(v)) v = "'" + v; return '"' + v.replace(/"/g, '""') + '"'; }
