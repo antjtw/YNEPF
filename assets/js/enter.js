@@ -87,6 +87,50 @@
   }
   function pounds(p) { return "£" + (p / 100).toFixed(p % 100 ? 2 : 0); }
 
+  // ---- discount code -------------------------------------------------------------------------------
+  // The price to pay: the discount (if a code has been applied) taken off.
+  function totalNow() { var a = v.discount_applied; if (a) return a.price_pence; return priceNow(); }
+  function refreshTotals() {
+    var t = totalNow(), free = t === 0;
+    var tl = document.getElementById("total-line"); if (tl) tl.replaceChildren(document.createTextNode("Total to pay: "), el("strong", null, t === null ? "—" : pounds(t)));
+    var btn = document.getElementById("pay-btn"); if (btn && !btn.disabled) btn.textContent = free ? "Confirm your entry" : "Continue to payment";
+    ["hold-note", "refund-note"].forEach(function (id) { var n = document.getElementById(id); if (n) n.hidden = free; });
+  }
+  function discountStatus(text, bad) {
+    var n = document.getElementById("discount-status"); if (!n) return;
+    n.textContent = text || ""; n.className = "help" + (bad ? " discount-bad" : "");
+  }
+  function applyDiscount() {
+    var input = document.getElementById("discount_code"), code = trim(input && input.value).toUpperCase();
+    v.discount_input = input ? input.value : "";
+    if (!code) { v.discount_applied = null; discountStatus("Enter your code first.", true); return refreshTotals(); }
+    var btn = document.getElementById("discount-apply"); if (btn) btn.disabled = true;
+    discountStatus("Checking…");
+    fetch(CFG.supabaseUrl.replace(/\/$/, "") + "/functions/v1/entry-checkout", {
+      method: "POST", headers: { "Content-Type": "application/json", apikey: CFG.supabaseAnonKey || "" },
+      body: JSON.stringify({ action: "discount", competition_id: ctx.comp.id, email: trim(v.email), code: code, date_of_birth: dobISO(), event: v.event, equipment: v.equipment })
+    }).then(function (r) { return r.json().catch(function () { return {}; }); }).then(function (b) {
+      if (b.ok) {
+        v.discount_applied = { code: code, discount_pence: b.discount_pence, price_pence: b.price_pence };
+        discountStatus("Code applied: " + pounds(b.discount_pence) + " off." + (b.price_pence === 0 ? " Your entry is free." : ""));
+      } else { v.discount_applied = null; discountStatus(b.message || "That code could not be checked. Please try again.", true); }
+      refreshTotals();
+    }).catch(function () { v.discount_applied = null; discountStatus("That code could not be checked. Please try again.", true); refreshTotals(); })
+      .then(function () { if (btn) btn.disabled = false; });
+  }
+  function discountField() {
+    var applied = v.discount_applied;
+    return el("div", { class: "field", "data-field": "discount_code" },
+      el("label", { for: "discount_code" }, "Discount code (optional)"),
+      el("p", { class: "help", id: "discount_code-help" }, "If you have a code, enter it and press Apply."),
+      el("div", { class: "discount-row" },
+        el("input", { id: "discount_code", name: "discount_code", type: "text", value: v.discount_input || "", autocomplete: "off", autocapitalize: "characters", spellcheck: "false", maxlength: "40", "aria-describedby": "discount_code-help discount-status",
+          oninput: function (e) { v.discount_input = e.target.value; if (v.discount_applied && trim(e.target.value).toUpperCase() !== v.discount_applied.code) { v.discount_applied = null; discountStatus(""); refreshTotals(); } },
+          onkeydown: function (e) { if (e.key === "Enter") { e.preventDefault(); applyDiscount(); } } }),
+        el("button", { class: "btn btn-secondary", type: "button", id: "discount-apply", onclick: applyDiscount }, "Apply")),
+      el("p", { class: "help", id: "discount-status", role: "status" }, applied ? "Code applied: " + pounds(applied.discount_pence) + " off." + (applied.price_pence === 0 ? " Your entry is free." : "") : ""));
+  }
+
   // ---- errors ----------------------------------------------------------------------------------
   function clearErrors() {
     summary.hidden = true; list.innerHTML = "";
@@ -149,7 +193,7 @@
   function dobField() {
     function part(k, label, w, max) {
       return el("div", { class: "date-part" }, el("label", { for: "dob-" + k }, label),
-        el("input", { id: "dob-" + k, type: "text", inputmode: "numeric", maxlength: max, size: w, value: v[k], autocomplete: k === "dd" ? "bday-day" : k === "mm" ? "bday-month" : "bday-year", oninput: function (e) { v[k] = e.target.value; }, onchange: updateCatNote }));
+        el("input", { id: "dob-" + k, type: "text", inputmode: "numeric", maxlength: max, size: w, value: v[k], autocomplete: k === "dd" ? "bday-day" : k === "mm" ? "bday-month" : "bday-year", oninput: function (e) { v[k] = e.target.value; updateCatNote(); }, onchange: updateCatNote }));
     }
     return el("div", { class: "field", "data-field": "dob" },
       el("fieldset", { class: "choice", id: "dob", tabindex: "-1" }, el("legend", null, "Date of birth"),
@@ -234,7 +278,7 @@
   function refundNote() {
     if (!ctx.comp.entry_closes) return null;
     var d = new Date(ctx.comp.entry_closes).toLocaleString("en-GB", { timeZone: Y.TZ, dateStyle: "full", timeStyle: "short" });
-    return el("p", { class: "help" }, "Refunds are available until entries close on " + d + ". After that, entries cannot be refunded.");
+    return el("p", { class: "help", id: "refund-note", hidden: totalNow() === 0 }, "Refunds are available until entries close on " + d + ". After that, entries cannot be refunded.");
   }
   // A summary list like GOV.UK's: label, answer, and a plain "Change" link on each row.
   function row(label, value, stepKey, hideChange) {
@@ -260,8 +304,9 @@
       el("h2", null, "Check your answers"),
       el("dl", { class: "summary-list" }, rows),
       age !== null && age < 18 ? el("p", { class: "help" }, "A parent or guardian must be with you at the competition.") : null,
-      el("p", { class: "lede" }, "Total to pay: ", el("strong", null, p === null ? "—" : pounds(p))),
-      el("p", { class: "help" }, "Pressing the button holds your place for " + ctx.settings.hold_minutes + " minutes while you pay. We never see or store your card details."),
+      discountField(),
+      el("p", { class: "lede", id: "total-line" }, "Total to pay: ", el("strong", null, totalNow() === null ? "—" : pounds(totalNow()))),
+      el("p", { class: "help", id: "hold-note", hidden: totalNow() === 0 }, "Pressing the button holds your place for " + ctx.settings.hold_minutes + " minutes while you pay. We never see or store your card details."),
       refundNote(),
       el("p", { class: "field-error", id: "submit-error", hidden: true })
     ];
@@ -307,6 +352,7 @@
       weight_class_id: v.weight_class_id, openipf_url: trim(v.openipf_url),
       photo_ok: v.photo_choice === "yes", photo_opt_out: v.photo_choice === "never" };
     if (invite) o.invite = invite;
+    if (v.discount_applied) o.discount_code = v.discount_applied.code;
     if (ageOnDay() < 18) { o.guardian_name = trim(v.guardian_name); o.guardian_phone = trim(v.guardian_phone); o.guardian_email = trim(v.guardian_email); o.guardian_consent = !!v.guardian_consent; }
     return o;
   }
@@ -329,7 +375,7 @@
     }).then(function (res) { return res.json().catch(function () { return {}; }).then(function (b) { return { ok: res.ok, b: b }; }); })
       .then(function (r) {
         if (!r.ok) throw new Error(r.b.message || "Sorry, something went wrong. Please try again.");
-        if (r.b.free) return showDone();
+        if (r.b.free) { location.href = "/entry-thanks?" + (r.b.slug ? "c=" + encodeURIComponent(r.b.slug) + "&" : "") + "entry=" + encodeURIComponent(r.b.entry_id); return; }
         return loadStripe().then(function (Stripe) {
           app.innerHTML = ""; app.appendChild(el("h2", null, "Pay " + pounds(r.b.price_pence)));
           app.appendChild(el("p", { class: "help" }, "Your place is held for " + ctx.settings.hold_minutes + " minutes. Please complete payment before then."));
@@ -347,7 +393,7 @@
       })
       .catch(function (e) {
         if (window.console) console.error(e);
-        err.textContent = e.message || "Sorry, something went wrong. Please try again."; err.hidden = false; btn.disabled = false; btn.textContent = "Continue to payment";
+        err.textContent = e.message || "Sorry, something went wrong. Please try again."; err.hidden = false; btn.disabled = false; btn.textContent = totalNow() === 0 ? "Confirm your entry" : "Continue to payment";
       });
   }
   function showDone() {
@@ -372,7 +418,7 @@
     } }, body,
       el("div", { class: "form-actions" },
         at > 0 ? el("button", { class: "btn btn-secondary", type: "button", onclick: function () { goStep(stepList()[stepList().indexOf(step) - 1]); } }, "Back") : null,
-        el("button", { class: "btn btn-primary", type: "submit" }, last ? "Continue to payment" : "Continue")));
+        el("button", { class: "btn btn-primary", type: "submit", id: last ? "pay-btn" : null }, last ? (totalNow() === 0 ? "Confirm your entry" : "Continue to payment") : "Continue")));
     app.appendChild(form);
     if (active) { var a = document.getElementById(active); if (a) a.focus(); }
   }

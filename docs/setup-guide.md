@@ -125,6 +125,12 @@ Stripe keeps its processing fee on a refund, so the federation bears that cost (
 
 ---
 
+## Part 5d: Discount codes
+
+Codes are made in the editor: open a competition, then the **Discounts** tab, then **Make a discount code**. Nothing else needs setting up in Stripe. Update these two functions so codes work on the entry form: **`entry-checkout`** (it now checks codes, and confirms a free entry itself and emails the lifter) and **`entry-status`** (it now also recognises a free entry). Run the newest all-in-one SQL first.
+
+---
+
 ## Part 5b: The club list
 
 Lifters in English divisions can choose their club (it is optional) from the English Powerlifting Association's list of approved clubs, copied from the EPA website. Only club **names** are copied, never contact details. Lifters from other nations have no club question, and clubs from other bodies are not included.

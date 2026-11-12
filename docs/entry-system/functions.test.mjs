@@ -46,4 +46,12 @@ assert(P({ entryStatus: "cancelled", refundPence: 100 }).error && P({ entryStatu
 assert(P({ entryStatus: "comped", refundPence: 100 }).error, "a free entry has no payment to refund"); assert.equal(P({ entryStatus: "comped", paidPence: 0 }).finalStatus, "cancelled", "a free entry can be cancelled");
 assert(P({ refundPence: -5 }).error && P({ refundPence: 12.5 }).error, "only whole positive pence");
 assert(rf.refundEmail({ name: "A", competition: "C", refundedPence: 4000, cancelled: true, reason: "Injury", entriesEmail: "x" }).includes("refunded £40.00 to the card"), "refund email");
+// the confirmation email is the same whichever function sends it (a paid entry or a free one)
+const sample = { name: "A", competition: "C", date: "2027-05-15", event: "Full power", equipment: "Classic", pence: 4000, under18: false, entriesEmail: "x@y.co", category: "Open", division: "South West (guest)", club: "Implexus Gym", discountPence: 2000, refundsUntil: "Saturday" };
+assert.equal(co.confirmationEmail(sample), wh.confirmationEmail(sample), "both functions write the same email");
+assert(co.confirmationEmail(sample).includes("Discount applied: £20.00 off") && co.confirmationEmail({ ...sample, discountPence: 0 }).indexOf("Discount") < 0, "the discount shows only when there is one");
+assert(co.MESSAGES.discount_used && co.MESSAGES.discount_expired && co.MESSAGES.discount_not_yours && co.MESSAGES.discount_invalid, "plain words for each discount problem");
+const t0 = 1_000_000; let allowed = 0; for (let i = 0; i < 12; i++) if (co.allowTry("1.2.3.4|a@b.co", t0 + i)) allowed++;
+assert.equal(allowed, 8, "only 8 discount code checks in 10 minutes per address, so codes cannot be guessed"); assert(co.allowTry("1.2.3.4|a@b.co", t0 + 11 * 60 * 1000), "...and it frees up again after the window"); assert(co.allowTry("9.9.9.9|z@b.co", t0), "other addresses are not affected");
+assert(es.validEntry("123e4567-e89b-12d3-a456-426614174000") && !es.validEntry("1; drop table"), "entry ids are checked");
 console.log("function helper tests passed");

@@ -229,6 +229,30 @@ create table if not exists public.addon_images (            -- up to 4 per add-o
 );
 
 -- ---------------------------------------------------------------------------
+-- 3b. Discount codes
+--     Made in the editor, for one competition or for any competition. A code can be tied to one email address (so it
+--     cannot be passed around), is case-insensitive, and can be used a set number of times. "percent" takes that
+--     percentage off, "amount" takes that many pence off. A code that takes the whole price off makes a free entry.
+-- ---------------------------------------------------------------------------
+create table if not exists public.discount_codes (
+  id uuid primary key default gen_random_uuid(),
+  competition_id uuid references public.competitions (id) on delete cascade,          -- null = any competition
+  code text not null,
+  code_key text generated always as (upper(btrim(code))) stored unique,
+  recipient_name text not null default '',
+  recipient_email text not null default '' check (recipient_email = lower(recipient_email)),   -- if set, only this email can use it
+  kind text not null check (kind in ('percent', 'amount')),
+  value integer not null check (value > 0),                                           -- percent (1 to 100) or pence
+  max_uses integer not null default 1 check (max_uses >= 1),
+  expires_at timestamptz,
+  active boolean not null default true,
+  reason text not null default '',                                                    -- for example "Volunteer points: half price"
+  created_by text not null default '',
+  created_at timestamptz not null default now(),
+  check ((kind = 'percent' and value <= 100) or kind = 'amount')
+);
+
+-- ---------------------------------------------------------------------------
 -- 4. Entries
 --    status: held (place reserved while paying), paid, comped (free), cancelled,
 --    refunded. Only held entries with an unexpired hold, paid and comped entries
@@ -278,6 +302,8 @@ create table if not exists public.entries (
 );
 -- Added for the entries desk: whether the entries team has checked the membership number (for guests), and a private note.
 alter table public.entries add column if not exists membership_checked boolean not null default false;
+alter table public.entries add column if not exists discount_code_id uuid references public.discount_codes (id) on delete set null;
+alter table public.entries add column if not exists discount_pence integer not null default 0;
 alter table public.entries add column if not exists entry_note text not null default '';
 create index if not exists entries_competition_status on public.entries (competition_id, status);
 create index if not exists entries_email on public.entries (email);
@@ -507,7 +533,7 @@ declare t text;
 begin
   foreach t in array array['entries', 'entry_private', 'entry_addons', 'payments', 'refunds', 'entry_settings', 'entry_stages',
                            'price_rules', 'addons', 'waiting_list', 'offers', 'invites', 'lifting_orders', 'lo_sessions',
-                           'lo_flights', 'lo_assignments', 'editors'] loop
+                           'lo_flights', 'lo_assignments', 'editors', 'discount_codes'] loop
     execute format('drop trigger if exists %I on public.%I', t || '_audit', t);
     execute format('create trigger %I after insert or update or delete on public.%I for each row execute function public.audit_row()', t || '_audit', t);
   end loop;
@@ -697,7 +723,7 @@ begin
   end loop;
   -- Everything about people and money: the entries team only (admins included).
   -- payees and hosts are here because they hold contact emails and our commercial split.
-  foreach t in array array['payees', 'hosts', 'entries', 'entry_private', 'entry_addons', 'payments', 'refunds', 'stripe_events', 'waiting_list', 'offers',
+  foreach t in array array['discount_codes', 'payees', 'hosts', 'entries', 'entry_private', 'entry_addons', 'payments', 'refunds', 'stripe_events', 'waiting_list', 'offers',
                            'invites', 'email_log', 'payout_rules', 'payouts', 'lifting_orders', 'lo_sessions', 'lo_flights',
                            'lo_assignments', 'competition_redirects', 'rota_slots', 'rota_signups', 'points_ledger'] loop
     execute format('alter table public.%I enable row level security', t);
@@ -733,7 +759,7 @@ grant select on public.entries_public, public.waiting_list_public, public.compet
 grant select, insert, update, delete on
   public.entry_settings, public.entry_stages, public.price_rules, public.addons, public.addon_options, public.addon_images,
   public.qualifying_totals, public.weight_classes, public.divisions, public.payees, public.hosts, public.volunteer_roles,
-  public.entries, public.entry_private, public.entry_addons, public.payments, public.refunds, public.stripe_events,
+  public.discount_codes, public.entries, public.entry_private, public.entry_addons, public.payments, public.refunds, public.stripe_events,
   public.waiting_list, public.offers, public.invites, public.email_templates, public.email_log, public.payout_rules,
   public.payouts, public.lifting_orders, public.lo_sessions, public.lo_flights, public.lo_assignments,
   public.competition_redirects, public.rota_slots, public.rota_signups, public.points_ledger
@@ -774,6 +800,10 @@ declare
   v_d public.divisions%rowtype;
   v_guest boolean;
   v_club text;
+  v_disc jsonb;
+  v_code_id uuid;
+  v_discount integer := 0;
+  v_free boolean := false;
 begin
   -- "TBC" and the like are accepted when someone does not have their number yet; they are not a number to compare.
   if v_bp ~ '^(tbc|tbd|n/?a|none|unknown|pending|\?+|-+|x+|0+)$' then v_bp := ''; end if;
@@ -865,21 +895,29 @@ begin
   -- A price of nothing is never accepted here: online entry always takes a payment. (Free places are added by the entries team.)
   if v_price is null or v_price < 1 then raise exception 'no_price'; end if;
 
+  -- A discount code, if one was given. A code that takes the whole price off makes this a free entry.
+  if btrim(coalesce(p->>'discount_code', '')) <> '' then
+    v_disc := public.discount_apply(p->>'discount_code', c.id, v_email, v_price);
+    if not (v_disc->>'ok')::boolean then raise exception 'discount_%', v_disc->>'error'; end if;
+    v_code_id := (v_disc->>'id')::uuid; v_discount := (v_disc->>'discount_pence')::int; v_price := (v_disc->>'price_pence')::int;
+  end if;
+  v_free := v_price = 0;
+
   v_expires := now() + make_interval(mins => s.hold_minutes);
   insert into public.entries (competition_id, status, source, stage_id, email, full_name, display_name, bp_number, date_of_birth, sex,
       division_id, club, instagram, photo_ok, photo_opt_out, eligibility_confirmed, weight_class_id, equipment, event,
-      openipf_url, price_pence, hold_expires_at, is_guest)
-    values (c.id, 'held', 'web', v_stage, v_email, v_name, trim(coalesce(p->>'display_name', '')), trim(coalesce(p->>'bp_number', '')), v_dob, v_sex,
+      openipf_url, price_pence, hold_expires_at, is_guest, paid_at, discount_code_id, discount_pence)
+    values (c.id, case when v_free then 'comped' else 'held' end, 'web', v_stage, v_email, v_name, trim(coalesce(p->>'display_name', '')), trim(coalesce(p->>'bp_number', '')), v_dob, v_sex,
       v_d.id, v_club, trim(coalesce(p->>'instagram', '')),
       coalesce((p->>'photo_ok')::boolean, false), coalesce((p->>'photo_opt_out')::boolean, false), coalesce((p->>'eligibility_confirmed')::boolean, false), v_class, v_equip, v_event,
-      trim(coalesce(p->>'openipf_url', '')), v_price, v_expires, v_guest)
+      trim(coalesce(p->>'openipf_url', '')), v_price, case when v_free then null else v_expires end, v_guest, case when v_free then now() end, v_code_id, v_discount)
     returning id into v_entry;
   insert into public.entry_private (entry_id, guardian_name, guardian_phone, guardian_email, guardian_consent, access_needs, delete_after)
     values (v_entry,
       case when v_age < 18 then trim(p->>'guardian_name') else '' end, case when v_age < 18 then trim(p->>'guardian_phone') else '' end,
       case when v_age < 18 then trim(p->>'guardian_email') else '' end, v_age < 18, v_access, coalesce(c.end_date, c.start_date) + 30);
   if v_invite is not null then update public.invites set entry_id = v_entry where id = v_invite; end if;
-  return jsonb_build_object('entry_id', v_entry, 'price_pence', v_price, 'hold_expires_at', v_expires, 'competition', c.name, 'slug', c.slug);
+  return jsonb_build_object('entry_id', v_entry, 'price_pence', v_price, 'hold_expires_at', v_expires, 'competition', c.name, 'slug', c.slug, 'free', v_free, 'discount_pence', v_discount);
 end
 $$;
 revoke all on function public.start_entry(jsonb) from public, anon, authenticated;
@@ -1083,3 +1121,99 @@ end
 $$;
 revoke all on function public.add_manual_entry(uuid, jsonb) from public, anon;
 grant execute on function public.add_manual_entry(uuid, jsonb) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 20. Discount codes: price, checking and making them
+-- ---------------------------------------------------------------------------
+-- What a code does to a price. Returns {ok, id, discount_pence, price_pence} or {ok: false, error}, where error is
+-- invalid | expired | not_yours | used. A held place counts as a use until it expires, so a one-use code cannot be shared out twice.
+create or replace function public.discount_apply(p_code text, comp uuid, p_email text, base integer) returns jsonb
+language plpgsql stable security definer set search_path = public
+as $$
+declare d public.discount_codes%rowtype; uses integer; disc integer;
+begin
+  select * into d from public.discount_codes where code_key = upper(btrim(coalesce(p_code, '')));
+  if not found or not d.active then return jsonb_build_object('ok', false, 'error', 'invalid'); end if;
+  if d.competition_id is not null and d.competition_id <> comp then return jsonb_build_object('ok', false, 'error', 'invalid'); end if;
+  if d.expires_at is not null and d.expires_at <= now() then return jsonb_build_object('ok', false, 'error', 'expired'); end if;
+  if d.recipient_email <> '' and d.recipient_email <> lower(btrim(coalesce(p_email, ''))) then return jsonb_build_object('ok', false, 'error', 'not_yours'); end if;
+  select count(*) into uses from public.entries e
+    where e.discount_code_id = d.id and (e.status in ('paid', 'comped') or (e.status = 'held' and e.hold_expires_at > now()));
+  if uses >= d.max_uses then return jsonb_build_object('ok', false, 'error', 'used'); end if;
+  disc := case d.kind when 'percent' then round(base * least(d.value, 100) / 100.0)::int else least(d.value, base) end;
+  disc := greatest(least(disc, base), 0);
+  return jsonb_build_object('ok', true, 'id', d.id, 'discount_pence', disc, 'price_pence', base - disc);
+end
+$$;
+revoke all on function public.discount_apply(text, uuid, text, integer) from public, anon, authenticated;
+
+-- The price for an entry before any discount (the first price rule that matches).
+create or replace function public.entry_price(c uuid, dob date, ev text, eq text) returns integer
+language sql stable security definer set search_path = public
+as $$
+  select r.price_pence from public.price_rules r join public.competitions k on k.id = r.competition_id
+  where r.competition_id = c and (r.event is null or r.event = ev) and (r.equipment is null or r.equipment = eq)
+    and (r.age_category is null or r.age_category = public.age_category_on(dob, k.start_date))
+  order by r.sort_order, r.label limit 1
+$$;
+revoke all on function public.entry_price(uuid, date, text, text) from public, anon, authenticated;
+
+-- "Would this code work, and what would the total be?" for the entry form. Called only by the payment function.
+create or replace function public.check_discount(p jsonb) returns jsonb
+language plpgsql stable security definer set search_path = public
+as $$
+declare base integer; r jsonb;
+begin
+  base := public.entry_price((p->>'competition_id')::uuid, (p->>'date_of_birth')::date, p->>'event', p->>'equipment');
+  if base is null then return jsonb_build_object('ok', false, 'error', 'no_price'); end if;
+  r := public.discount_apply(p->>'code', (p->>'competition_id')::uuid, p->>'email', base);
+  if (r->>'ok')::boolean then return jsonb_build_object('ok', true, 'base_pence', base, 'discount_pence', r->'discount_pence', 'price_pence', r->'price_pence'); end if;
+  return r;
+exception when others then
+  return jsonb_build_object('ok', false, 'error', 'invalid');
+end
+$$;
+revoke all on function public.check_discount(jsonb) from public, anon, authenticated;
+do $$ begin
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    grant execute on function public.check_discount(jsonb) to service_role;
+  end if;
+end $$;
+
+-- Make a code (entries team only). c is the competition, or null for a code that works for any competition. p:
+--   recipient_name, recipient_email (optional), kind ('percent' | 'amount'), value (percent, or pence), max_uses (default 1),
+--   expires_at (optional), reason.   The code is made from the name and the discount plus random letters, e.g. SAM-20OFF-K7XQ2M.
+create or replace function public.create_discount_code(c uuid, p jsonb) returns jsonb
+language plpgsql security definer set search_path = public, auth
+as $$
+declare
+  v_kind text := p->>'kind'; v_value integer := (p->>'value')::int; v_max integer := coalesce((p->>'max_uses')::int, 1);
+  v_name text := btrim(coalesce(p->>'recipient_name', '')); v_email text := lower(btrim(coalesce(p->>'recipient_email', '')));
+  v_prefix text; v_label text; v_code text; v_who text; v_row public.discount_codes%rowtype; tries integer := 0; u text;
+  alphabet constant text := 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+begin
+  if not public.is_entries() then raise exception 'forbidden'; end if;
+  if c is not null and not exists (select 1 from public.competitions where id = c) then raise exception 'not_found'; end if;
+  if v_kind not in ('percent', 'amount') then raise exception 'invalid:kind'; end if;
+  if v_value is null or v_value < 1 or (v_kind = 'percent' and v_value > 100) or (v_kind = 'amount' and v_value > 100000) then raise exception 'invalid:value'; end if;
+  if v_max < 1 or v_max > 1000 then raise exception 'invalid:max_uses'; end if;
+  if v_email <> '' and v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then raise exception 'invalid:email'; end if;
+  v_prefix := left(upper(regexp_replace(v_name, '[^A-Za-z]', '', 'g')), 10);
+  if v_prefix = '' then v_prefix := 'YNE'; end if;
+  v_label := case when v_kind = 'percent' then (case when v_value = 100 then 'FREE' when v_value = 50 then 'HALF' else v_value::text || 'PCT' end)
+                  else (case when v_value % 100 = 0 then (v_value / 100)::text else replace(to_char(v_value / 100.0, 'FM990.00'), '.', 'P') end) || 'OFF' end;
+  select coalesce(email, 'unknown') into v_who from auth.users where id = auth.uid();
+  loop
+    u := replace(gen_random_uuid()::text, '-', '');
+    v_code := v_prefix || '-' || v_label || '-' || (select string_agg(substr(alphabet, (('x' || substr(u, i * 2 - 1, 2))::bit(8)::int % 32) + 1, 1), '') from generate_series(1, 6) i);
+    exit when not exists (select 1 from public.discount_codes where code_key = upper(v_code));
+    tries := tries + 1; if tries > 20 then raise exception 'could not make a unique code'; end if;
+  end loop;
+  insert into public.discount_codes (competition_id, code, recipient_name, recipient_email, kind, value, max_uses, expires_at, reason, created_by)
+    values (c, v_code, v_name, v_email, v_kind, v_value, v_max, nullif(p->>'expires_at', '')::timestamptz, btrim(coalesce(p->>'reason', '')), coalesce(v_who, ''))
+    returning * into v_row;
+  return jsonb_build_object('id', v_row.id, 'code', v_row.code);
+end
+$$;
+revoke all on function public.create_discount_code(uuid, jsonb) from public, anon;
+grant execute on function public.create_discount_code(uuid, jsonb) to authenticated;

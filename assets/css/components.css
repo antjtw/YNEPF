@@ -706,3 +706,7 @@ table.lifters thead th { overflow-wrap: normal; }
 .field select:disabled { cursor: not-allowed; }
 /* The entry fee line on the lifting step always takes the same room, so the buttons never jump when it fills in. */
 #fee-line { min-height: 2.7em; }
+.discount-row { display: flex; gap: var(--space-3); align-items: stretch; flex-wrap: wrap; }
+.discount-row input { flex: 1 1 14rem; text-transform: uppercase; }
+.discount-bad { color: var(--error-text); font-weight: 600; }
+#discount-status { min-height: 1.45em; margin-top: var(--space-2); }

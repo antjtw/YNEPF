@@ -332,7 +332,7 @@
     sb.from("competitions").select("*").eq("id", args[0]).maybeSingle().then(function (res) {
       var c = ok(res);
       if (!c) return panel.replaceChildren(panelHead("Not found"), el("p", null, "That item no longer exists."), backLink());
-      renderEditor(panel, c, c.kind === "event" ? "event" : "competition", args[1] === "entries" ? "entries" : "details");
+      renderEditor(panel, c, c.kind === "event" ? "event" : "competition", args[1] === "entries" ? "entries" : args[1] === "discounts" ? "discounts" : "details");
     }).catch(function (e) { panel.replaceChildren(el("p", { class: "form-error" }, friendly(e)), backLink()); });
   }
 
@@ -471,10 +471,12 @@
     if (!isNew && !isEvent) {
       var tabs = el("nav", { class: "admin-tabs subtabs", "aria-label": c.name }, el("a", { href: "#competitions/" + c.id, "aria-current": tab === "details" ? "page" : null }, "Details"));
       if (canEntry()) tabs.appendChild(el("a", { href: "#competitions/" + c.id + "/entries", "aria-current": tab === "entries" ? "page" : null }, "Entries"));
+      if (canEntry()) tabs.appendChild(el("a", { href: "#competitions/" + c.id + "/discounts", "aria-current": tab === "discounts" ? "page" : null }, "Discounts"));
       panel.appendChild(tabs);
     }
     panel.appendChild(view);
     if (tab === "entries" && !isNew && !isEvent) return renderEntriesTab(view, c);
+    if (tab === "discounts" && !isNew && !isEvent) return renderDiscountsTab(view, c);
     return isEvent ? renderEventForm(view, c, isNew) : renderCompetitionForm(view, c, isNew);
   }
 
@@ -836,6 +838,101 @@
         el("div", { class: "entry-toolbar" }, q, st, so, g, dp), count, list);
       draw();
     }).catch(function (e) { view.replaceChildren(el("p", { class: "form-error" }, friendly(e))); });
+  }
+
+  // ---- discount codes --------------------------------------------------------------------------
+  // Codes for this competition, and codes that work for any competition. A code can be tied to one email address so it
+  // cannot be passed around. Made here, never guessable: name, discount, and random letters (SAM-20OFF-K7XQ2M).
+  var DISCOUNT_ERRORS = { forbidden: "You do not have permission to make discount codes.", "invalid:kind": "Choose pounds off or percent off.", "invalid:value": "Enter a discount: pounds off, or a percentage from 1 to 100.",
+    "invalid:max_uses": "How many times it can be used must be between 1 and 1000.", "invalid:email": "Check the email address." };
+  function discountWords(d) { return d.kind === "percent" ? (d.value === 100 ? "Free entry" : d.value === 50 ? "Half price (50% off)" : d.value + "% off") : entryMoney(d.value) + " off"; }
+  function copyText(text) {
+    var done = function () { toast("Copied: " + text); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, function () { toast("Select the code and copy it by hand.", "error"); });
+    else toast("Select the code and copy it by hand.", "error");
+  }
+
+  function renderDiscountsTab(view, c) {
+    view.replaceChildren(el("p", null, "Loading…"));
+    sb.from("discount_codes").select("*").order("created_at", { ascending: false }).then(ok).then(function (all) {
+      var codes = all.filter(function (d) { return d.competition_id === c.id || d.competition_id === null; });
+      var ids = codes.map(function (d) { return d.id; });
+      return (ids.length ? sb.from("entries").select("discount_code_id,status,hold_expires_at").in("discount_code_id", ids).then(function (r) { return r.error ? [] : r.data || []; }) : Promise.resolve([])).then(function (used) {
+        var now = new Date();
+        function uses(d) { return used.filter(function (e) { return e.discount_code_id === d.id && (e.status === "paid" || e.status === "comped" || (e.status === "held" && new Date(e.hold_expires_at) > now)); }).length; }
+        function state(d) {
+          if (!d.active) return ["Switched off", "tag tag-full"];
+          if (d.expires_at && new Date(d.expires_at) <= now) return ["Expired", "tag tag-full"];
+          if (uses(d) >= d.max_uses) return ["Used up", "tag tag-closed"];
+          return ["Live", "tag tag-open"];
+        }
+        view.replaceChildren(
+          el("div", { class: "actions", style: "margin-bottom:var(--space-3)" }, btn("Make a discount code", function () { makeDiscount(c, function () { renderDiscountsTab(view, c); }); }, "btn-primary")),
+          el("p", { class: "panel-intro" }, "Give someone a code and they enter it on the last step of the entry form. A code can take pounds or a percentage off, and one that takes everything off makes the entry free. Tie a code to someone's email address and only they can use it."),
+          codes.length ? el("div", { class: "table-scroll" }, el("table", { class: "admin-table" },
+            el("thead", null, el("tr", null, ["Code", "Discount", "Used", "Valid until", "Status", "Actions"].map(function (h) { return el("th", { scope: "col" }, h); }))),
+            el("tbody", null, codes.map(function (d) {
+              var st = state(d), n = uses(d);
+              return el("tr", null,
+                el("th", { scope: "row" }, el("code", { class: "code-text" }, d.code),
+                  el("small", null, [d.recipient_name, d.recipient_email && "only " + d.recipient_email, d.competition_id === null && "any competition", d.reason].filter(Boolean).join(" · "))),
+                el("td", null, discountWords(d)), el("td", null, n + " of " + d.max_uses),
+                el("td", null, d.expires_at ? new Date(d.expires_at).toLocaleDateString("en-GB", { timeZone: Y.TZ, dateStyle: "medium" }) : "No end date"),
+                el("td", null, el("span", { class: st[1] }, st[0])),
+                el("td", null, el("span", { class: "actions" },
+                  btn("Copy", function () { copyText(d.code); }),
+                  btn(d.active ? "Switch off" : "Switch on", function () { sb.from("discount_codes").update({ active: !d.active }).eq("id", d.id).then(ok).then(function () { renderDiscountsTab(view, c); }).catch(function (er) { toast(friendly(er), "error"); }); }),
+                  n === 0 ? btn("Delete", function () { if (!window.confirm("Delete the code " + d.code + "?")) return; sb.from("discount_codes").delete().eq("id", d.id).then(ok).then(function () { renderDiscountsTab(view, c); }).catch(function (er) { toast(friendly(er), "error"); }); }, "btn-danger") : null)));
+            })))) : el("p", { class: "empty" }, "No discount codes yet."));
+      });
+    }).catch(function (e) { view.replaceChildren(el("p", { class: "form-error" }, friendly(e))); });
+  }
+
+  function makeDiscount(c, done) {
+    var PRESETS = { custom: null, off20: { kind: "amount", value: 20, reason: "Volunteer points: £20 off" }, off40: { kind: "amount", value: 40, reason: "Volunteer points: £40 off" },
+      half: { kind: "percent", value: 50, reason: "Volunteer points: half price" }, free: { kind: "percent", value: 100, reason: "Volunteer points: free entry" } };
+    var api = openForm({
+      title: "Make a discount code: " + c.name, saveLabel: "Make code",
+      intro: "The code is made for you from the name and the discount, plus random letters so it cannot be guessed. Send it to the person yourself.",
+      values: { preset: "custom", kind: "amount", value: "", max_uses: 1, scope: "this" },
+      fields: [
+        { name: "preset", label: "Quick choice", type: "select", options: [{ value: "custom", label: "Something else (fill in below)" }, { value: "off20", label: "£20 off (volunteer)" }, { value: "off40", label: "£40 off (volunteer)" }, { value: "half", label: "Half price (volunteer)" }, { value: "free", label: "Free entry (volunteer)" }] },
+        { name: "kind", label: "Type of discount", type: "select", options: [{ value: "amount", label: "Pounds off" }, { value: "percent", label: "Percent off" }], half: true },
+        { name: "value", label: "How much (£ or %)", type: "number", min: "0", required: true, half: true, help: "For example 20 for £20 off, or 50 for 50% off." },
+        { name: "recipient_name", label: "Who is it for? (optional)", half: true, help: "Used to make the code, for example SAM-20OFF-…" },
+        { name: "recipient_email", label: "Their email address (optional)", type: "email", half: true, help: "If set, only this address can use the code." },
+        { name: "scope", label: "Works for", type: "select", options: [{ value: "this", label: "This competition only" }, { value: "any", label: "Any competition" }], half: true },
+        { name: "max_uses", label: "Number of uses", type: "number", min: "1", half: true },
+        { name: "expires", label: "Last day it works (optional)", type: "date", help: "Leave blank for no end date." },
+        { name: "reason", label: "Reason (kept privately)", help: "For example the volunteer points it was exchanged for." }
+      ],
+      validate: function (v) {
+        if (v.value === null || v.value <= 0) return "Enter how much the discount is.";
+        if (v.kind === "percent" && v.value > 100) return "A percentage cannot be more than 100.";
+        return null;
+      },
+      onSave: function (v) {
+        var p = { kind: v.kind, value: v.kind === "amount" ? Math.round(v.value * 100) : Math.round(v.value), max_uses: v.max_uses || 1, recipient_name: v.recipient_name, recipient_email: v.recipient_email,
+          reason: v.reason, expires_at: v.expires ? Y.fromLondonInput(v.expires + "T23:59") : null };
+        return sb.rpc("create_discount_code", { c: v.scope === "any" ? null : c.id, p: p }).then(function (r) {
+          if (r.error) { var m = (r.error.message || "").trim(); throw new Error(DISCOUNT_ERRORS[m] || friendly(r.error)); }
+          setTimeout(function () { showNewCode(r.data && r.data.code, v); done(); }, 80);
+        });
+      }
+    });
+    api.input("preset").addEventListener("change", function () {
+      var pr = PRESETS[api.get("preset")]; if (!pr) return;
+      api.set("kind", pr.kind); api.set("value", pr.value); api.set("reason", pr.reason);
+    });
+  }
+  function showNewCode(code, v) {
+    openForm({
+      title: "Your code", saveLabel: "Done", values: { code: code },
+      intro: "Send this to " + (v.recipient_name || "the person") + ". " + (v.recipient_email ? "Only " + v.recipient_email + " can use it. " : "") + "It is also listed on the Discounts tab.",
+      fields: [{ name: "code", label: "Discount code", help: "Select it and copy, or use Copy on the list." }],
+      onSave: function () { return Promise.resolve(); }
+    });
+    var f = document.getElementById("f-code"); if (f) { f.readOnly = true; f.select(); }
   }
 
   // Add someone by hand: a free place, or someone who paid another way. The database applies the same checks on the person

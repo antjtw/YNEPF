@@ -59,6 +59,8 @@ We do not sell your information. [Confirm where each service stores data and whe
 - Parent or guardian details: [30 days after the competition], then they are deleted.
 - Emails we sent you about your entry: [12 months].
 
+**Discount codes.** If we give you a discount code, we keep your name and email address with it so only you can use it, for as long as we keep the entry records.
+
 **Who else handles it.** Stripe (payments), Resend (emails), Supabase (our database, [region to be confirmed, expected West EU]), Vercel (the website), and White Lights Media (see above). [Confirm where each stores data.]
 
 **Your rights.** You can ask what we hold about you, ask us to correct or delete it (we can keep payment records we are required to keep), or withdraw your consent for access needs. Email ynepfentries@gmail.com and we will reply within one month.

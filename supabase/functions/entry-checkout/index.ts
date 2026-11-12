@@ -25,6 +25,10 @@ export const MESSAGES: Record<string, string> = {
   guest_not_open: "Entries from outside the Yorkshire & North East division have not opened yet. Please come back later.",
   "invalid:division": "Please choose the federation or division you are part of.",
   "invalid:club": "Please choose your club from the list, or choose unattached.",
+  discount_invalid: "That discount code was not recognised. Please check it and try again.",
+  discount_expired: "That discount code has expired.",
+  discount_used: "That discount code has already been used.",
+  discount_not_yours: "That discount code was made for a different email address.",
   duplicate_bp: "A lifter with that membership number has already entered. If this is a mistake, please contact the entries team.",
   "invalid:openipf": "Please enter your OpenIPF profile link, starting https://www.openipf.org/",
   no_price: "We could not work out a price for that combination. Please email the entries team.",
@@ -70,6 +74,45 @@ export function sessionParams(o: { entryId: string; email: string; name: string;
   };
 }
 
+// The year they turn the age decides the category, not the day (the same rule as the database).
+export function ageCategory(yearOfBirth: number, competitionYear: number): string {
+  const d = competitionYear - yearOfBirth;
+  return d < 14 ? "" : d <= 18 ? "Sub-junior" : d <= 23 ? "Junior" : d <= 39 ? "Open" : d <= 49 ? "Masters 1 (M1)" : d <= 59 ? "Masters 2 (M2)" : d <= 69 ? "Masters 3 (M3)" : "Masters 4 (M4)";
+}
+// Exact age on the day (the under-18 guardian rule uses this, not the calendar year).
+export function exactAge(dob: string, on: string): number {
+  const b = new Date(dob), c = new Date(on);
+  let a = c.getUTCFullYear() - b.getUTCFullYear();
+  if (c.getUTCMonth() < b.getUTCMonth() || (c.getUTCMonth() === b.getUTCMonth() && c.getUTCDate() < b.getUTCDate())) a--;
+  return a;
+}
+export function pounds(pence: number): string { return "£" + (pence / 100).toFixed(2); }
+
+export function confirmationEmail(e: { name: string; competition: string; date: string; event: string; equipment: string; pence: number; under18: boolean; entriesEmail: string; refundsUntil?: string; category?: string; division?: string; club?: string; discountPence?: number }) {
+  const lines = [
+    `Hi ${e.name},`, "",
+    `You are entered in ${e.competition} (${e.date}). Thank you!`, "",
+    `Event: ${e.event}`, `Equipment: ${e.equipment}`, ...(e.category ? [`Category: ${e.category}`] : []), ...(e.division ? [`Federation or division: ${e.division}`] : []), ...(e.club ? [`Club: ${e.club}`] : []),
+    ...(e.discountPence ? [`Discount applied: ${pounds(e.discountPence)} off`] : []), `Paid: ${pounds(e.pence)}`, "",
+  ];
+  if (e.under18) lines.push("Because you are under 18 on the day, a parent or guardian must be with you at the competition.", "");
+  if (e.refundsUntil) lines.push(`Refunds are available until entries close on ${e.refundsUntil}. After that, entries cannot be refunded.`, "");
+  lines.push(
+    "Your name, club and weight class will be shown on the entries list and the lifting order. Your date of birth is never published.", "",
+    `If anything is wrong, or you would like us to change or delete the information we hold about you, reply to this email or write to ${e.entriesEmail}.`, "",
+    "YNEPF",
+  );
+  return lines.join("\n");
+}
+
+// Checking a discount code is limited so codes cannot be guessed: a handful of tries per address, per few minutes.
+const tries: Record<string, number[]> = {};
+export function allowTry(key: string, now = Date.now(), max = 8, windowMs = 10 * 60 * 1000): boolean {
+  const list = (tries[key] = (tries[key] ?? []).filter((t) => now - t < windowMs));
+  if (list.length >= max) return false;
+  list.push(now); return true;
+}
+
 if (typeof Deno !== "undefined") {
   Deno.serve(async (req: Request) => {
     const origin = Deno.env.get("ALLOWED_ORIGIN") ?? "*";
@@ -107,6 +150,23 @@ if (typeof Deno !== "undefined") {
     }
     delete body.preview;
 
+    // The form asks "would this code work, and what is the new total?" before it pays.
+    if (body.action === "discount") {
+      const key = (req.headers.get("x-forwarded-for") ?? "").split(",")[0] + "|" + String(body.email ?? "").toLowerCase();
+      if (!allowTry(key)) return reply(429, { ok: false, message: "Too many tries. Please wait a few minutes and try again." });
+      const chk = await fetch(`${url}/rest/v1/rpc/check_discount`, {
+        method: "POST", headers: { apikey: svc, authorization: `Bearer ${svc}`, "content-type": "application/json" },
+        body: JSON.stringify({ p: { competition_id: body.competition_id, email: body.email, code: body.code, date_of_birth: body.date_of_birth, event: body.event, equipment: body.equipment } }),
+      });
+      const r = await chk.json().catch(() => ({}));
+      if (!chk.ok || r.ok !== true) {
+        const code = r?.error === "no_price" ? "no_price" : "discount_" + (r?.error ?? "invalid");
+        return reply(200, { ok: false, message: MESSAGES[code] ?? MESSAGES.discount_invalid });
+      }
+      return reply(200, { ok: true, base_pence: r.base_pence, discount_pence: r.discount_pence, price_pence: r.price_pence });
+    }
+    delete body.action;
+
     // 1. Rules, price and a held place, all in one database step.
     const rpc = await fetch(`${url}/rest/v1/rpc/start_entry`, {
       method: "POST",
@@ -121,14 +181,23 @@ if (typeof Deno !== "undefined") {
     }
     const { entry_id, price_pence, competition, slug } = out as { entry_id: string; price_pence: number; competition: string; slug?: string };
 
-    // 2. A free entry (price 0) needs no payment.
-    if (price_pence === 0) {
-      await fetch(`${url}/rest/v1/entries?id=eq.${entry_id}`, {
-        method: "PATCH",
-        headers: { apikey: svc, authorization: `Bearer ${svc}`, "content-type": "application/json" },
-        body: JSON.stringify({ status: "comped", paid_at: new Date().toISOString() }),
-      });
-      return reply(200, { free: true, entry_id });
+    // 2. A code that takes the whole price off makes this a free entry: it is already confirmed, so there is nothing to pay.
+    if ((out as { free?: boolean }).free) {
+      const [row] = await (await fetch(`${url}/rest/v1/entries?id=eq.${entry_id}&select=email,full_name,event,equipment,price_pence,discount_pence,date_of_birth,club,divisions(name,is_home),competitions(name,start_date,entry_closes)`, { headers: { apikey: svc, authorization: `Bearer ${svc}` } })).json();
+      if (row) {
+        const from = Deno.env.get("MAIL_FROM") ?? "YNEPF <onboarding@resend.dev>", copy = Deno.env.get("NOTIFY_TO") ?? "ynepfentries@gmail.com";
+        const compYear = new Date(row.competitions.start_date).getFullYear();
+        const sent = await fetch("https://api.resend.com/emails", {
+          method: "POST", headers: { authorization: `Bearer ${Deno.env.get("RESEND_API_KEY")}`, "content-type": "application/json" },
+          body: JSON.stringify({ from, to: [row.email, copy], reply_to: copy, subject: `Your entry: ${row.competitions.name}`, text: confirmationEmail({
+            name: row.full_name, competition: row.competitions.name, date: row.competitions.start_date, event: row.event === "bench_only" ? "Bench only" : "Full power",
+            equipment: row.equipment === "equipped" ? "Equipped" : "Classic", pence: row.price_pence, under18: exactAge(row.date_of_birth, row.competitions.start_date) < 18, entriesEmail: copy,
+            category: ageCategory(new Date(row.date_of_birth).getFullYear(), compYear), division: row.divisions ? row.divisions.name + (row.divisions.is_home ? "" : " (guest)") : undefined,
+            club: row.club || undefined, discountPence: row.discount_pence || 0 }) }),
+        });
+        if (!sent.ok) console.error("Resend failed", sent.status);
+      }
+      return reply(200, { free: true, entry_id, slug });
     }
 
     // 3. Stripe embedded Checkout. Stripe's shortest allowed life is 30 minutes; our own hold is shorter

@@ -15,6 +15,7 @@ export function statusFrom(rows: { status: string; entries?: { status: string } 
   return "pending";
 }
 export const validSession = (s: string) => /^cs_[A-Za-z0-9_]{8,200}$/.test(s);
+export const validEntry = (s: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
 
 if (typeof Deno !== "undefined") {
   Deno.serve(async (req: Request) => {
@@ -23,12 +24,20 @@ if (typeof Deno !== "undefined") {
     const reply = (status: number, body: Record<string, unknown>) => new Response(JSON.stringify(body), { status, headers: { ...cors, "content-type": "application/json", "cache-control": "no-store" } });
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     if (req.method !== "GET") return reply(405, { error: "method_not_allowed" });
-    const session = new URL(req.url).searchParams.get("session_id") ?? "";
-    if (!validSession(session)) return reply(200, { status: "unknown" });
+    const q = new URL(req.url).searchParams, session = q.get("session_id") ?? "", entry = q.get("entry_id") ?? "";
+    if (!validSession(session) && !validEntry(entry)) return reply(200, { status: "unknown" });
     const url = Deno.env.get("SUPABASE_URL"), svc = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     if (!url || !svc) return reply(500, { error: "not_configured" });
-    const r = await fetch(`${url}/rest/v1/payments?stripe_session_id=eq.${encodeURIComponent(session)}&select=status,entries(status)&limit=1`, { headers: { apikey: svc, authorization: `Bearer ${svc}` } });
+    const H = { apikey: svc, authorization: `Bearer ${svc}` };
+    if (validSession(session)) {
+      const r = await fetch(`${url}/rest/v1/payments?stripe_session_id=eq.${encodeURIComponent(session)}&select=status,entries(status)&limit=1`, { headers: H });
+      if (!r.ok) { console.error("entry-status lookup failed", r.status); return reply(502, { error: "lookup_failed" }); }
+      return reply(200, { status: statusFrom(await r.json()) });
+    }
+    // A free entry has no payment: look at the entry itself (its id is a long random value only its owner is sent).
+    const r = await fetch(`${url}/rest/v1/entries?id=eq.${entry}&select=status&limit=1`, { headers: H });
     if (!r.ok) { console.error("entry-status lookup failed", r.status); return reply(502, { error: "lookup_failed" }); }
-    return reply(200, { status: statusFrom(await r.json()) });
+    const [row] = await r.json();
+    return reply(200, { status: !row ? "unknown" : row.status === "paid" || row.status === "comped" ? "paid" : row.status === "refunded" ? "refunded" : "pending" });
   });
 }

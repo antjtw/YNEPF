@@ -194,13 +194,69 @@ ok((await manual("entries", { email: "d@example.com", division_id: "" })).error 
 ok((await manual("entries", { email: "w@example.com", weight_class_id: wcF })).error === "invalid:weight_class", "same checks as the form: class matches category");
 ok((await manual("entries", { email: "o@example.com" })).over_capacity === true, "adding past the number of places is allowed but flagged (capacity is 2)");
 await db.exec(`update public.entries set status='cancelled' where competition_id='${C}'; update public.competitions set entry_opens = null, entry_closes = null where id='${C}'`);
+const C2 = "33333333-3333-3333-3333-333333333333";
+await db.exec(`insert into public.competitions (id,name,start_date,capacity,published,slug) values ('${C2}','New Open','2027-05-01',50,true,'new')`);
+// ---- discount codes
+await db.exec("reset role");
+await db.exec(`update public.entries set status='cancelled' where competition_id='${C}'; update public.competitions set capacity = 20 where id='${C}'`);
+const mkcode = async (who, comp, o) => { await db.exec("reset role"); await db.query(`select set_config('request.uid','${who ? UU[who] : ""}',false)`); await db.exec(who ? "set role authenticated" : "set role anon");
+  try { return (await db.query(`select public.create_discount_code($1, $2::jsonb) r`, [comp, JSON.stringify(o)])).rows[0].r; } catch (e) { return { error: e.message }; } finally { await db.exec("reset role"); } };
+ok((await mkcode("editor", C, { kind: "amount", value: 2000 })).error === "forbidden", "an editor cannot make discount codes");
+ok((await mkcode(null, C, { kind: "amount", value: 2000 })).error !== undefined, "the public cannot");
+const c20 = await mkcode("entries", C, { recipient_name: "Sam Smith", kind: "amount", value: 2000, reason: "Volunteer points: £20 off" });
+ok(/^SAMSMITH-20OFF-[A-Z2-9]{6}$/.test(c20.code), "a code is made from the name and the discount plus random letters: " + c20.code);
+const half = await mkcode("entries", C, { recipient_name: "Pat", kind: "percent", value: 50 });
+ok(/^PAT-HALF-/.test(half.code), "half price: " + half.code);
+const free = await mkcode("entries", C, { recipient_name: "Vic", kind: "percent", value: 100, recipient_email: "Vic@Example.com" });
+ok(/^VIC-FREE-/.test(free.code), "free: " + free.code);
+ok(/^YNE-12P50OFF-/.test((await mkcode("entries", C, { kind: "amount", value: 1250 })).code), "no name: YNE, and pence shown as 12P50");
+ok((await mkcode("entries", C, { kind: "percent", value: 150 })).error === "invalid:value" && (await mkcode("entries", C, { kind: "weird", value: 5 })).error === "invalid:kind" && (await mkcode("entries", C, { kind: "amount", value: 0 })).error === "invalid:value", "bad kinds and values are refused");
+const price = async (code, o) => { const r = await start({ email: "d" + Math.random().toString(36).slice(2, 8) + "@example.com", discount_code: code, ...o }); return r; };
+// full power is £60 in this test competition
+r = await price(c20.code, { email: "samsmith@example.com" });
+ok(r.price_pence === 4000 && r.discount_pence === 2000 && r.free === false, "£20 off a £60 entry makes it £40: " + JSON.stringify(r));
+ok((await price(c20.code.toLowerCase())).error === "discount_used", "a one-use code cannot be used a second time (held places count), and case does not matter");
+r = await price(half.code); ok(r.price_pence === 3000, "half price of £60 is £30");
+ok((await price(free.code, { email: "someone@example.com" })).error === "discount_not_yours", "a code tied to an email only works for that email");
+r = await price(free.code, { email: "vic@example.com" });
+const fr = (await db.query(`select status s, price_pence p, discount_pence d, paid_at is not null pa, hold_expires_at h from public.entries where id='${r.entry_id}'`)).rows[0];
+ok(r.free === true && r.price_pence === 0 && fr.s === "comped" && fr.p === 0 && fr.d === 6000 && fr.pa && fr.h === null, "a code that takes everything off makes a free, confirmed entry: " + JSON.stringify(fr));
+ok((await db.query(`select public.places_left('${C}') n`)).rows[0].n < 20, "...which still takes a place");
+ok((await price("NOPE-00000")).error === "discount_invalid" && (await price("")).entry_id, "an unknown code is refused; no code is fine");
+// the code is freed when the entry is cancelled
+await db.exec(`update public.entries set status='cancelled' where discount_code_id = (select id from public.discount_codes where code='${c20.code}')`);
+ok((await price(c20.code)).discount_pence === 2000, "cancelling or refunding the entry frees the code");
+// expiry, switched off, other competition, any competition, bigger than the price
+const exp = await mkcode("entries", C, { kind: "amount", value: 500, expires_at: "2020-01-01T00:00:00Z" });
+ok((await price(exp.code)).error === "discount_expired", "an expired code is refused");
+const off = await mkcode("entries", C, { kind: "amount", value: 500 }); await db.exec(`update public.discount_codes set active = false where code = '${off.code}'`);
+ok((await price(off.code)).error === "discount_invalid", "a switched-off code is refused");
+const other = await mkcode("entries", C2, { kind: "amount", value: 500 });
+ok((await price(other.code)).error === "discount_invalid", "a code for another competition is refused");
+const any = await mkcode("entries", null, { recipient_name: "Anywhere", kind: "amount", value: 500, max_uses: 2 });
+ok((await price(any.code)).discount_pence === 500 && (await price(any.code)).discount_pence === 500 && (await price(any.code)).error === "discount_used", "a code for any competition works here, and max uses is respected");
+const big = await mkcode("entries", C, { kind: "amount", value: 90000 });
+r = await price(big.code); ok(r.price_pence === 0 && r.discount_pence === 6000 && r.free, "a discount bigger than the price takes off only the price (never a negative total)");
+// the entry form's check (service role only)
+await db.exec("reset role");
+const chk = async (code, o) => (await db.query(`select public.check_discount($1::jsonb) r`, [JSON.stringify({ competition_id: C, email: "x@example.com", date_of_birth: "1990-01-01", event: "full_power", equipment: "classic", code, ...o })])).rows[0].r;
+const hlf = await mkcode("entries", C, { kind: "percent", value: 50, max_uses: 5 });
+const cr = await chk(hlf.code);
+ok(cr.ok === true && cr.base_pence === 6000 && cr.discount_pence === 3000 && cr.price_pence === 3000, "the form's check shows the new total");
+ok((await chk("nope")).error === "invalid" && (await chk(hlf.code, { competition_id: "00000000-0000-0000-0000-000000000099" })).ok === false, "the form's check refuses bad codes and unknown competitions");
+await db.exec("set role anon"); let anonCheck = true; try { await db.query(`select public.check_discount('{}'::jsonb)`); } catch { anonCheck = false; }
+ok(!anonCheck, "the public cannot call the check directly (it goes through the payment function)");
+const seeCodes = async (who) => { await db.exec("reset role"); await db.query(`select set_config('request.uid','${who ? UU[who] : ""}',false)`); await db.exec(who ? "set role authenticated" : "set role anon");
+  try { return (await db.query(`select count(*)::int n from public.discount_codes`)).rows[0].n; } catch { return 0; } finally { await db.exec("reset role"); } };
+ok((await seeCodes("entries")) > 5 && (await seeCodes("editor")) === 0 && (await seeCodes(null)) === 0, "only the entries team can see discount codes (not editors, not the public)");
+await db.exec("reset role");
+await db.exec(`update public.entries set status='cancelled' where competition_id='${C}'; update public.competitions set capacity = 2 where id='${C}'`);
 // ---- save_entry_settings (the entries team's admin screen)
 await db.exec("reset role");
 const U = { entries: "00000000-0000-0000-0000-00000000000b", editor: "00000000-0000-0000-0000-00000000000c" };
 for (const [k, id] of Object.entries(U)) await db.exec(`insert into auth.users (id,email,email_confirmed_at) values ('${id}','${k}@example.com',now()) on conflict do nothing`);
 await db.exec(`insert into public.editors (email, role) values ('entries@example.com','entries'),('editor@example.com','editor') on conflict do nothing`);
-const C2 = "33333333-3333-3333-3333-333333333333";
-await db.exec(`insert into public.competitions (id,name,start_date,capacity,published,slug) values ('${C2}','New Open','2027-05-01',50,true,'new')`);
+
 const settings = { entry_method: "yne", events: ["full_power", "bench_only"], equipment: ["classic"], hold_minutes: 15, prices: { sub_junior: 2500, bench_only: 2500, full_power: 6000 } };
 const save = async (who, o) => { await db.exec("reset role"); await db.query(`select set_config('request.uid','${U[who]}',false)`); await db.exec("set role authenticated");
   try { await db.query(`select public.save_entry_settings('${C2}', $1::jsonb)`, [JSON.stringify({ ...settings, ...o })]); return "ok"; } catch (e) { return e.message; } };
