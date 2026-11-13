@@ -205,7 +205,7 @@ create table if not exists public.qualifying_totals (
 create table if not exists public.addons (
   id uuid primary key default gen_random_uuid(),
   competition_id uuid not null references public.competitions (id) on delete cascade,
-  kind text not null check (kind in ('photo', 'merch')),  -- decides who is paid (see payout_rules)
+  kind text not null check (kind in ('photo', 'merch', 'federation')),  -- decides who is paid: photo and merch by payout_rules, federation: the federation keeps it all
   name text not null,
   description text not null default '',
   price_pence integer not null check (price_pence >= 0),
@@ -214,6 +214,8 @@ create table if not exists public.addons (
   size_guide_path text not null default '',
   sort_order integer not null default 0
 );
+alter table public.addons drop constraint if exists addons_kind_check;
+alter table public.addons add constraint addons_kind_check check (kind in ('photo', 'merch', 'federation'));
 create table if not exists public.addon_options (          -- e.g. T-shirt sizes
   id uuid primary key default gen_random_uuid(),
   addon_id uuid not null references public.addons (id) on delete cascade,
@@ -666,9 +668,16 @@ begin
                         then category_pence - sum(pence) over (partition by category) else 0 end as pence
       from raw
   ),
+  -- Extras marked "paid to the federation" are the federation's own: all of it, no percentages.
+  fed_extras as (
+    select fed as payee_id, 'merch'::text as category, coalesce(sum(ea.price_pence), 0)::bigint as pence
+      from public.addons ad join public.entry_addons ea on ea.addon_id = ad.id and ea.entry_id in (select id from live)
+     where ad.competition_id = c and ad.kind = 'federation' having coalesce(sum(ea.price_pence), 0) > 0
+  ),
   parts as (
     select er.payee_id, 'entry'::text as category, er.pence from entry_rows er
     union all select s.payee_id, s.category, s.pence from split s
+    union all select fe.payee_id, fe.category, fe.pence from fed_extras fe
   ),
   per_payee as (
     select pt.payee_id,

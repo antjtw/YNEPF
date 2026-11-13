@@ -206,6 +206,16 @@ ok((await db.query(`select count(*)::int n from public.payees where lower(name) 
 ok((await db.query(`select count(*)::int n from public.payout_rules where competition_id = '${CC}' and category = 'photo'`)).rows[0].n === 0, "saving again replaces the old split (no photographer this time)");
 await db.exec("reset role");
 
+
+// an extra marked "paid to the federation": the federation keeps all of it (here in a competition with a host)
+await db.exec("reset role");
+await db.exec(`update public.entries set status='cancelled'`);
+await db.exec(`insert into public.addons (id, competition_id, kind, name, price_pence) values ('${id("a3")}','${COMP}','federation','YNE hoodie',3000)`);
+await mkEntry({ addon: { id: "a3", price: 3000 } });
+s = byName(await settle());
+ok(s["YNEPF"].m === 3000 && s["Implexus Gym"].m === 0, "a federation extra is kept whole by the federation (£30), the host gets none of it: " + JSON.stringify(s["YNEPF"]));
+ok(s["Implexus Gym"].e === 2800 && s["YNEPF"].e === 1200, "and the entry fee still splits £28 host / £12 federation");
+try { await db.query(`insert into public.addons (competition_id, kind, name, price_pence) values ('${COMP}','other','x',1)`); ok(false, "an unknown kind is refused"); } catch { ok(true, "an unknown kind of extra is refused"); }
 // a competition the federation runs itself (not a franchise): it keeps the whole entry fee, and the photo package goes to the photographer
 await db.exec("reset role");
 await db.exec(`update public.entries set status='cancelled'; update public.competitions set is_franchise = false where id = '${COMP}'`);

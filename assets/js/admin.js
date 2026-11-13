@@ -856,7 +856,7 @@
 
 
   // ---- Extras: a photo package, merchandise (a T-shirt in sizes) offered on the entry form ------------------
-  var EXTRA_KINDS = { photo: "Photo package", merch: "Merchandise" };
+  var EXTRA_KINDS = { photo: "Photo package", merch: "Merchandise", federation: "Federation" };
   function renderExtrasTab(view, c) {
     view.replaceChildren(el("p", null, "Loading…"));
     Promise.all([
@@ -869,7 +869,7 @@
       function count(id) { return taken.filter(function (x) { return x.addon_id === id; }).reduce(function (n, x) { return n + x.quantity; }, 0); }
       view.replaceChildren(
         el("div", { class: "actions", style: "margin-bottom:var(--space-3)" }, btn("Add an extra", function () { editExtra(c, null, function () { renderExtrasTab(view, c); }); }, "btn-primary")),
-        el("p", { class: "panel-intro" }, "Extras are offered on the entry form, after the lifting questions, and added to what the lifter pays. Discount codes take money off the entry only, never the extras. A photo package is paid to the photographer you name on the Money tab."),
+        el("p", { class: "panel-intro" }, "Extras are offered on the entry form, after the lifting questions, and added to what the lifter pays. Discount codes take money off the entry only, never the extras. A photo package is paid to the photographer you name on the Money tab, merchandise is shared with the host by the percentage you set there, and anything marked as paid to the federation is kept by the federation."),
         items.length ? el("div", { class: "table-scroll" }, el("table", { class: "admin-table" },
           el("thead", null, el("tr", null, ["Extra", "Type", "Price", "Taken", "Actions"].map(function (h) { return el("th", { scope: "col" }, h); }))),
           el("tbody", null, items.map(function (x) {
@@ -894,7 +894,7 @@
       values: x ? { kind: x.kind, name: x.name, description: x.description, price: poundsInput(x.price_pence), stock: x.stock === null ? "" : x.stock, sizes: current.map(function (o) { return o.label; }).join(", ") }
                 : { kind: "photo", name: "White Lights Media photo package", description: "", price: "", stock: "", sizes: "" },
       fields: [
-        { name: "kind", label: "What kind is it?", type: "select", half: true, options: [{ value: "photo", label: "Photo package (paid to the photographer)" }, { value: "merch", label: "Merchandise (paid to the host)" }] },
+        { name: "kind", label: "What kind is it?", type: "select", half: true, options: [{ value: "photo", label: "Photo package (paid to the photographer)" }, { value: "merch", label: "Merchandise (shared with the host)" }, { value: "federation", label: "Paid to the federation (the federation keeps all of it)" }] },
         { name: "price", label: "Price (£)", type: "number", min: "0", required: true, half: true },
         { name: "name", label: "Name", required: true, help: "Shown on the entry form, on the payment page and in the confirmation email." },
         { name: "description", label: "Short description (optional)", help: "One line shown under the name on the entry form." },
