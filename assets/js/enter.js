@@ -101,33 +101,33 @@
     var items = ctx.extras || [];
     if (!items.length) return null;
     v.extras = v.extras || {};
-    return el("fieldset", { class: "field", id: "extras-field" },
-      el("legend", null, "Extras (optional)"),
-      el("p", { class: "help", id: "extras-help" }, "You can add these to your entry. Discount codes only apply to the entry fee."),
-      items.map(function (x, i) {
-        var opts = (x.addon_options || []).slice().sort(function (p, q) { return p.sort_order - q.sort_order; });
-        var label = x.name + ", " + pounds(x.price_pence);
-        if (opts.length) {
-          return el("div", { class: "field" },
-            el("label", { for: "extra-" + i }, label),
-            x.description ? el("p", { class: "help", id: "extra-" + i + "-help" }, x.description) : null,
-            el("select", { id: "extra-" + i, name: "extra-" + i, "aria-describedby": x.description ? "extra-" + i + "-help" : false,
-              onchange: function (e) { v.extras[x.id] = e.target.value; refreshTotals(); } },
-              el("option", { value: "" }, "No thank you"), opts.map(function (o) { return el("option", { value: o.id, selected: v.extras[x.id] === o.id }, "Size " + o.label); })));
-        }
-        return el("div", { class: "check-field form-touch" },
-          el("label", { class: "check-label", for: "extra-" + i },
+    return el("div", { class: "field", "data-field": "extras" },
+      el("fieldset", { class: "choice", id: "extras-field" },
+        el("legend", null, "Extras (optional)"),
+        el("p", { class: "help", id: "extras-help" }, "You can add these to your entry. Discount codes only apply to the entry fee."),
+        items.map(function (x, i) {
+          var opts = (x.addon_options || []).slice().sort(function (p, q) { return p.sort_order - q.sort_order; });
+          var label = x.name + ", " + pounds(x.price_pence);
+          if (opts.length) {
+            return el("div", { class: "field" },
+              el("label", { for: "extra-" + i }, label),
+              x.description ? el("p", { class: "help", id: "extra-" + i + "-help" }, x.description) : null,
+              el("select", { id: "extra-" + i, name: "extra-" + i, "aria-describedby": x.description ? "extra-" + i + "-help" : false,
+                onchange: function (e) { v.extras[x.id] = e.target.value; refreshTotals(); } },
+                el("option", { value: "" }, "No thank you"), opts.map(function (o) { return el("option", { value: o.id, selected: v.extras[x.id] === o.id }, "Size " + o.label); })));
+          }
+          return el("div", { class: "field-check" },
             el("input", { id: "extra-" + i, name: "extra-" + i, type: "checkbox", checked: !!v.extras[x.id], "aria-describedby": x.description ? "extra-" + i + "-hint" : false,
               onchange: function (e) { v.extras[x.id] = e.target.checked ? "yes" : ""; refreshTotals(); } }),
-            el("span", null, label)),
-          x.description ? el("p", { class: "help", id: "extra-" + i + "-hint" }, x.description) : null);
-      }));
+            el("div", null, el("label", { for: "extra-" + i }, label), x.description ? el("p", { class: "help", id: "extra-" + i + "-hint" }, x.description) : null));
+        })));
   }
 
   // ---- discount code -------------------------------------------------------------------------------
   // The price to pay: the discount (if a code has been applied) taken off.
   function totalNow() { var a = v.discount_applied, base = a ? a.price_pence : priceNow(); return base === null ? null : base + extrasNow(); }
   function refreshTotals() {
+    updateFee();
     var t = totalNow(), free = t === 0;
     var tl = document.getElementById("total-line"); if (tl) tl.replaceChildren(document.createTextNode("Total to pay: "), el("strong", null, t === null ? "—" : pounds(t)));
     var btn = document.getElementById("pay-btn"); if (btn && !btn.disabled) btn.textContent = free ? "Confirm your entry" : "Continue to payment";
@@ -294,7 +294,7 @@
     ];
   }
   // The fee line is always on the page; only its words change when the event and equipment are chosen.
-  function feeText() { var p = priceNow(); return p === null ? "Your entry fee: choose an event and equipment." : "Your entry fee: " + pounds(p); }
+  function feeText() { var p = priceNow(), x = extrasNow(); return p === null ? "Your entry fee: choose an event and equipment." : "Your entry fee: " + pounds(p) + (x ? ". With extras: " + pounds(p + x) : ""); }
   function updateFee() { var n = document.getElementById("fee-line"); if (n) n.textContent = feeText(); }
   function stepLifting() {
     var allowed = allowedClasses();
