@@ -6,6 +6,16 @@
 (function () {
   "use strict";
 
+  // The browser's own replaceChildren() turns a null into the word "null" on the page. We often pass `condition ? thing : null`,
+  // so ignore anything that is not a real piece of content.
+  if (window.Element && Element.prototype.replaceChildren && !Element.prototype.replaceChildren.__quiet) {
+    var nativeReplace = Element.prototype.replaceChildren;
+    Element.prototype.replaceChildren = function () {
+      return nativeReplace.apply(this, Array.prototype.filter.call(arguments, function (n) { return n !== null && n !== undefined && n !== false; }));
+    };
+    Element.prototype.replaceChildren.__quiet = true;
+  }
+
   var TZ = "Europe/London"; // GMT in winter, BST in summer
   var cfg = window.YNEPF_CONFIG || {};
   var client = null;
