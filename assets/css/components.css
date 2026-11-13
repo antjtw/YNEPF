@@ -681,7 +681,7 @@ table.lifters thead th { overflow-wrap: normal; }
 .form-touch .field-check input[type="radio"] { border-radius: 50%; }
 .form-touch .field-check input[type="checkbox"] { border-radius: 4px; }
 .form-touch .field-check input[type="radio"]::before { content: ""; position: absolute; inset: 0.5rem; border-radius: 50%; background: var(--accent-ink); opacity: 0; }
-.form-touch .field-check input[type="checkbox"]::after { content: ""; position: absolute; left: 0.5rem; top: 0.55rem; width: 1.1rem; height: 0.55rem; border: solid var(--accent-ink); border-width: 0 0 4px 4px; transform: rotate(-45deg); opacity: 0; }
+.form-touch .field-check input[type="checkbox"]::after { content: ""; position: absolute; left: 0.54rem; top: 0.77rem; width: 1.1rem; height: 0.55rem; border: solid var(--accent-ink); border-width: 0 0 4px 4px; transform: rotate(-45deg); opacity: 0; }
 .form-touch .field-check input:checked::before, .form-touch .field-check input:checked::after { opacity: 1; }
 .form-touch .field-check input:hover { border-color: var(--accent-ink); }
 .form-touch .field-check input:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; box-shadow: 0 0 0 3px var(--focus-text); }
