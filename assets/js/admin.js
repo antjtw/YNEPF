@@ -1009,9 +1009,10 @@
         { name: "prime_time", label: "Prime time", type: "checkbox", help: "Makes the last session prime time, for the top lifters by GL points." },
         { name: "prime_women", label: "Women in prime time", type: "number", min: "1", max: "14", half: true, show: function (v) { return v.prime_time; } },
         { name: "prime_men", label: "Men in prime time", type: "number", min: "1", max: "14", half: true, show: function (v) { return v.prime_time; } },
-        { name: "women_first", label: "Put the women's flight first in each session", type: "checkbox" },
-        { name: "seconds_per_attempt", label: "Seconds per attempt", type: "number", min: "15", max: "180", half: true, help: "Used to estimate when each session finishes. 45 gives about 3.5 hours for two full flights." }
+        { name: "women_first", label: "Put the women's flight first in each session", type: "checkbox" }
       ], settings);
+      var secForm = pageForm([{ name: "seconds_per_attempt", label: "Seconds per attempt", type: "number", min: "15", max: "180", half: true, help: "Used to estimate when each session finishes. 45 is the usual: about 3.5 hours for two full flights." }], { seconds_per_attempt: settings.seconds_per_attempt });
+      secForm.el.addEventListener("change", function () { S.dirty = true; status(); draw(); });
       form.el.addEventListener("input", function () { S.dirty = true; status(); });
       form.el.addEventListener("change", function () { S.dirty = true; status(); });
 
@@ -1019,7 +1020,7 @@
       function settingsNow() {
         var v = form.values();
         return { days: v.days ? Math.round(v.days) : null, sessions: v.sessions ? Math.round(v.sessions) : null, maxFullPower: 14, maxPerFlight: 20,         // the federation's rules: not a setting
-          womenFirst: !!v.women_first, secondsPerAttempt: Math.round(v.seconds_per_attempt) || 45, primeTime: { enabled: !!v.prime_time, women: Math.round(v.prime_women) || 14, men: Math.round(v.prime_men) || 14 } };
+          womenFirst: !!v.women_first, secondsPerAttempt: Math.round(secForm.values().seconds_per_attempt) || 45, primeTime: { enabled: !!v.prime_time, women: Math.round(v.prime_women) || 14, men: Math.round(v.prime_men) || 14 } };
       }
       function status() { statusNode.textContent = S.dirty ? "Not saved yet" : (S.sessions.length ? "Saved" : ""); window.onbeforeunload = S.dirty ? function () { return ""; } : null; }
       function flightsList() { var out = []; S.sessions.forEach(function (s) { s.flights.forEach(function (f) { out.push({ s: s, f: f, key: s.day + ":" + f.letter }); }); }); return out; }
@@ -1149,27 +1150,28 @@
       // ---- session times: lift-off is typed, weigh-in defaults to 2 hours before, the finish is estimated from the attempts
       function hm(ms) { return ms === null || ms === undefined ? "" : Y.toLondonInput(new Date(ms).toISOString()).slice(11, 16); }
       function msOf(iso) { return iso ? new Date(iso).getTime() : null; }
-      function timesOf(s) { return LSo.sessionTimes({ liftOff: msOf(s.liftOff), weighIn: msOf(s.weighIn), awards: msOf(s.awards), flights: s.flights.map(function (f) { return { lifters: f.lifters.filter(function (l) { return ent[l.id]; }).map(function (l) { return { event: ent[l.id].event }; }) }; }) }, settingsNow().secondsPerAttempt); }
-      function timeField(s, key, label, placeholder) {
-        var id = "t-" + s.day + "-" + s.sessionNo + "-" + key, input = el("input", { type: "text", id: id, inputmode: "numeric", autocomplete: "off", size: "6", maxlength: "5", placeholder: placeholder || "hh:mm", "data-fk": id, "aria-describedby": "lo-times-help" });
-        input.value = s[key] ? hm(msOf(s[key])) : "";
-        input.addEventListener("change", function () {
-          var v = input.value.trim().replace(".", ":");
-          if (v === "") { s[key] = null; }
-          else {
-            var m = /^(\d{1,2})(?::?(\d{2}))$/.exec(v); if (!m || +m[1] > 23 || +m[2] > 59) { toast("Type the time like 09:30.", "error"); input.value = s[key] ? hm(msOf(s[key])) : ""; return; }
-            s[key] = Y.fromLondonInput(Y.addDays(c.start_date, s.day - 1) + "T" + ("0" + m[1]).slice(-2) + ":" + m[2]);
-          }
-          S.dirty = true; status(); draw(id);
-        });
-        return el("div", { class: "field half", style: "margin:0" }, el("label", { for: id }, label), input);
+      function timesOf(s) { return LSo.sessionTimes({ liftOff: msOf(s.liftOff), weighIn: msOf(s.weighIn), awards: msOf(s.awards), defaultWeighIn: defaultWeighIn(s), flights: s.flights.map(function (f) { return { lifters: f.lifters.filter(function (l) { return ent[l.id]; }).map(function (l) { return { event: ent[l.id].event }; }) }; }) }, settingsNow().secondsPerAttempt); }
+      function defaultWeighIn(s) { var hmDefault = LSo.DEFAULT_WEIGH_IN[s.sessionNo]; return hmDefault ? msOf(Y.fromLondonInput(Y.addDays(c.start_date, s.day - 1) + "T" + hmDefault)) : null; }
+      function parseTime(v, s) {
+        v = String(v || "").trim().replace(".", ":"); if (v === "") return null;
+        var m = /^(\d{1,2})(?::?(\d{2}))$/.exec(v); if (!m || +m[1] > 23 || +m[2] > 59) return false;
+        return Y.fromLondonInput(Y.addDays(c.start_date, s.day - 1) + "T" + ("0" + m[1]).slice(-2) + ":" + m[2]);
       }
-      function timesRow(s) {
+      function editTimes(s) {
         var t = timesOf(s);
-        var line = t.liftOff === null ? "Type the lift-off time and the others are worked out." : "Weigh-in " + hm(t.weighIn) + (t.weighInAuto ? " (2 hours before)" : "") + ", lift-off " + hm(t.liftOff) + ", awards " + (t.awardsAuto ? "about " : "") + hm(t.awards) + (t.awardsAuto ? " (estimated)" : "") + ".";
-        return el("div", { class: "lab-times", style: "display:flex;gap:var(--space-4);flex-wrap:wrap;align-items:flex-end;margin:var(--space-3) 0" },
-          timeField(s, "liftOff", "Lift-off"), timeField(s, "weighIn", "Weigh-in", t.weighInAuto ? hm(t.weighIn) : ""), timeField(s, "awards", "Awards", t.awardsAuto ? hm(t.awards) : ""),
-          el("p", { class: "help", style: "margin:0;flex:1 1 16em" }, line));
+        openForm({ title: "Day " + s.day + ", session " + s.sessionNo + ": times", intro: "UK time, like 09:30. Leave a box empty to use the usual time: weigh-in 08:00 for session 1 and 13:00 for session 2, lift-off two hours after weigh-in, and the awards estimated from the attempts.",
+          saveLabel: "Save times",
+          fields: [{ name: "weighIn", label: "Weigh-in", type: "text", half: true, placeholder: hm(t.weighIn) }, { name: "liftOff", label: "Lift-off", type: "text", half: true, placeholder: hm(t.liftOff) }, { name: "awards", label: "Awards", type: "text", half: true, placeholder: hm(t.awards) }],
+          values: { weighIn: s.weighIn ? hm(msOf(s.weighIn)) : "", liftOff: s.liftOff ? hm(msOf(s.liftOff)) : "", awards: s.awards ? hm(msOf(s.awards)) : "" },
+          validate: function (v) { return ["weighIn", "liftOff", "awards"].some(function (k) { return parseTime(v[k], s) === false; }) ? "Type each time like 09:30, or leave it empty." : null; },
+          onSave: function (v) { ["weighIn", "liftOff", "awards"].forEach(function (k) { s[k] = parseTime(v[k], s); }); S.dirty = true; status(); draw("times:" + s.day + "-" + s.sessionNo); } });
+      }
+      // The card: the three times in plain text, with an Edit button that opens the overlay
+      function timesRow(s) {
+        var t = timesOf(s), item = function (label, ms, note) { return el("div", { class: "time-item" }, el("span", { class: "time-label" }, label), el("strong", { class: "time-value" }, ms === null ? "Not set" : hm(ms)), note ? el("span", { class: "time-note" }, note) : null); };
+        return el("div", { class: "times-card" },
+          item("Weigh-in", t.weighIn, t.weighInAuto && t.weighIn !== null ? "usual time" : ""), item("Lift-off", t.liftOff, t.liftOffAuto && t.liftOff !== null ? "2 hours after weigh-in" : ""), item("Awards", t.awards, t.awardsAuto && t.awards !== null ? "estimated" : ""),
+          el("button", { class: "btn btn-sm btn-secondary", type: "button", "data-fk": "times:" + s.day + "-" + s.sessionNo, "aria-label": "Edit times for day " + s.day + ", session " + s.sessionNo, onclick: function () { editTimes(s); } }, "Edit times"));
       }
       var justMoved = null;
       function draw(focusKey, moved) {
@@ -1182,7 +1184,6 @@
         var ls = lotsState(); if (ls.any && !ls.ok) notes.push("Lifters have moved since the lot numbers were drawn, so some flights no longer have their own block of numbers. Draw the lot numbers again once the order is settled.");
         if (!flights.length && noTotal) notes.push(noTotal + (noTotal === 1 ? " lifter has" : " lifters have") + " no best total yet (it comes from the OpenIPF check on the entry). They go first in their flight.");
         if (notes.length) kids.push(el("div", { class: "callout" }, el("ul", { style: "margin:0;padding-left:1.2em" }, notes.map(function (w) { return el("li", null, w); }))));
-        kids.push(el("p", { class: "visually-hidden", id: "lo-times-help" }, "Times are UK time, like 09:30. Leave weigh-in and awards blank to have them worked out."));
         kids.push(el("p", { class: "visually-hidden", id: "lo-grip-help" }, "Press space to pick this lifter up, then the up and down arrow keys to move them through the order, space to drop them, delete to take them out, or escape to cancel."));
         if (flights.length) {
           kids.push(el("section", { id: "lo-unplaced-zone", class: "lab-unplaced", "aria-labelledby": "lo-unplaced" }, el("h3", { id: "lo-unplaced" }, "Not in the lifting order" + (unplaced.length ? " (" + unplaced.length + ")" : "")),
@@ -1302,6 +1303,7 @@
         live, area,
         el("section", { "aria-labelledby": "lo-lots-h", style: "margin:var(--space-5) 0" }, el("h3", { id: "lo-lots-h" }, "Lot numbers"),
           el("div", { class: "actions", style: "margin:var(--space-3) 0" }, lotBtn), lotToggle),
+        el("section", { "aria-labelledby": "lo-settings-h", style: "margin:var(--space-5) 0" }, el("h3", { id: "lo-settings-h" }, "Settings"), secForm.el),
         exportBox);
       status(); pubStatus(); draw();
     }).catch(function (e) { view.replaceChildren(el("p", { class: "form-error" }, friendly(e))); });

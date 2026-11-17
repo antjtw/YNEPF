@@ -170,3 +170,11 @@ body.dragging-lifter { user-select: none; cursor: grabbing; }
 .lab-flight .lab-table:has(.grip) th:nth-child(4) { width: 9%; }
 .lab-flight .lab-table:has(.grip) th:nth-child(5) { width: 11%; }
 .lab-flight .lab-table:has(.grip) th:nth-child(6) { width: 15%; }
+
+/* Session times card (Lifting order tab) */
+.times-card { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4) var(--space-6); margin: var(--space-3) 0 var(--space-4); padding: var(--space-3) var(--space-4); background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+.times-card .time-item { display: flex; flex-direction: column; min-width: 7rem; }
+.times-card .time-label { font-size: 0.8125rem; color: var(--text-muted, var(--grey-700)); }
+.times-card .time-value { font-size: 1.25rem; line-height: 1.2; }
+.times-card .time-note { font-size: 0.8125rem; color: var(--text-muted, var(--grey-700)); }
+.times-card .btn { margin-left: auto; }

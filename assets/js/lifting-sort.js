@@ -214,22 +214,26 @@
   }
 
   // ---- session times ---------------------------------------------------------------------------------------------------
-  // Lift-off is set by hand. Weigh-in defaults to two hours before it. The finish (awards) is estimated from the attempts:
+  // Usual weigh-in times by session of the day (UK time): session 1 at 08:00, session 2 at 13:00. Lift-off defaults to two hours after weigh-in.
+  // The finish (awards) is estimated from the attempts:
   //   (full power lifters x 9 + bench only lifters x 3) x seconds per attempt, plus 10 minutes between flights when there are two or more,
   //   plus 10 minutes before awards. 45 seconds an attempt gives about 3.5 hours for two full flights of 14.
-  // s = { liftOff, weighIn, awards: ms or null (what was typed), flights: [{ lifters: [{ event }] }] }. Returns times in ms, or null where unknown.
+  // Anything typed by hand wins. Type only a lift-off and the weigh-in becomes two hours before it; type only a weigh-in and lift-off follows it.
+  var DEFAULT_WEIGH_IN = { 1: "08:00", 2: "13:00" };
   function estimateMinutes(flights, secondsPerAttempt) {
     var attempts = 0;
     flights.forEach(function (f) { f.lifters.forEach(function (l) { attempts += l.event === "bench_only" ? 3 : 9; }); });
     var n = flights.filter(function (f) { return f.lifters.length; }).length;
     return Math.round(attempts * (secondsPerAttempt || 45) / 60) + (n >= 2 ? 10 : 0) + 10;
   }
+  // s = { liftOff, weighIn, awards: ms or null (typed), defaultWeighIn: ms or null (the usual time for this session), flights: [{ lifters: [{ event }] }] }
   function sessionTimes(s, secondsPerAttempt) {
-    var lift = typeof s.liftOff === "number" ? s.liftOff : null;
-    var weigh = typeof s.weighIn === "number" ? s.weighIn : (lift !== null ? lift - 120 * 60000 : null);
-    var awards = typeof s.awards === "number" ? s.awards : (lift !== null ? lift + estimateMinutes(s.flights, secondsPerAttempt) * 60000 : null);
-    return { liftOff: lift, weighIn: weigh, awards: awards, weighInAuto: typeof s.weighIn !== "number" && lift !== null, awardsAuto: typeof s.awards !== "number" && lift !== null };
+    var has = function (k) { return typeof s[k] === "number"; }, H = 120 * 60000;
+    var weigh = has("weighIn") ? s.weighIn : has("liftOff") ? s.liftOff - H : typeof s.defaultWeighIn === "number" ? s.defaultWeighIn : null;
+    var lift = has("liftOff") ? s.liftOff : weigh !== null ? weigh + H : null;
+    var awards = has("awards") ? s.awards : lift !== null ? lift + estimateMinutes(s.flights, secondsPerAttempt) * 60000 : null;
+    return { weighIn: weigh, liftOff: lift, awards: awards, weighInAuto: !has("weighIn") && weigh !== null, liftOffAuto: !has("liftOff") && lift !== null, awardsAuto: !has("awards") && awards !== null };
   }
 
-  return { build: build, classKey: classKey, letter: letter, flightOrder: flightOrder, assignLots: assignLots, sessionTimes: sessionTimes, estimateMinutes: estimateMinutes, DEFAULTS: DEFAULTS };
+  return { build: build, classKey: classKey, letter: letter, flightOrder: flightOrder, assignLots: assignLots, sessionTimes: sessionTimes, estimateMinutes: estimateMinutes, DEFAULT_WEIGH_IN: DEFAULT_WEIGH_IN, DEFAULTS: DEFAULTS };
 });

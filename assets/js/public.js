@@ -275,7 +275,7 @@
           // times: lift-off as set; weigh-in two hours before and the finish estimated from the attempts, unless they were typed in
           var sess = {};
           (r.data || []).forEach(function (x) {
-            var k = x.day + "-" + x.session_no, q = sess[k] = sess[k] || { liftOff: x.lift_off_at ? new Date(x.lift_off_at).getTime() : null, weighIn: x.weigh_in_at ? new Date(x.weigh_in_at).getTime() : null, awards: x.awards_at ? new Date(x.awards_at).getTime() : null, flights: {}, secs: x.seconds_per_attempt };
+            var k = x.day + "-" + x.session_no, q = sess[k] = sess[k] || { liftOff: x.lift_off_at ? new Date(x.lift_off_at).getTime() : null, weighIn: x.weigh_in_at ? new Date(x.weigh_in_at).getTime() : null, awards: x.awards_at ? new Date(x.awards_at).getTime() : null, flights: {}, secs: x.seconds_per_attempt, defaultWeighIn: (function () { var d = window.LiftingSort && window.LiftingSort.DEFAULT_WEIGH_IN[x.session_no]; var iso = d && Y.fromLondonInput(Y.addDays(c.start_date, x.day - 1) + "T" + d); return iso ? new Date(iso).getTime() : null; })() };
             (q.flights[x.flight] = q.flights[x.flight] || { lifters: [] }).lifters.push({ event: x.event });
           });
           Object.keys(sess).forEach(function (k) { var q = sess[k]; q.flights = Object.keys(q.flights).map(function (f) { return q.flights[f]; }); q.t = window.LiftingSort ? window.LiftingSort.sessionTimes(q, q.secs) : { weighIn: q.weighIn, liftOff: q.liftOff, awards: q.awards }; });
