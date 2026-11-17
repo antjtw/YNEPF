@@ -242,6 +242,37 @@ ok((await asUser(U.editor, () => call("openipf_recheck", [eA]))).error?.includes
 await asUser(U.entries, () => call("openipf_recheck", [eA]));
 ok((await oi(eA)).s === "pending", "the entries team can: it goes back to pending");
 
+// ---- lifting order: saving the builder's arrangement ----
+await db.exec("reset role");
+const LO = "77777777-7777-7777-7777-777777777777", LO2 = "88888888-8888-8888-8888-888888888888";
+await db.exec(`insert into public.competitions (id,name,start_date,capacity,published,slug,entry_method) values ('${LO}','Order Open','2027-06-12',20,true,'order-open','yne'),('${LO2}','Other Open','2027-06-13',20,true,'other-open','yne')`);
+const lo = async (n, o = {}) => { const id = `00000000-0000-0000-0000-0000000008${String(n).padStart(2, "0")}`;
+  await db.exec(`insert into public.entries (id, competition_id, email, full_name, date_of_birth, sex, status, event, equipment, weight_class_id) values ('${id}','${o.comp || LO}','lo${n}@x.com','Lo ${n}','1990-01-01','M','${o.status || "paid"}','full_power','classic','${wc83}')`); return id; };
+const l1 = await lo(1), l2 = await lo(2), l3 = await lo(3), lOther = await lo(4, { comp: LO2 }), lCancelled = await lo(5, { status: "cancelled" });
+const saveLo = (who, payload) => asUser(who, () => call("lifting_order_save", [LO, JSON.stringify(payload)]));
+const arrangement = (flightsA, flightsB) => ({ settings: { days: 2, sessions: null, max_full_power: 12, max_per_flight: 18, prime_time: true, prime_women: 10, prime_men: 12, women_first: false },
+  sessions: [{ day: 1, session_no: 1, prime: false, flights: [{ letter: "A", lifters: flightsA }] }, { day: 2, session_no: 1, prime: true, name: "Prime time", flights: [{ letter: "B", locked: true, lifters: flightsB }] }] });
+ok((await saveLo(U.editor, arrangement([], []))).error?.includes("forbidden"), "an editor cannot save a lifting order");
+const good1 = arrangement([{ entry_id: l1, reason: "first" }, { entry_id: l2, lot_number: 7 }], [{ entry_id: l3, locked: true }]);
+ok(!(await saveLo(U.entries, good1))?.error, "the entries team can save one");
+const rowsLo = async () => q(`select s.day, s.session_no, s.is_prime_time p, f.letter, f.locked fl, a.entry_id, a.position pos, a.locked al, a.lot_number lot, a.reason from public.lo_sessions s join public.lo_flights f on f.session_id = s.id join public.lo_assignments a on a.flight_id = f.id where s.competition_id = '${LO}' order by f.letter, a.position`);
+let got = await rowsLo(); ok(got.length === 3 && got[0].entry_id === l1 && got[0].pos === 1 && got[1].entry_id === l2 && got[1].pos === 2 && got[1].lot === 7 && got[2].letter === "B" && got[2].p === true && got[2].fl === true && got[2].al === true, "sessions, flights and positions are stored in order: " + JSON.stringify(got.map((r) => [r.letter, r.pos])));
+const set = (await q(`select days, max_full_power_per_flight mf, max_per_flight ma, prime_time_enabled pt, prime_time_women pw, prime_time_men pm, women_first wf from public.lifting_orders where competition_id = '${LO}'`))[0];
+ok(set.days === 2 && set.mf === 12 && set.ma === 18 && set.pt === true && set.pw === 10 && set.pm === 12 && set.wf === false, "the settings are stored too: " + JSON.stringify(set));
+// saving again replaces everything
+await saveLo(U.entries, arrangement([{ entry_id: l3 }], [{ entry_id: l1 }]));
+got = await rowsLo(); ok(got.length === 2 && got.find((r) => r.letter === "A").entry_id === l3 && got.find((r) => r.letter === "B").entry_id === l1, "saving again replaces the earlier arrangement, leaving nothing behind");
+// bad input is refused and the saved arrangement is left exactly as it was
+const before = JSON.stringify(await rowsLo());
+for (const [what, payload, msg] of [
+  ["a lifter twice", arrangement([{ entry_id: l1 }], [{ entry_id: l1 }]), "duplicate_lifter"],
+  ["a lifter from another competition", arrangement([{ entry_id: lOther }], []), "invalid:lifter"],
+  ["a cancelled entry", arrangement([{ entry_id: lCancelled }], []), "invalid:lifter"],
+  ["a flight letter used twice", { settings: {}, sessions: [{ day: 1, session_no: 1, flights: [{ letter: "A", lifters: [] }, { letter: "A", lifters: [] }] }] }, "invalid:flight_letter"]]) {
+  const r = await saveLo(U.entries, payload); ok(r.error?.includes(msg), "refused: " + what + " (" + (r.error || "").slice(0, 60) + ")");
+}
+ok(JSON.stringify(await rowsLo()) === before, "and a refused save changes nothing");
+
 // who may do what
 await db.exec("set role anon");
 ok(!(await can(`select public.waitlist_join('{}'::jsonb)`)) && !(await can(`select public.waitlist_sweep('${W}')`)) && !(await can(`select public.waitlist_make_offer('${W}'::uuid, 'x')`)), "the public cannot call the waiting list functions (only our server can)");

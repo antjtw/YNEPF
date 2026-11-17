@@ -189,6 +189,16 @@ To switch from Stripe's test mode to real money, and test it with a £1 entry an
 
 Each time someone's entry is confirmed, `competitions@ynepf.co.uk` (the `NOTIFY_TO` address) gets a short "New entry" note: who, which event and weight class, what they paid, extras, any guest or under-18 flag, how many places are taken, and a link to the entries desk. The lifter gets only their own confirmation. Refunds work the same way: the lifter gets their refund or cancellation email, and `competitions@` gets a separate note saying who did it, how much, why, and how many places are now taken. That covers refunds from the entries desk, refunds made in Stripe's own dashboard, and the automatic refund when someone pays after their place was released. This needs the updated `stripe-webhook`, `entry-checkout` and `entry-refund` functions pasted into Supabase.
 
+## Part 5k: The lifting order (builder)
+
+Every online-entry competition has a **Lifting order** tab (entries team and admins). It takes the competition's real entered lifters (paid or free) and:
+- **Sort the entries** runs the auto sort: days, sessions and flights, with women and men apart, at most 14 full power / 20 in all per flight, optional prime time, classes running up, and lifters with no best total first. Set the days, sessions, flight limits and prime time above the button first, if you want to.
+- Move anyone by hand with the **Move to…** menu on their row (or take them out of the order), and use the up and down buttons to change their place in a flight. A flight that breaks a rule (women and men mixed, or over the limits) is flagged.
+- Lifters who enter after you've sorted are listed under **Not in the lifting order yet**, with a menu to place them. Lifters who have cancelled are taken out for you.
+- **Save** keeps the arrangement (nothing is lost if you leave and come back). Sorting again replaces everything, and asks first.
+
+Best totals come from the OpenIPF check on each entry. Nothing here is public yet: publishing, locks, drag and drop, timings, lot numbers and the OpenLifter export come next. It needs the newest all-in-one SQL.
+
 ## Part 5j: The lifting order lab
 
 Before the lifting order builder arrives, `/admin/lifting-lab` (on the preview site, or the live site once merged) lets you try the auto sort on pretend lifters: pick a scenario (including the real YNE Worlds 2026 mix), change the days, sessions, flight sizes and prime time, and see how it splits them. Nothing is saved and it uses no real data. It is there to review how the sort behaves and tell us what you would do differently.

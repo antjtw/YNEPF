@@ -185,5 +185,5 @@
     };
   }
 
-  return { build: build, classKey: classKey, letter: letter, DEFAULTS: DEFAULTS };
+  return { build: build, classKey: classKey, letter: letter, flightOrder: flightOrder, DEFAULTS: DEFAULTS };
 });

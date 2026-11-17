@@ -574,6 +574,56 @@ create table if not exists public.lo_assignments (
   lot_number integer,
   reason text not null default ''                          -- why the auto sort put them here
 );
+alter table public.lifting_orders add column if not exists days integer check (days is null or days between 1 and 6);
+alter table public.lifting_orders add column if not exists sessions integer check (sessions is null or sessions between 1 and 24);
+alter table public.lifting_orders add column if not exists women_first boolean not null default true;
+alter table public.lifting_orders add column if not exists updated_at timestamptz not null default now();
+
+-- Saves the whole lifting order for a competition in one step (the builder sends everything it has). Entries team only.
+--   p = { settings: {days, sessions, max_full_power, max_per_flight, prime_time, prime_women, prime_men, women_first},
+--         sessions: [ { day, session_no, prime, name, weigh_in_at, lift_off_at, awards_at,
+--                       flights: [ { letter, locked, lifters: [ { entry_id, locked, lot_number, reason } ] } ] } ] }
+-- A lifter's position is their place in the list. Everyone must be an entered (paid or free) lifter in this competition, once only.
+create or replace function public.lifting_order_save(c uuid, p jsonb) returns void
+language plpgsql security definer set search_path = public
+as $$
+declare s jsonb; f jsonb; l jsonb; v_sess uuid; v_flight uuid; i integer; j integer; k integer; seen uuid[] := '{}'; eid uuid; st jsonb := coalesce(p->'settings', '{}'::jsonb); letters text[] := '{}';
+begin
+  if not public.is_entries() then raise exception 'forbidden'; end if;
+  if not exists (select 1 from public.competitions where id = c) then raise exception 'not_found'; end if;
+  if jsonb_typeof(coalesce(p->'sessions', '[]'::jsonb)) <> 'array' then raise exception 'invalid:sessions'; end if;
+  insert into public.lifting_orders (competition_id, prime_time_enabled, prime_time_women, prime_time_men, max_full_power_per_flight, max_per_flight, days, sessions, women_first, updated_at)
+    values (c, coalesce((st->>'prime_time')::boolean, false), coalesce((st->>'prime_women')::int, 14), coalesce((st->>'prime_men')::int, 14),
+            coalesce((st->>'max_full_power')::int, 14), coalesce((st->>'max_per_flight')::int, 20), nullif(st->>'days', '')::int, nullif(st->>'sessions', '')::int, coalesce((st->>'women_first')::boolean, true), now())
+    on conflict (competition_id) do update set prime_time_enabled = excluded.prime_time_enabled, prime_time_women = excluded.prime_time_women, prime_time_men = excluded.prime_time_men,
+      max_full_power_per_flight = excluded.max_full_power_per_flight, max_per_flight = excluded.max_per_flight, days = excluded.days, sessions = excluded.sessions,
+      women_first = excluded.women_first, updated_at = now();
+  delete from public.lo_sessions where competition_id = c;                -- flights and placements go with them
+  i := 0;
+  for s in select * from jsonb_array_elements(coalesce(p->'sessions', '[]'::jsonb)) loop
+    i := i + 1;
+    insert into public.lo_sessions (competition_id, day, session_no, platform, name, is_prime_time, weigh_in_at, lift_off_at, awards_at)
+      values (c, coalesce((s->>'day')::int, 1), coalesce((s->>'session_no')::int, i), 1, left(coalesce(s->>'name', ''), 80), coalesce((s->>'prime')::boolean, false),
+              nullif(s->>'weigh_in_at', '')::timestamptz, nullif(s->>'lift_off_at', '')::timestamptz, nullif(s->>'awards_at', '')::timestamptz)
+      returning id into v_sess;
+    for f in select * from jsonb_array_elements(coalesce(s->'flights', '[]'::jsonb)) loop
+      if coalesce(f->>'letter', '') = '' or f->>'letter' = any (letters) then raise exception 'invalid:flight_letter'; end if;
+      letters := letters || (f->>'letter');
+      insert into public.lo_flights (session_id, letter, locked) values (v_sess, left(f->>'letter', 4), coalesce((f->>'locked')::boolean, false)) returning id into v_flight;
+      j := 0;
+      for l in select * from jsonb_array_elements(coalesce(f->'lifters', '[]'::jsonb)) loop
+        j := j + 1; eid := (l->>'entry_id')::uuid;
+        if eid = any (seen) then raise exception 'invalid:duplicate_lifter'; end if;
+        if not exists (select 1 from public.entries e where e.id = eid and e.competition_id = c and e.status in ('paid', 'comped')) then raise exception 'invalid:lifter'; end if;
+        seen := seen || eid;
+        insert into public.lo_assignments (entry_id, flight_id, position, locked, lot_number, reason)
+          values (eid, v_flight, j, coalesce((l->>'locked')::boolean, false), nullif(l->>'lot_number', '')::int, left(coalesce(l->>'reason', ''), 300));
+      end loop;
+    end loop;
+  end loop;
+end $$;
+revoke all on function public.lifting_order_save(uuid, jsonb) from public, anon;
+grant execute on function public.lifting_order_save(uuid, jsonb) to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- 10. Audit log: who did what and when, with before and after. Append only.

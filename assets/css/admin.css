@@ -131,3 +131,16 @@ input:disabled, select:disabled, textarea:disabled { background: var(--navy-10, 
 .history-list { margin: 0; padding-left: 1.25rem; }
 @media (max-width: 52em) { .entry-row > summary { grid-template-columns: 1fr auto; } .entry-lift { grid-column: 1 / -1; } .entry-flags { grid-column: 1; } .entry-dl { grid-template-columns: 1fr; } .entry-dl dt { margin-top: var(--space-2); } }
 .code-text { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 1.05rem; letter-spacing: 0.02em; }
+
+/* Lifting order: sessions, flights and their tables (used by the lifting order tab and the lab). */
+.lab-session { margin-top: var(--space-6); }
+.lab-flight { margin: var(--space-3) 0 var(--space-5); }
+.lab-flight h4 { margin: 0 0 var(--space-1); }
+.lab-flight .sex-tag { display: inline-block; padding: 0 .5em; border-radius: 4px; background: var(--navy-100); font-size: .875rem; font-weight: 600; margin-left: .5em; }
+.lab-flight .sex-tag.f { background: var(--rose-100); }
+.lab-stats { display: flex; flex-wrap: wrap; gap: var(--space-5); margin: var(--space-3) 0; }
+.lab-stats strong { display: block; font-size: 1.5rem; }
+.lab-table td, .lab-table th { padding: .35rem .6rem; }
+.lab-table th[scope=row] { white-space: nowrap; }
+.lab-table .reason { color: var(--text-muted); font-size: .9375rem; }
+.lab-warn { background: var(--surface-muted); border-radius: var(--radius); padding: var(--space-3) var(--space-4); }

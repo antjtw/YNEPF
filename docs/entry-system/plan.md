@@ -113,6 +113,8 @@ Everything the entries team needs to run a competition.
 
 ### Phase 2: lifting order
 
+*Built so far:* the auto sort (`assets/js/lifting-sort.js`), a test lab (`/admin/lifting-lab`), and the **Lifting order** tab on each competition (sort the real entries, move lifters by hand, save). Still to build: locks, drag and drop, timings and lot numbers, publish and unpublish with the optional email, the public page reading from the saved order, and the OpenLifter export.
+
 - The builder: set up days, sessions and flights, **auto sort**, drag and drop with a "Move to…" menu as the keyboard alternative, locks, prime time, timings, lot numbers.
 - Publish and unpublish, with an optional email to every entrant.
 - The OpenLifter export.
