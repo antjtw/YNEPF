@@ -38,6 +38,26 @@ export function exactAge(dob: string, on: string): number {
 }
 export function pounds(pence: number): string { return "£" + (pence / 100).toFixed(2); }
 
+// An internal note to the federation's competitions inbox each time someone is confirmed, so the team can see entries arriving.
+export function entryNotification(e: { name: string; email: string; competition: string; date: string; event: string; equipment: string; weightClass?: string; sex?: string; category?: string; division?: string; isGuest?: boolean; club?: string; pence: number; discountPence?: number; extras?: { name: string; option?: string; pence: number }[]; under18?: boolean; openipfUrl?: string; taken: number; capacity?: number | null; deskUrl?: string }) {
+  const lines = [
+    `${e.name} has entered ${e.competition} (${e.date}).`, "",
+    `Event: ${e.event}, ${e.equipment}`,
+    ...(e.weightClass ? [`Weight class: ${e.sex === "F" ? "Women's" : "Men's"} ${e.weightClass} kg`] : []),
+    ...(e.category ? [`Category: ${e.category}`] : []),
+    ...(e.division ? [`Federation or division: ${e.division}${e.isGuest ? ". A guest: the membership number needs checking" : ""}`] : []),
+    ...(e.club ? [`Club: ${e.club}`] : []),
+    ...(e.under18 ? ["Under 18 on the day: parent or guardian details were taken"] : []),
+    ...(e.pence > 0 ? [`Paid: ${pounds(e.pence)}${e.discountPence ? ` (after a discount of ${pounds(e.discountPence)})` : ""}`] : ["Free entry: nothing to pay"]),
+    ...((e.extras ?? []).map((x) => `Extra: ${x.name}${x.option ? ` (${x.option})` : ""}, ${pounds(x.pence)}`)),
+    ...(e.openipfUrl ? [`OpenIPF: ${e.openipfUrl} (checked automatically within a few minutes)`] : []),
+    `Email: ${e.email}`, "",
+    `That is ${e.taken}${e.capacity ? ` of ${e.capacity}` : ""} ${e.taken === 1 && !e.capacity ? "place" : "places"} taken.`,
+    ...(e.deskUrl ? ["", `Open the entries desk: ${e.deskUrl}`] : []),
+  ];
+  return lines.join("\n");
+}
+
 export function confirmationEmail(e: { name: string; competition: string; date: string; event: string; equipment: string; pence: number; under18: boolean; entriesEmail: string; refundsUntil?: string; category?: string; division?: string; club?: string; discountPence?: number; extras?: { name: string; option?: string; pence: number }[] }) {
   const lines = [
     `Hi ${e.name},`, "",
@@ -100,7 +120,7 @@ if (typeof Deno !== "undefined") {
             card_last4: charge.payment_method_details?.card?.last4 ?? "", receipt_url: charge.receipt_url ?? "",
           }),
         });
-        const [row] = await (await db(`entries?id=eq.${entryId}&select=email,full_name,event,equipment,price_pence,date_of_birth,club,discount_pence,divisions(name,is_home),competitions(name,start_date,entry_closes)`)).json();
+        const [row] = await (await db(`entries?id=eq.${entryId}&select=email,full_name,event,equipment,price_pence,date_of_birth,club,discount_pence,sex,openipf_url,is_guest,competition_id,weight_classes(label),divisions(name,is_home),competitions(name,start_date,entry_closes,capacity)`)).json();
         const from = Deno.env.get("MAIL_FROM") ?? "YNEPF <onboarding@resend.dev>";
         const copy = Deno.env.get("NOTIFY_TO") ?? "competitions@ynepf.co.uk";
         const send = (to: string[], subject: string, text: string) => fetch("https://api.resend.com/emails", {
@@ -112,11 +132,24 @@ if (typeof Deno !== "undefined") {
           const xr = await (await db(`entry_addons?entry_id=eq.${entryId}&select=price_pence,addons(name),addon_options(label)`)).json().catch(() => []);
           const extras = (Array.isArray(xr) ? xr : []).map((x: { price_pence: number; addons?: { name: string }; addon_options?: { label: string } | null }) => ({ name: x.addons?.name ?? "Extra", option: x.addon_options?.label, pence: x.price_pence }));
           const compYear = new Date(row.competitions.start_date).getFullYear(), age = exactAge(row.date_of_birth, row.competitions.start_date);
-          await send([row.email, copy], `Your entry: ${row.competitions.name}`, confirmationEmail({
+          await send([row.email], `Your entry: ${row.competitions.name}`, confirmationEmail({
             name: row.full_name, competition: row.competitions.name, date: row.competitions.start_date,
             event: row.event === "bench_only" ? "Bench only" : "Full power", equipment: row.equipment === "equipped" ? "Equipped" : "Classic",
             pence: row.price_pence, under18: age < 18, entriesEmail: copy, category: ageCategory(new Date(row.date_of_birth).getFullYear(), compYear), division: row.divisions ? row.divisions.name + (row.divisions.is_home ? "" : " (guest)") : undefined, club: row.club || undefined, discountPence: row.discount_pence || 0, extras,
             refundsUntil: row.competitions.entry_closes ? new Date(row.competitions.entry_closes).toLocaleString("en-GB", { timeZone: "Europe/London", dateStyle: "full", timeStyle: "short" }) : undefined,
+          }));
+          // A note for the competitions inbox, so the team can see each entry arrive.
+          const takenRows = await (await db(`entries?competition_id=eq.${row.competition_id}&status=in.(paid,comped)&select=id`)).json().catch(() => []);
+          const siteUrl = (Deno.env.get("SITE_URL") ?? "").replace(/\/$/, "");
+          const wcRow = Array.isArray(row.weight_classes) ? row.weight_classes[0] : row.weight_classes;
+          await send([copy], `New entry: ${row.full_name}, ${row.competitions.name}`, entryNotification({
+            name: row.full_name, email: row.email, competition: row.competitions.name, date: row.competitions.start_date,
+            event: row.event === "bench_only" ? "Bench only" : "Full power", equipment: row.equipment === "equipped" ? "Equipped" : "Classic",
+            weightClass: wcRow?.label, sex: row.sex, category: ageCategory(new Date(row.date_of_birth).getFullYear(), compYear),
+            division: row.divisions ? row.divisions.name + (row.divisions.is_home ? "" : " (guest)") : undefined, isGuest: !!row.is_guest, club: row.club || undefined,
+            pence: row.price_pence, discountPence: row.discount_pence || 0, extras, under18: age < 18, openipfUrl: row.openipf_url || undefined,
+            taken: Array.isArray(takenRows) ? takenRows.length : 0, capacity: row.competitions.capacity,
+            deskUrl: siteUrl && row.competition_id ? `${siteUrl}/admin/#competitions/${row.competition_id}/entries` : undefined,
           }));
         } else if (state === "no_place" && row && session.payment_intent) {
           // Paid after the hold ran out and the competition filled in the meantime: refund in full.

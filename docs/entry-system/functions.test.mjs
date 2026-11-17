@@ -115,4 +115,14 @@ assert(es.validEntry("123e4567-e89b-12d3-a456-426614174000") && !es.validEntry("
   r = await wl.lookupLifter("x", opt, async () => new Response("oops", { status: 503 })); assert.strictEqual(r.status, "error", "a server error is retried later");
   r = await wl.lookupLifter("x", opt, async () => { throw new Error("offline"); }); assert.strictEqual(r.status, "error", "no connection is retried later");
 }
+
+{ // the note to the competitions inbox when someone is confirmed (same wording in both functions)
+  const base = { name: "Sam Smith", email: "sam@x.co", competition: "Spring Open", date: "2027-05-15", event: "Full power", equipment: "Classic", weightClass: "83", sex: "M", category: "Open", division: "South West (guest)", isGuest: true, club: "Iron Gym", pence: 4000, discountPence: 2000, extras: [{ name: "Photo package", pence: 4049 }], under18: false, openipfUrl: "https://www.openipf.org/u/sam", taken: 7, capacity: 40, deskUrl: "https://site/admin/#competitions/abc/entries" };
+  for (const mod of [wh, co]) {
+    const t = mod.entryNotification(base);
+    assert(t.startsWith("Sam Smith has entered Spring Open (2027-05-15).") && t.includes("Weight class: Men's 83 kg") && t.includes("A guest: the membership number needs checking") && t.includes("Paid: £40.00 (after a discount of £20.00)") && t.includes("Extra: Photo package, £40.49") && t.includes("That is 7 of 40 places taken.") && t.includes("Open the entries desk: https://site/admin/#competitions/abc/entries") && t.includes("OpenIPF: https://www.openipf.org/u/sam"), "entry note: " + t);
+    assert(!/date of birth|guardian/i.test(t.replace("parent or guardian details were taken", "")), "the note does not carry a date of birth or guardian details");
+    assert(mod.entryNotification({ ...base, pence: 0, discountPence: 4000, extras: [], isGuest: false, division: undefined, under18: true }).includes("Free entry: nothing to pay") && mod.entryNotification({ ...base, under18: true }).includes("Under 18 on the day"), "free and under-18 entries are described");
+  }
+}
 console.log("function helper tests passed");

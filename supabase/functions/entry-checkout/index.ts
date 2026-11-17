@@ -94,6 +94,26 @@ export function exactAge(dob: string, on: string): number {
 }
 export function pounds(pence: number): string { return "£" + (pence / 100).toFixed(2); }
 
+// An internal note to the federation's competitions inbox each time someone is confirmed, so the team can see entries arriving.
+export function entryNotification(e: { name: string; email: string; competition: string; date: string; event: string; equipment: string; weightClass?: string; sex?: string; category?: string; division?: string; isGuest?: boolean; club?: string; pence: number; discountPence?: number; extras?: { name: string; option?: string; pence: number }[]; under18?: boolean; openipfUrl?: string; taken: number; capacity?: number | null; deskUrl?: string }) {
+  const lines = [
+    `${e.name} has entered ${e.competition} (${e.date}).`, "",
+    `Event: ${e.event}, ${e.equipment}`,
+    ...(e.weightClass ? [`Weight class: ${e.sex === "F" ? "Women's" : "Men's"} ${e.weightClass} kg`] : []),
+    ...(e.category ? [`Category: ${e.category}`] : []),
+    ...(e.division ? [`Federation or division: ${e.division}${e.isGuest ? ". A guest: the membership number needs checking" : ""}`] : []),
+    ...(e.club ? [`Club: ${e.club}`] : []),
+    ...(e.under18 ? ["Under 18 on the day: parent or guardian details were taken"] : []),
+    ...(e.pence > 0 ? [`Paid: ${pounds(e.pence)}${e.discountPence ? ` (after a discount of ${pounds(e.discountPence)})` : ""}`] : ["Free entry: nothing to pay"]),
+    ...((e.extras ?? []).map((x) => `Extra: ${x.name}${x.option ? ` (${x.option})` : ""}, ${pounds(x.pence)}`)),
+    ...(e.openipfUrl ? [`OpenIPF: ${e.openipfUrl} (checked automatically within a few minutes)`] : []),
+    `Email: ${e.email}`, "",
+    `That is ${e.taken}${e.capacity ? ` of ${e.capacity}` : ""} ${e.taken === 1 && !e.capacity ? "place" : "places"} taken.`,
+    ...(e.deskUrl ? ["", `Open the entries desk: ${e.deskUrl}`] : []),
+  ];
+  return lines.join("\n");
+}
+
 export function confirmationEmail(e: { name: string; competition: string; date: string; event: string; equipment: string; pence: number; under18: boolean; entriesEmail: string; refundsUntil?: string; category?: string; division?: string; club?: string; discountPence?: number; extras?: { name: string; option?: string; pence: number }[] }) {
   const lines = [
     `Hi ${e.name},`, "",
@@ -194,19 +214,33 @@ if (typeof Deno !== "undefined") {
 
     // 2. A code that takes the whole price off makes this a free entry: it is already confirmed, so there is nothing to pay.
     if ((out as { free?: boolean }).free) {
-      const [row] = await (await fetch(`${url}/rest/v1/entries?id=eq.${entry_id}&select=email,full_name,event,equipment,price_pence,discount_pence,date_of_birth,club,divisions(name,is_home),competitions(name,start_date,entry_closes)`, { headers: { apikey: svc, authorization: `Bearer ${svc}` } })).json();
+      const [row] = await (await fetch(`${url}/rest/v1/entries?id=eq.${entry_id}&select=email,full_name,event,equipment,price_pence,discount_pence,date_of_birth,club,sex,openipf_url,is_guest,competition_id,weight_classes(label),divisions(name,is_home),competitions(name,start_date,entry_closes,capacity)`, { headers: { apikey: svc, authorization: `Bearer ${svc}` } })).json();
       if (row) {
         const from = Deno.env.get("MAIL_FROM") ?? "YNEPF <onboarding@resend.dev>", copy = Deno.env.get("NOTIFY_TO") ?? "competitions@ynepf.co.uk";
         const compYear = new Date(row.competitions.start_date).getFullYear();
         const sent = await fetch("https://api.resend.com/emails", {
           method: "POST", headers: { authorization: `Bearer ${Deno.env.get("RESEND_API_KEY")}`, "content-type": "application/json" },
-          body: JSON.stringify({ from, to: [row.email, copy], reply_to: copy, subject: `Your entry: ${row.competitions.name}`, text: confirmationEmail({
+          body: JSON.stringify({ from, to: [row.email], reply_to: copy, subject: `Your entry: ${row.competitions.name}`, text: confirmationEmail({
             name: row.full_name, competition: row.competitions.name, date: row.competitions.start_date, event: row.event === "bench_only" ? "Bench only" : "Full power",
             equipment: row.equipment === "equipped" ? "Equipped" : "Classic", pence: row.price_pence, under18: exactAge(row.date_of_birth, row.competitions.start_date) < 18, entriesEmail: copy,
             category: ageCategory(new Date(row.date_of_birth).getFullYear(), compYear), division: row.divisions ? row.divisions.name + (row.divisions.is_home ? "" : " (guest)") : undefined,
             club: row.club || undefined, discountPence: row.discount_pence || 0, extras }) }),
         });
         if (!sent.ok) console.error("Resend failed", sent.status);
+        // A note for the competitions inbox, so the team can see each entry arrive.
+        const takenRows = await (await fetch(`${url}/rest/v1/entries?competition_id=eq.${row.competition_id}&status=in.(paid,comped)&select=id`, { headers: { apikey: svc, authorization: `Bearer ${svc}` } })).json().catch(() => []);
+        const wcRow = Array.isArray(row.weight_classes) ? row.weight_classes[0] : row.weight_classes;
+        await fetch("https://api.resend.com/emails", {
+          method: "POST", headers: { authorization: `Bearer ${Deno.env.get("RESEND_API_KEY")}`, "content-type": "application/json" },
+          body: JSON.stringify({ from, to: [copy], reply_to: copy, subject: `New entry: ${row.full_name}, ${row.competitions.name}`, text: entryNotification({
+            name: row.full_name, email: row.email, competition: row.competitions.name, date: row.competitions.start_date,
+            event: row.event === "bench_only" ? "Bench only" : "Full power", equipment: row.equipment === "equipped" ? "Equipped" : "Classic", weightClass: wcRow?.label, sex: row.sex,
+            category: ageCategory(new Date(row.date_of_birth).getFullYear(), compYear), division: row.divisions ? row.divisions.name + (row.divisions.is_home ? "" : " (guest)") : undefined,
+            isGuest: !!row.is_guest, club: row.club || undefined, pence: row.price_pence, discountPence: row.discount_pence || 0, extras,
+            under18: exactAge(row.date_of_birth, row.competitions.start_date) < 18, openipfUrl: row.openipf_url || undefined,
+            taken: Array.isArray(takenRows) ? takenRows.length : 0, capacity: row.competitions.capacity,
+            deskUrl: siteUrl && row.competition_id ? `${siteUrl}/admin/#competitions/${row.competition_id}/entries` : undefined }) }),
+        }).catch(() => {});
       }
       return reply(200, { free: true, entry_id, slug });
     }

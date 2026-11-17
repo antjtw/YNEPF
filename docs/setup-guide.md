@@ -183,6 +183,12 @@ Entries below the standard get a **Below qualifying standard** tag and are count
 
 It uses the same function and timer as the waiting list, so there is nothing new to set up: paste the updated `waitlist` function over the old one in Supabase, and run the newest all-in-one SQL.
 
+## Part 5i: Real payments and entry notifications
+
+To switch from Stripe's test mode to real money, and test it with a £1 entry and refunds, follow [stripe-live-guide.md](stripe-live-guide.md).
+
+Each time someone's entry is confirmed, `competitions@ynepf.co.uk` (the `NOTIFY_TO` address) gets a short "New entry" note: who, which event and weight class, what they paid, extras, any guest or under-18 flag, how many places are taken, and a link to the entries desk. The lifter gets only their own confirmation. This needs the updated `stripe-webhook` and `entry-checkout` functions pasted into Supabase.
+
 ## Part 5b: The club list
 
 Lifters in English divisions can choose their club (it is optional) from the English Powerlifting Association's list of approved clubs, copied from the EPA website. Only club **names** are copied, never contact details. Lifters from other nations have no club question, and clubs from other bodies are not included.
