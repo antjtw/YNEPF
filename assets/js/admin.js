@@ -1303,8 +1303,8 @@
         live, area,
         el("section", { "aria-labelledby": "lo-lots-h", style: "margin:var(--space-5) 0" }, el("h3", { id: "lo-lots-h" }, "Lot numbers"),
           el("div", { class: "actions", style: "margin:var(--space-3) 0" }, lotBtn), lotToggle),
-        el("section", { "aria-labelledby": "lo-settings-h", style: "margin:var(--space-5) 0" }, el("h3", { id: "lo-settings-h" }, "Settings"), secForm.el),
-        exportBox);
+        exportBox,
+        el("section", { "aria-labelledby": "lo-settings-h", style: "margin:var(--space-5) 0" }, el("h3", { id: "lo-settings-h" }, "Settings"), secForm.el));
       status(); pubStatus(); draw();
     }).catch(function (e) { view.replaceChildren(el("p", { class: "form-error" }, friendly(e))); });
   }

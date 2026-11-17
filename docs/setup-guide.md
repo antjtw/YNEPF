@@ -255,4 +255,4 @@ Everything for a competition is set up once, on one page in the **Calendar** tab
 
 Each session has a card showing **Weigh-in**, **Lift-off** and **Awards**, with an **Edit times** button that opens an overlay. The usual times are filled in for you: weigh-in 08:00 for session 1 and 13:00 for session 2, lift-off two hours after weigh-in, and the finish (awards) estimated from the attempts (full power lifters have 9, bench only 3, at the *Seconds per attempt* setting, plus 10 minutes between flights and 10 before awards). Type any time in the overlay (UK time, like `09:30`) to override it, or leave a box empty to use the usual time. If you type only a lift-off, the weigh-in moves to two hours before it. The times show on the public lifting order once published, and are kept when you sort again.
 
-**Settings** (just above Exports) holds *Seconds per attempt*, 45 by default (about 3.5 hours for two full flights). Run the latest all-in-one SQL once for this setting.
+**Settings** (the last section, below Exports) holds *Seconds per attempt*, 45 by default (about 3.5 hours for two full flights). Run the latest all-in-one SQL once for this setting.
