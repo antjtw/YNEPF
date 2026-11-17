@@ -18,15 +18,14 @@
   var EVENTS = ["SBD", "SB", "SD", "BD", "S", "B", "D"];
   var YESNO = ["Guest", "Novice", "CanBreakRecords"];
 
-  // Age class codes. The code table must mirror the divisions set up in the OpenLifter meet; these are the likely names (M or F, R for raw,
-  // then the age class), and the team can change every one of them on the screen.
-  var AGE_CODES = { "": "O", SJ: "SJ", J: "J", M1: "M1", M2: "M2", M3: "M3", M4: "M4" };
-  function defaultDivisionCode(sex, equipment, cat) { return (sex === "F" ? "F" : "M") + (equipment === "equipped" ? "E" : "R") + "-" + (AGE_CODES[cat] || "O"); }
+  // Division codes, as in the YNE Worlds file: M or F, R for raw (classic, lifted in sleeves) or E for equipped, then -O (Open).
+  // Age classes are not separate divisions in OpenLifter. The code table must mirror the OpenLifter meet and can be changed on the screen.
+  function defaultDivisionCode(sex, equipment) { return (sex === "F" ? "F" : "M") + (equipment === "equipped" ? "E" : "R") + "-O"; }
   var DEFAULTS = {
     columns: COLUMNS,
     platforms: 1,
     equipment: { classic: "Sleeves", equipped: "Single-ply" },
-    divisions: {},                // "F:classic:J" -> "FR-J"; anything not listed uses defaultDivisionCode
+    divisions: {},                // "F:classic" -> "FR-O"; anything not listed uses defaultDivisionCode
     novice: false                 // the whole competition is a novice one (Implexus Novice)
   };
 
@@ -38,8 +37,8 @@
     var a = d[0] - b[0]; if (d[1] < b[1] || (d[1] === b[1] && d[2] < b[2])) a--; return a > 0 ? a : "";
   }
   function divisionFor(e, settings) {
-    var key = (e.sex === "F" ? "F" : "M") + ":" + (e.equipment === "equipped" ? "equipped" : "classic") + ":" + (e.ageCat || "");
-    return (settings.divisions && settings.divisions[key]) || defaultDivisionCode(e.sex, e.equipment, e.ageCat || "");
+    var key = (e.sex === "F" ? "F" : "M") + ":" + (e.equipment === "equipped" ? "equipped" : "classic");
+    return (settings.divisions && settings.divisions[key]) || defaultDivisionCode(e.sex, e.equipment);
   }
 
   // sessions: the builder's arrangement [{ day, sessionNo, flights: [{ letter, lifters: [{ id, lot }] }] }]
@@ -57,7 +56,7 @@
             Equipment: o.equipment[eq] || "", Division1: divisionFor(e, o), Event1: e.event === "bench_only" ? "B" : "SBD",
             BirthDate: e.dob ? "'" + String(e.dob).slice(0, 10) : "", Age: ageOn(e.dob, comp.start_date), SquatRack: "", BenchRack: "",
             MemberID: e.bp || "", Country: "", State: "", Lot: l.lot || "", Guest: e.guest ? "Yes" : "No", Novice: o.novice ? "Yes" : "No",
-            CanBreakRecords: e.canBreakRecords === false ? "No" : "Yes", Team: e.club || "", Instagram: e.instagram || "", Notes: ""
+            CanBreakRecords: e.canBreakRecords === false ? "No" : "Yes", Team: e.club || "", Instagram: String(e.instagram || "").replace(/^@/, ""), Notes: e.guest ? (e.divisionName ? e.divisionName + " Guest" : "Guest") : ""
           });
         });
       });

@@ -10,7 +10,7 @@ assert.strictEqual(X.COLUMNS.join(","), SPEC_HEADER, "the header is the referenc
 const people = {
   a: { name: "Smith, Jo", sex: "F", event: "full_power", equipment: "classic", dob: "1998-02-16", ageCat: "J", bp: "BP1", club: 'Iron "Works", Leeds', instagram: "@jo", classLabel: "63" },
   b: { name: "Ann  Lee", sex: "F", event: "bench_only", equipment: "equipped", dob: "1975-12-01", ageCat: "M1", bp: "", club: "", classLabel: "57" },
-  c: { name: "Bob Ray", sex: "M", event: "full_power", equipment: "classic", dob: "1990-06-30", ageCat: "", guest: true, canBreakRecords: false, classLabel: "83" }
+  c: { name: "Bob Ray", sex: "M", event: "full_power", equipment: "classic", dob: "1990-06-30", ageCat: "", guest: true, divisionName: "North West", canBreakRecords: false, classLabel: "83" }
 };
 const sessions = [{ day: 1, sessionNo: 1, flights: [{ letter: "A", lifters: [{ id: "b", lot: 2 }, { id: "a", lot: 1 }] }, { letter: "B", lifters: [{ id: "c", lot: 3 }] }] }];
 const comp = { name: "TEST Open", start_date: "2026-06-13" };
@@ -19,11 +19,11 @@ const csv = X.openLifterCsv(rows);
 const lines = csv.trim().split("\r\n");
 assert.strictEqual(lines[0], SPEC_HEADER, "the file starts with the reference header, byte for byte");
 assert.strictEqual(lines.length, 4, "a header and three lifters");
-assert(lines[1].startsWith("1,1,1,A,Smith Jo,F,Sleeves,FR-J,SBD,'1998-02-16,28,"), "ordered by flight then lot, commas stripped, apostrophe date, age on the day: " + lines[1]);
+assert(lines[1].startsWith("1,1,1,A,Smith Jo,F,Sleeves,FR-O,SBD,'1998-02-16,28,"), "ordered by flight then lot, commas stripped, apostrophe date, age on the day: " + lines[1]);
 assert(lines[1].includes(",Iron Works Leeds,"), "commas and double quotes removed from values, spaces collapsed");
-assert(lines[2].includes("Ann Lee,F,Single-ply,FE-M1,B,'1975-12-01,50,"), "equipped bench only maps to Single-ply and B; double spaces collapsed");
+assert(lines[2].includes("Ann Lee,F,Single-ply,FE-O,B,'1975-12-01,50,"), "equipped bench only maps to Single-ply and B; double spaces collapsed");
 assert.strictEqual(lines[3].split(",")[17], "Yes", "guest is Yes");
-assert.strictEqual(lines[3].split(",")[19], "No", "can't break records is No");
+assert.strictEqual(lines[3].split(",")[19], "No", "can't break records is No"); assert.strictEqual(lines[3].split(",")[22], "North West Guest", "a guest's note names their division"); assert.strictEqual(lines[1].split(",")[21], "jo", "the @ is dropped from Instagram");
 assert.deepStrictEqual(X.validateOpenLifter(csv, { days: 1, platforms: 1 }), [], "a generated file passes OpenLifter's checks");
 
 // the validator catches what OpenLifter would reject
@@ -37,11 +37,11 @@ assert(/BirthDate/.test(bad(csv.replace("'1998-02-16", "16/02/1998"))) && /Birth
 assert(/Lot must/.test(bad(csv.replace(/^1,1,1,A,Smith Jo(.*?),1,No,/m, "1,1,1,A,Smith Jo$1,0,No,"))), "lot must be positive");
 assert(/Yes or No/.test(bad(csv.replace(",Yes,No,No,Yes,", ",Maybe,No,No,Yes,")) + bad(csv.replace("No,No,Yes,Iron", "No,No,Sure,Iron"))), "Yes/No columns");
 assert(/double quote/.test(bad(csv.replace("Bob Ray", 'Bob "Ray"'))), "double quotes");
-assert(/Event1/.test(bad(csv.replace(",SBD,", ",XYZ,"))) && /no division/.test(bad(csv.replace("FR-J", ""))), "mandatory fields");
+assert(/Event1/.test(bad(csv.replace(",SBD,", ",XYZ,"))) && /no division/.test(bad(csv.replace("FR-O", ""))), "mandatory fields");
 assert(/Sex must/.test(bad(csv.replace(",F,Sleeves", ",X,Sleeves"))) && /Equipment must/.test(bad(csv.replace("Sleeves", "Leotard"))), "sex and equipment values");
 
 // settings: the division table, equipment mapping and column list are editable
-const custom = X.openLifterRows(sessions, people, comp, { divisions: { "F:classic:J": "WJ-Raw" }, equipment: { classic: "Bare", equipped: "Multi-ply" }, novice: true });
+const custom = X.openLifterRows(sessions, people, comp, { divisions: { "F:classic": "WJ-Raw" }, equipment: { classic: "Bare", equipped: "Multi-ply" }, novice: true });
 assert.strictEqual(custom[0].Division1, "WJ-Raw"); assert.strictEqual(custom[0].Equipment, "Bare"); assert.strictEqual(custom[0].Novice, "Yes");
 assert.strictEqual(X.openLifterCsv(rows, { columns: ["Day", "Name"] }).split("\r\n")[1], "1,Smith Jo", "the column list is a setting");
 assert.strictEqual(X.ageOn("2000-06-14", "2026-06-13"), 25, "age is whole years on the day"); assert.strictEqual(X.ageOn("2000-06-13", "2026-06-13"), 26);
@@ -55,6 +55,12 @@ const arr = built.sessions.map((s) => ({ day: s.day, sessionNo: s.sessionNo, pri
 const big = X.openLifterCsv(X.openLifterRows(arr, ppl, comp, {}));
 assert.deepStrictEqual(X.validateOpenLifter(big, { days: 2, platforms: 1 }), [], "96 lifters pass the validation");
 assert.strictEqual(big.trim().split("\r\n").length, 97);
+
+// the real file from YNE Worlds 2026: same header byte for byte, and it passes our port of the importer's checks
+import fs from "node:fs";
+const real = fs.readFileSync(new URL("./fixtures/yne-worlds-2026-openlifter.csv", import.meta.url), "utf8");
+assert.strictEqual(real.split(/\r?\n/)[0], X.COLUMNS.join(","), "our header matches the real file's header");
+assert.deepStrictEqual(X.validateOpenLifter(real, { days: 2, platforms: 1 }), [], "the real file passes our validation");
 
 // printable sheets, in the federation's layouts
 const cmp = { name: "TEST <Open>", start_date: "2026-11-07", venue_name: "Riccall Regen Centre" };

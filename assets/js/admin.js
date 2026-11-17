@@ -978,7 +978,7 @@
     var LSo = window.LiftingSort;
     view.replaceChildren(el("p", null, "Loading…"));
     Promise.all([
-      sb.from("entries").select("id,full_name,sex,event,equipment,date_of_birth,best_total_kg,best_glp,status,bp_number,club,instagram,is_guest,can_break_records,weight_classes(label)").eq("competition_id", c.id).in("status", ["paid", "comped"]),
+      sb.from("entries").select("id,full_name,sex,event,equipment,date_of_birth,best_total_kg,best_glp,status,bp_number,club,instagram,is_guest,can_break_records,weight_classes(label),divisions(name)").eq("competition_id", c.id).in("status", ["paid", "comped"]),
       sb.from("lifting_orders").select("*").eq("competition_id", c.id).maybeSingle(),
       sb.from("lo_sessions").select("*, lo_flights(id,letter,locked, lo_assignments(entry_id,position,locked,lot_number,reason))").eq("competition_id", c.id).order("day").order("session_no"),
       sb.from("site_settings").select("value").eq("key", "openlifter.settings").maybeSingle().then(function (r) { return r; }, function () { return {}; })
@@ -987,7 +987,7 @@
       var ent = {}, list = [];
       (res[0].data || []).forEach(function (e) {
         var wc = one(e.weight_classes);
-        var x = { id: e.id, name: e.full_name, sex: e.sex, classLabel: wc ? wc.label : "", ageClass: e.date_of_birth ? CAT_LABEL[catFor(e.date_of_birth, c.start_date)] : "", ageCat: e.date_of_birth ? catFor(e.date_of_birth, c.start_date) : "", dob: e.date_of_birth, equipment: e.equipment, bp: e.bp_number, club: e.club, instagram: e.instagram, guest: !!e.is_guest, canBreakRecords: e.can_break_records !== false, event: e.event, total: e.best_total_kg === null || e.best_total_kg === undefined ? null : Number(e.best_total_kg), glp: e.best_glp === null || e.best_glp === undefined ? null : Number(e.best_glp) };
+        var x = { id: e.id, name: e.full_name, sex: e.sex, classLabel: wc ? wc.label : "", ageClass: e.date_of_birth ? CAT_LABEL[catFor(e.date_of_birth, c.start_date)] : "", ageCat: e.date_of_birth ? catFor(e.date_of_birth, c.start_date) : "", dob: e.date_of_birth, equipment: e.equipment, bp: e.bp_number, club: e.club, instagram: e.instagram, guest: !!e.is_guest, divisionName: (one(e.divisions) || {}).name || "", canBreakRecords: e.can_break_records !== false, event: e.event, total: e.best_total_kg === null || e.best_total_kg === undefined ? null : Number(e.best_total_kg), glp: e.best_glp === null || e.best_glp === undefined ? null : Number(e.best_glp) };
         ent[e.id] = x; list.push(x);
       });
       var row = (res[1] && !res[1].error && res[1].data) || {};
@@ -1197,25 +1197,18 @@
       // ---- exports: weigh-in sheet, score sheet, OpenLifter file. They use what is on screen, in lot order.
       var LEx = window.LiftingExport, olSaved = {};
       try { olSaved = JSON.parse((res[3] && res[3].data && res[3].data.value) || "{}") || {}; } catch (x) { olSaved = {}; }
-      var CAT_KEYS = ["", "SJ", "J", "M1", "M2", "M3", "M4"];
-      function divisionLines() {
-        var out = [];
-        ["F", "M"].forEach(function (sx) { ["classic", "equipped"].forEach(function (eq) { CAT_KEYS.forEach(function (cat) {
-          var key = sx + ":" + eq + ":" + cat; out.push((sx === "F" ? "Women" : "Men") + ", " + eq + ", " + CAT_LABEL[cat] + " = " + ((olSaved.divisions || {})[key] || LEx.defaultDivisionCode(sx, eq, cat)));
-        }); }); });
-        return out.join("\n");
-      }
+      var DIV_KEYS = [["F", "classic", "Women, classic"], ["M", "classic", "Men, classic"], ["F", "equipped", "Women, equipped"], ["M", "equipped", "Men, equipped"]];
+      function divisionLines() { return DIV_KEYS.map(function (d) { return d[2] + " = " + ((olSaved.divisions || {})[d[0] + ":" + d[1]] || LEx.defaultDivisionCode(d[0], d[1])); }).join("\n"); }
       function parseDivisions(text) {
-        var map = {}, keys = [];
-        ["F", "M"].forEach(function (sx) { ["classic", "equipped"].forEach(function (eq) { CAT_KEYS.forEach(function (cat) { keys.push({ k: sx + ":" + eq + ":" + cat, label: (sx === "F" ? "Women" : "Men") + ", " + eq + ", " + CAT_LABEL[cat] }); }); }); });
+        var map = {};
         text.split(/\r?\n/).forEach(function (line) {
           var i = line.lastIndexOf("="); if (i < 0) return;
-          var lab = line.slice(0, i).trim(), code = LEx.clean(line.slice(i + 1)), hit = keys.filter(function (k) { return k.label === lab; })[0];
-          if (hit && code) map[hit.k] = code;
+          var lab = line.slice(0, i).trim(), code = LEx.clean(line.slice(i + 1)), hit = DIV_KEYS.filter(function (d) { return d[2] === lab; })[0];
+          if (hit && code) map[hit[0] + ":" + hit[1]] = code;
         });
         return map;
       }
-      var divText = el("textarea", { id: "ol-divisions", rows: "14", "aria-describedby": "ol-div-help", spellcheck: "false" }); divText.value = divisionLines();
+      var divText = el("textarea", { id: "ol-divisions", rows: "4", "aria-describedby": "ol-div-help", spellcheck: "false" }); divText.value = divisionLines();
       var noviceBox = el("input", { type: "checkbox", id: "ol-novice" }); noviceBox.checked = (olSaved.novice_for || []).indexOf(c.id) >= 0;
       var classicBox = el("input", { type: "text", id: "ol-classic", value: (olSaved.equipment || {}).classic || "Sleeves" }), equippedBox = el("input", { type: "text", id: "ol-equipped", value: (olSaved.equipment || {}).equipped || "Single-ply" });
       function olSettings() { return { divisions: parseDivisions(divText.value), equipment: { classic: classicBox.value.trim() || "Sleeves", equipped: equippedBox.value.trim() || "Single-ply" }, novice: noviceBox.checked, platforms: 1 }; }
