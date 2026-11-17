@@ -931,8 +931,7 @@
         el("div", { class: "actions", style: "margin-bottom:var(--space-3)" },
           btn("Add entry", function () { addEntry(c, refs, reload); }, "btn-primary"),
           c.slug ? el("a", { class: "btn btn-sm btn-secondary", href: "../entries?c=" + encodeURIComponent(c.slug), target: "_blank", rel: "noopener" }, "Public list") : null,
-          btn("Download CSV", function () { downloadEntries(c); }, "btn-ghost"),
-          el("a", { class: "btn btn-sm btn-ghost", href: "lifting-lab.html", target: "_blank", rel: "noopener" }, "Try the lifting order lab ", el("span", { class: "visually-hidden" }, "(opens in a new tab)"))),
+          btn("Download CSV", function () { downloadEntries(c); }, "btn-ghost")),
         el("p", { class: "panel-intro" }, live.length + " entered of " + (c.capacity || "?") + " places. Entry money taken: " + entryMoney(total) + "." +
           (toCheck ? " " + toCheck + (toCheck === 1 ? " guest" : " guests") + " to check." : "") + (belowStd ? " " + belowStd + " below the qualifying standard." : "") + (Object.keys(dup).length ? " " + Object.keys(dup).length + " entries share an email or membership number with another." : "")),
         el("div", { class: "control-row" }, q, st, so), el("div", { class: "control-row checks" }, g, dp), count, list);
@@ -991,7 +990,7 @@
         ent[e.id] = x; list.push(x);
       });
       var row = (res[1] && !res[1].error && res[1].data) || {};
-      var settings = { days: row.days || "", sessions: row.sessions || "",         prime_time: !!row.prime_time_enabled, prime_women: row.prime_time_women || 14, prime_men: row.prime_time_men || 14, women_first: row.women_first !== false };
+      var settings = { days: row.days || "", sessions: row.sessions || "",         prime_time: !!row.prime_time_enabled, prime_women: row.prime_time_women || 14, prime_men: row.prime_time_men || 14, women_first: row.women_first !== false, seconds_per_attempt: row.seconds_per_attempt || 45 };
       var S = { sessions: [], dirty: false, warnings: [], dropped: 0, showLots: false };
       // the saved arrangement (lifters who have cancelled since are dropped)
       ((res[2] && !res[2].error && res[2].data) || []).forEach(function (s) {
@@ -1000,7 +999,7 @@
             .map(function (a) { return { id: a.entry_id, reason: a.reason || "", locked: !!a.locked, lot: a.lot_number }; });
           return { letter: f.letter, locked: !!f.locked, lifters: lifters };
         });
-        S.sessions.push({ day: s.day, sessionNo: s.session_no, prime: !!s.is_prime_time, name: s.name || "", flights: flights });
+        S.sessions.push({ day: s.day, sessionNo: s.session_no, prime: !!s.is_prime_time, name: s.name || "", liftOff: s.lift_off_at || null, weighIn: s.weigh_in_at || null, awards: s.awards_at || null, flights: flights });
       });
       if (S.dropped) S.dirty = true;
 
@@ -1010,7 +1009,8 @@
         { name: "prime_time", label: "Prime time", type: "checkbox", help: "Makes the last session prime time, for the top lifters by GL points." },
         { name: "prime_women", label: "Women in prime time", type: "number", min: "1", max: "14", half: true, show: function (v) { return v.prime_time; } },
         { name: "prime_men", label: "Men in prime time", type: "number", min: "1", max: "14", half: true, show: function (v) { return v.prime_time; } },
-        { name: "women_first", label: "Put the women's flight first in each session", type: "checkbox" }
+        { name: "women_first", label: "Put the women's flight first in each session", type: "checkbox" },
+        { name: "seconds_per_attempt", label: "Seconds per attempt", type: "number", min: "15", max: "180", half: true, help: "Used to estimate when each session finishes. 45 gives about 3.5 hours for two full flights." }
       ], settings);
       form.el.addEventListener("input", function () { S.dirty = true; status(); });
       form.el.addEventListener("change", function () { S.dirty = true; status(); });
@@ -1019,7 +1019,7 @@
       function settingsNow() {
         var v = form.values();
         return { days: v.days ? Math.round(v.days) : null, sessions: v.sessions ? Math.round(v.sessions) : null, maxFullPower: 14, maxPerFlight: 20,         // the federation's rules: not a setting
-          womenFirst: !!v.women_first, primeTime: { enabled: !!v.prime_time, women: Math.round(v.prime_women) || 14, men: Math.round(v.prime_men) || 14 } };
+          womenFirst: !!v.women_first, secondsPerAttempt: Math.round(v.seconds_per_attempt) || 45, primeTime: { enabled: !!v.prime_time, women: Math.round(v.prime_women) || 14, men: Math.round(v.prime_men) || 14 } };
       }
       function status() { statusNode.textContent = S.dirty ? "Not saved yet" : (S.sessions.length ? "Saved" : ""); window.onbeforeunload = S.dirty ? function () { return ""; } : null; }
       function flightsList() { var out = []; S.sessions.forEach(function (s) { s.flights.forEach(function (f) { out.push({ s: s, f: f, key: s.day + ":" + f.letter }); }); }); return out; }
@@ -1050,7 +1050,8 @@
       function runSort() {
         if (flightsList().length && !window.confirm("Sorting again replaces the order below, including anything you moved by hand. Carry on?")) return;
         var out = LSo.build(list, settingsNow());
-        S.showLots = false; lotToggle.querySelector("input").checked = false; S.sessions = out.sessions.map(function (s) { return { day: s.day, sessionNo: s.sessionNo, prime: s.prime, name: s.name, flights: s.flights.map(function (f) { return { letter: f.letter, locked: false, lifters: f.lifters.map(function (l) { return { id: l.id, reason: l.reason, locked: false, lot: null }; }) }; }) }; });
+        var oldTimes = {}; S.sessions.forEach(function (o) { oldTimes[o.day + ":" + o.sessionNo] = o; });
+        S.showLots = false; lotToggle.querySelector("input").checked = false; S.sessions = out.sessions.map(function (s) { var ot = oldTimes[s.day + ":" + s.sessionNo] || {}; return { day: s.day, sessionNo: s.sessionNo, prime: s.prime, name: s.name, liftOff: ot.liftOff || null, weighIn: ot.weighIn || null, awards: ot.awards || null, flights: s.flights.map(function (f) { return { letter: f.letter, locked: false, lifters: f.lifters.map(function (l) { return { id: l.id, reason: l.reason, locked: false, lot: null }; }) }; }) }; });
         S.warnings = out.warnings; S.dirty = true; S.dropped = 0; status(); draw();
       }
       function remove(id) { flightsList().forEach(function (x) { x.f.lifters = x.f.lifters.filter(function (l) { return l.id !== id; }); }); }
@@ -1145,6 +1146,31 @@
           el("td", null, e.total === null ? "none yet" : e.total + " kg"), el("td", null, e.glp === null ? "–" : String(e.glp)),
           S.showLots ? el("td", { class: "lot-cell" }, l.lot ? String(l.lot) : "–") : null);
       }
+      // ---- session times: lift-off is typed, weigh-in defaults to 2 hours before, the finish is estimated from the attempts
+      function hm(ms) { return ms === null || ms === undefined ? "" : Y.toLondonInput(new Date(ms).toISOString()).slice(11, 16); }
+      function msOf(iso) { return iso ? new Date(iso).getTime() : null; }
+      function timesOf(s) { return LSo.sessionTimes({ liftOff: msOf(s.liftOff), weighIn: msOf(s.weighIn), awards: msOf(s.awards), flights: s.flights.map(function (f) { return { lifters: f.lifters.filter(function (l) { return ent[l.id]; }).map(function (l) { return { event: ent[l.id].event }; }) }; }) }, settingsNow().secondsPerAttempt); }
+      function timeField(s, key, label, placeholder) {
+        var id = "t-" + s.day + "-" + s.sessionNo + "-" + key, input = el("input", { type: "text", id: id, inputmode: "numeric", autocomplete: "off", size: "6", maxlength: "5", placeholder: placeholder || "hh:mm", "data-fk": id, "aria-describedby": "lo-times-help" });
+        input.value = s[key] ? hm(msOf(s[key])) : "";
+        input.addEventListener("change", function () {
+          var v = input.value.trim().replace(".", ":");
+          if (v === "") { s[key] = null; }
+          else {
+            var m = /^(\d{1,2})(?::?(\d{2}))$/.exec(v); if (!m || +m[1] > 23 || +m[2] > 59) { toast("Type the time like 09:30.", "error"); input.value = s[key] ? hm(msOf(s[key])) : ""; return; }
+            s[key] = Y.fromLondonInput(Y.addDays(c.start_date, s.day - 1) + "T" + ("0" + m[1]).slice(-2) + ":" + m[2]);
+          }
+          S.dirty = true; status(); draw(id);
+        });
+        return el("div", { class: "field half", style: "margin:0" }, el("label", { for: id }, label), input);
+      }
+      function timesRow(s) {
+        var t = timesOf(s);
+        var line = t.liftOff === null ? "Type the lift-off time and the others are worked out." : "Weigh-in " + hm(t.weighIn) + (t.weighInAuto ? " (2 hours before)" : "") + ", lift-off " + hm(t.liftOff) + ", awards " + (t.awardsAuto ? "about " : "") + hm(t.awards) + (t.awardsAuto ? " (estimated)" : "") + ".";
+        return el("div", { class: "lab-times", style: "display:flex;gap:var(--space-4);flex-wrap:wrap;align-items:flex-end;margin:var(--space-3) 0" },
+          timeField(s, "liftOff", "Lift-off"), timeField(s, "weighIn", "Weigh-in", t.weighInAuto ? hm(t.weighIn) : ""), timeField(s, "awards", "Awards", t.awardsAuto ? hm(t.awards) : ""),
+          el("p", { class: "help", style: "margin:0;flex:1 1 16em" }, line));
+      }
       var justMoved = null;
       function draw(focusKey, moved) {
         justMoved = moved || null;
@@ -1156,6 +1182,7 @@
         var ls = lotsState(); if (ls.any && !ls.ok) notes.push("Lifters have moved since the lot numbers were drawn, so some flights no longer have their own block of numbers. Draw the lot numbers again once the order is settled.");
         if (!flights.length && noTotal) notes.push(noTotal + (noTotal === 1 ? " lifter has" : " lifters have") + " no best total yet (it comes from the OpenIPF check on the entry). They go first in their flight.");
         if (notes.length) kids.push(el("div", { class: "callout" }, el("ul", { style: "margin:0;padding-left:1.2em" }, notes.map(function (w) { return el("li", null, w); }))));
+        kids.push(el("p", { class: "visually-hidden", id: "lo-times-help" }, "Times are UK time, like 09:30. Leave weigh-in and awards blank to have them worked out."));
         kids.push(el("p", { class: "visually-hidden", id: "lo-grip-help" }, "Press space to pick this lifter up, then the up and down arrow keys to move them through the order, space to drop them, delete to take them out, or escape to cancel."));
         if (flights.length) {
           kids.push(el("section", { id: "lo-unplaced-zone", class: "lab-unplaced", "aria-labelledby": "lo-unplaced" }, el("h3", { id: "lo-unplaced" }, "Not in the lifting order" + (unplaced.length ? " (" + unplaced.length + ")" : "")),
@@ -1165,7 +1192,7 @@
               : el("p", { class: "help" }, "Everyone is in. Drag a lifter here to take them out of the lifting order.")));
         }
         S.sessions.forEach(function (s) {
-          var box = el("section", { class: "lab-session", "aria-label": "Day " + s.day + ", session " + s.sessionNo }, el("h3", null, "Day " + s.day + ", session " + s.sessionNo + (s.prime ? ": prime time" : "")));
+          var box = el("section", { class: "lab-session", "aria-label": "Day " + s.day + ", session " + s.sessionNo }, el("h3", null, "Day " + s.day + ", session " + s.sessionNo + (s.prime ? ": prime time" : "")), timesRow(s));
           s.flights.forEach(function (f) {
             var fp = f.lifters.filter(function (l) { return ent[l.id].event !== "bench_only"; }).length, sx = sexOf(f), st = settingsNow();
             var problems = []; if (sx === "mixed") problems.push("women and men in the same flight"); if (f.lifters.length > st.maxPerFlight) problems.push("over the " + st.maxPerFlight + " lifters limit"); if (fp > st.maxFullPower) problems.push("over the " + st.maxFullPower + " full power limit");
@@ -1187,8 +1214,8 @@
         var st = settingsNow();
         btnNode.disabled = true;
         sb.rpc("lifting_order_save", { c: c.id, p: {
-          settings: { days: st.days, sessions: st.sessions, max_full_power: st.maxFullPower, max_per_flight: st.maxPerFlight, prime_time: st.primeTime.enabled, prime_women: st.primeTime.women, prime_men: st.primeTime.men, women_first: st.womenFirst },
-          sessions: S.sessions.map(function (s) { return { day: s.day, session_no: s.sessionNo, prime: s.prime, name: s.name, flights: s.flights.map(function (f) { return { letter: f.letter, locked: f.locked, lifters: f.lifters.map(function (l) { return { entry_id: l.id, locked: l.locked, lot_number: l.lot, reason: l.reason }; }) }; }) }; })
+          settings: { days: st.days, sessions: st.sessions, max_full_power: st.maxFullPower, max_per_flight: st.maxPerFlight, prime_time: st.primeTime.enabled, prime_women: st.primeTime.women, prime_men: st.primeTime.men, women_first: st.womenFirst, seconds_per_attempt: st.secondsPerAttempt },
+          sessions: S.sessions.map(function (s) { return { day: s.day, session_no: s.sessionNo, prime: s.prime, name: s.name, weigh_in_at: s.weighIn, lift_off_at: s.liftOff, awards_at: s.awards, flights: s.flights.map(function (f) { return { letter: f.letter, locked: f.locked, lifters: f.lifters.map(function (l) { return { entry_id: l.id, locked: l.locked, lot_number: l.lot, reason: l.reason }; }) }; }) }; })
         } }).then(function (r) {
           if (r.error) { var m = (r.error.message || "").trim(); throw new Error(m === "forbidden" ? "You do not have permission to save the lifting order." : /invalid:lifter/.test(m) ? "Someone on the order is no longer an entered lifter. Reload the page and sort again." : friendly(r.error)); }
           S.dirty = false; S.dropped = 0; status(); toast("Lifting order saved."); draw();

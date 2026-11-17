@@ -213,5 +213,23 @@
     return out;
   }
 
-  return { build: build, classKey: classKey, letter: letter, flightOrder: flightOrder, assignLots: assignLots, DEFAULTS: DEFAULTS };
+  // ---- session times ---------------------------------------------------------------------------------------------------
+  // Lift-off is set by hand. Weigh-in defaults to two hours before it. The finish (awards) is estimated from the attempts:
+  //   (full power lifters x 9 + bench only lifters x 3) x seconds per attempt, plus 10 minutes between flights when there are two or more,
+  //   plus 10 minutes before awards. 45 seconds an attempt gives about 3.5 hours for two full flights of 14.
+  // s = { liftOff, weighIn, awards: ms or null (what was typed), flights: [{ lifters: [{ event }] }] }. Returns times in ms, or null where unknown.
+  function estimateMinutes(flights, secondsPerAttempt) {
+    var attempts = 0;
+    flights.forEach(function (f) { f.lifters.forEach(function (l) { attempts += l.event === "bench_only" ? 3 : 9; }); });
+    var n = flights.filter(function (f) { return f.lifters.length; }).length;
+    return Math.round(attempts * (secondsPerAttempt || 45) / 60) + (n >= 2 ? 10 : 0) + 10;
+  }
+  function sessionTimes(s, secondsPerAttempt) {
+    var lift = typeof s.liftOff === "number" ? s.liftOff : null;
+    var weigh = typeof s.weighIn === "number" ? s.weighIn : (lift !== null ? lift - 120 * 60000 : null);
+    var awards = typeof s.awards === "number" ? s.awards : (lift !== null ? lift + estimateMinutes(s.flights, secondsPerAttempt) * 60000 : null);
+    return { liftOff: lift, weighIn: weigh, awards: awards, weighInAuto: typeof s.weighIn !== "number" && lift !== null, awardsAuto: typeof s.awards !== "number" && lift !== null };
+  }
+
+  return { build: build, classKey: classKey, letter: letter, flightOrder: flightOrder, assignLots: assignLots, sessionTimes: sessionTimes, estimateMinutes: estimateMinutes, DEFAULTS: DEFAULTS };
 });

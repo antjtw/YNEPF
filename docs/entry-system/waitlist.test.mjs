@@ -262,6 +262,11 @@ ok(set.days === 2 && set.mf === 12 && set.ma === 18 && set.pt === true && set.pw
 // saving again replaces everything
 await saveLo(U.entries, arrangement([{ entry_id: l3 }], [{ entry_id: l1 }]));
 got = await rowsLo(); ok(got.length === 2 && got.find((r) => r.letter === "A").entry_id === l3 && got.find((r) => r.letter === "B").entry_id === l1, "saving again replaces the earlier arrangement, leaving nothing behind");
+// times and the seconds-per-attempt setting are stored with the order
+await saveLo(U.entries, { settings: { seconds_per_attempt: 50 }, sessions: [{ day: 1, session_no: 1, weigh_in_at: "2027-06-12T08:00:00Z", lift_off_at: "2027-06-12T10:00:00Z", awards_at: null, flights: [{ letter: "A", lifters: [{ entry_id: l1 }] }] }] });
+const tms = (await q(`select to_char(s.weigh_in_at at time zone 'utc','HH24:MI') w, to_char(s.lift_off_at at time zone 'utc','HH24:MI') l, s.awards_at a, lo.seconds_per_attempt sp from public.lo_sessions s join public.lifting_orders lo on lo.competition_id = s.competition_id where s.competition_id = '${LO}'`))[0];
+ok(tms.w === "08:00" && tms.l === "10:00" && tms.a === null && tms.sp === 50, "session times and seconds per attempt are saved: " + JSON.stringify(tms));
+await saveLo(U.entries, arrangement([{ entry_id: l3 }], [{ entry_id: l1 }]));
 // the same letter on two different days is fine (letters start again each day)
 ok(!(await saveLo(U.entries, { settings: {}, sessions: [{ day: 1, session_no: 1, flights: [{ letter: "A", lifters: [{ entry_id: l1 }] }] }, { day: 2, session_no: 1, flights: [{ letter: "A", lifters: [{ entry_id: l2 }] }] }] }))?.error, "flight A on day 1 and flight A on day 2 can both be saved");
 await saveLo(U.entries, arrangement([{ entry_id: l3 }], [{ entry_id: l1 }]));

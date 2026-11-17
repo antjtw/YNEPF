@@ -197,8 +197,8 @@
     var days = {};
     lifters.forEach(function (l) {
       var d = days[l.day] = days[l.day] || {};
-      var s = d[l.session] = d[l.session] || { name: "", weighIn: "", liftOff: "", flights: {} };
-      s.name = s.name || l.sessionName; s.weighIn = s.weighIn || l.weighIn; s.liftOff = s.liftOff || l.liftOff;
+      var s = d[l.session] = d[l.session] || { name: "", weighIn: "", liftOff: "", awards: "", flights: {} };
+      s.name = s.name || l.sessionName; s.weighIn = s.weighIn || l.weighIn; s.liftOff = s.liftOff || l.liftOff; s.awards = s.awards || l.awards || "";
       (s.flights[l.flight] = s.flights[l.flight] || []).push(l);
     });
     var num = function (a, b) { return a - b; };
@@ -213,10 +213,10 @@
       Object.keys(days[day]).map(Number).sort(num).forEach(function (sn) {
         var s = days[day][sn];
         var prime = /^prime time$/i.test(s.name);
-        var times = [s.weighIn && ["Weigh-in ", el("strong", null, s.weighIn)], s.liftOff && ["Lift off ", el("strong", null, s.liftOff)]].filter(Boolean);
+        var times = [s.weighIn && ["Weigh-in ", el("strong", null, s.weighIn)], s.liftOff && ["Lift off ", el("strong", null, s.liftOff)], s.awards && ["Awards ", el("strong", null, s.awards)]].filter(Boolean);
         var block = el("div", { class: "lo-session" },
           el("h3", null, s.name || "Session " + sn),
-          times.length ? el("p", { class: "lo-times" }, times[0], times[1] ? [" · ", times[1]] : null) : null);
+          times.length ? el("p", { class: "lo-times" }, times.map(function (t, i) { return i ? [" · ", t] : t; })) : null);
         Object.keys(s.flights).sort().forEach(function (f) {
           var rows = s.flights[f].slice();
           if (rows.every(function (l) { return l.position != null; })) rows.sort(function (a, b) { return a.position - b.position; });
@@ -272,6 +272,14 @@
               glp: x.best_glp == null ? null : Number(x.best_glp), weighIn: hm(x.weigh_in_at), liftOff: hm(x.lift_off_at), sessionName: x.is_prime_time ? "Prime time" : (x.session_name || ""), _as: x.published_as };
           });
           if (!rows.length) { root.replaceChildren(el("p", null, "The lifting order is not ready yet. Check back soon.")); return; }
+          // times: lift-off as set; weigh-in two hours before and the finish estimated from the attempts, unless they were typed in
+          var sess = {};
+          (r.data || []).forEach(function (x) {
+            var k = x.day + "-" + x.session_no, q = sess[k] = sess[k] || { liftOff: x.lift_off_at ? new Date(x.lift_off_at).getTime() : null, weighIn: x.weigh_in_at ? new Date(x.weigh_in_at).getTime() : null, awards: x.awards_at ? new Date(x.awards_at).getTime() : null, flights: {}, secs: x.seconds_per_attempt };
+            (q.flights[x.flight] = q.flights[x.flight] || { lifters: [] }).lifters.push({ event: x.event });
+          });
+          Object.keys(sess).forEach(function (k) { var q = sess[k]; q.flights = Object.keys(q.flights).map(function (f) { return q.flights[f]; }); q.t = window.LiftingSort ? window.LiftingSort.sessionTimes(q, q.secs) : { weighIn: q.weighIn, liftOff: q.liftOff, awards: q.awards }; });
+          rows.forEach(function (l) { var q = sess[l.day + "-" + l.session]; if (q) { l.weighIn = hm(q.t.weighIn); l.liftOff = hm(q.t.liftOff); l.awards = hm(q.t.awards); } });
           renderLiftingOrder(root, c, rows);
           root.insertBefore(el("p", { class: "lo-key" }, el("strong", null, rows[0]._as === "final" ? "Final" : "Provisional"), rows[0]._as === "final" ? " lifting order." : " lifting order. It may change before the competition."), root.firstChild);
         }).catch(function (e) { if (window.console) console.error(e); root.replaceChildren(el("p", null, "We could not load the lifting order just now. Please try again in a moment.")); });

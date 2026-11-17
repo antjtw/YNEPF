@@ -132,6 +132,20 @@ console.log("PASS " + runs + " different competitions all obey the rules");
   assert.deepStrictEqual(LS.assignLots([]), {}, "no flights, no lots");
   console.log("PASS lot numbers: consecutive block per flight, women then men, random inside the flight");
 }
+// ---- 8. session times
+{
+  const fl = (n) => ({ lifters: Array.from({ length: n }, () => ({ event: "full_power" })) });
+  const min = LS.estimateMinutes([fl(14), fl(14)], 45);
+  assert(min >= 205 && min <= 215, "two full flights of 14 at 45 seconds take about 3.5 hours (" + min + " minutes)");
+  assert.strictEqual(LS.estimateMinutes([{ lifters: [{ event: "bench_only" }, { event: "bench_only" }] }], 60), 6 + 10, "bench only is 3 attempts, one flight has no gap between flights");
+  const lift = Date.UTC(2026, 10, 7, 11, 0);
+  const t1 = LS.sessionTimes({ liftOff: lift, flights: [fl(14), fl(14)] }, 45);
+  assert.strictEqual(t1.weighIn, lift - 2 * 3600000, "weigh-in defaults to two hours before lift-off"); assert(t1.weighInAuto && t1.awardsAuto);
+  const t2 = LS.sessionTimes({ liftOff: lift, weighIn: lift - 3600000, awards: lift + 4 * 3600000, flights: [fl(1)] }, 45);
+  assert.strictEqual(t2.weighIn, lift - 3600000); assert.strictEqual(t2.awards, lift + 4 * 3600000); assert(!t2.weighInAuto && !t2.awardsAuto, "typed times win");
+  const t3 = LS.sessionTimes({ flights: [fl(3)] }, 45); assert(t3.liftOff === null && t3.weighIn === null && t3.awards === null, "no lift-off, no times");
+  console.log("PASS session times: estimate, defaults and overrides");
+}
 console.log("\nlifting sort tests passed");
 {
   const r = LS.build(lifters(120, 8), { ...O, sessions: 4, primeTime: { enabled: true } });

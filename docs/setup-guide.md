@@ -199,10 +199,6 @@ Every online-entry competition has a **Lifting order** tab (entries team and adm
 
 Best totals come from the OpenIPF check on each entry. Nothing here is public yet: publishing, locks, timings, lot numbers and the OpenLifter export come next. It needs the newest all-in-one SQL.
 
-## Part 5j: The lifting order lab
-
-Before the lifting order builder arrives, `/admin/lifting-lab` (on the preview site, or the live site once merged) lets you try the auto sort on pretend lifters: pick a scenario (including the real YNE Worlds 2026 mix), change the days, sessions and prime time, and see how it splits them. Nothing is saved and it uses no real data. It is there to review how the sort behaves and tell us what you would do differently.
-
 ## Part 5b: The club list
 
 Lifters in English divisions can choose their club (it is optional) from the English Powerlifting Association's list of approved clubs, copied from the EPA website. Only club **names** are copied, never contact details. Lifters from other nations have no club question, and clubs from other bodies are not included.
@@ -254,3 +250,7 @@ Everything for a competition is set up once, on one page in the **Calendar** tab
 - **OpenLifter file** downloads a CSV with the reference header and runs the importer's checks first. Open **OpenLifter settings** to set the division codes (they must match the divisions in your OpenLifter meet exactly), the equipment names and whether the competition is a novice one.
 - The division codes start as `MR-O` and `FR-O` (sex, R for raw/classic or E for equipped, then O for Open), as in the YNE Worlds 2026 file. Guests get a note: "Divisional Guest" when they can break records, otherwise their own division, such as "North West Guest".
 - Tests: `node docs/entry-system/lifting-sort.test.mjs` and `node docs/entry-system/lifting-export.test.mjs`.
+
+### Session times (Lifting order tab)
+
+Each session has **Lift-off**, **Weigh-in** and **Awards** boxes (UK time, like `09:30`). Type the lift-off time and the rest are worked out: weigh-in two hours before, and the finish estimated from the attempts (full power lifters have 9, bench only 3, at the *Seconds per attempt* setting, 45 by default, plus 10 minutes between flights and 10 before awards). Type a weigh-in or awards time to override the estimate, or clear the box to go back to it. The times show on the public lifting order once published. They are kept when you sort again. Run the latest all-in-one SQL once for the new setting.
