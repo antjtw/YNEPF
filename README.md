@@ -325,74 +325,10 @@ news, users and more) is in [`docs/editor-guide.md`](docs/editor-guide.md).
   **Spaces:** *Number of spaces* shows on the competition next to the date and
   venue.
   **Enter now / lifting order:** once entry opens an "Enter now" button appears.
-  A few days later, paste the lifting order sheet (a published Google Sheet:
-  File > Share > Publish to web > CSV) into *Lifting order sheet* and a "View
-  lifting order" button appears beside it, leading to that competition's own
-  page at `/lifting-order/<address>`. The address is made from the year and name
-  (for example `2027-yne-march-open`), suggested for you and editable (*Web
-  address ending*); `vercel.json` rewrites it to `lifting/index.html`, and
-  `/lifting/?c=<address>` also works anywhere. The page is headed with the
-  competition name and lists lifters by day, session and flight. Sheet columns:
-  Day, Session, Flight and Name are required; optional are Club, Instagram, Age
-  class (blank = Open, else J, SJ, M1 to M4), Class (such as M66), GLP, Total (kg),
-  Open IPF (links the name to the profile), and per session Weigh-in, Lift off and
-  Session name. Each lifter's name cell holds the name, an Instagram icon (never
-  the handle) and the club. Only columns that have something in them are shown, so
-  use Total and/or GLP depending on the competition. There is no years-of-age
-  column. Saving a competition warns about unrecognised age classes and invalid
-  handles. `docs/mockups/sample-lifting-order.csv` is an example sheet. Within a flight lifters are
-  ordered by class then GLP, except a session named "Prime time", which keeps
-  the sheet's order. The page reads the sheet live, so adding, changing or
-  deleting rows shows up as soon as Google refreshes the published sheet (a few
-  minutes); nothing is stored or scheduled.
-- **News.** Posts have a title, date, author (the signed-in editor), and a rich
-  text body that is saved as Markdown, with links, headings, lists and tables.
-  A post dated in the future publishes itself on that date; untick *Published*
-  for a draft.
-- **Organisation.** Sections (Executive team, Referees...) containing people
-  (name, role, optional Instagram handle and blurb). Add, edit, delete and
-  reorder with the arrow buttons; people can be moved between sections.
-- **FAQs.** Categories containing questions, with Markdown answers. Same
-  controls as the organisation page.
-- **Records.** The Records page shows one table per entry under *Records* in
-  the editor, each read live from a Google Sheet (men and women, classic and
-  equipped). In each sheet use File > Share > Publish to web, choose the tab and
-  CSV, and paste the link into the editor. A normal share link also works if the
-  sheet is shared with "anyone with the link". The divisional records layout (a block per weight
-  class, with each lift's current record in three rows: weight, holder, date) is
-  recognised automatically and shown as a grid per weight class (each sheet is a
-  tab, with search across all tabs and weight class jump links); any other sheet is shown as a plain table (first row = headings, blank
-  rows and columns ignored). `docs/mockups/sample-records.csv` shows the layout. To move the
-  records elsewhere, edit the entry and paste the new link; leaving the link
-  blank hides that table. Google refreshes published sheets every few minutes.
-- **Address, search and sharing.** The site's one main address is `https://www.ynepf.co.uk` (the
-  plain `ynepf.co.uk` redirects to it), set as `SITE_URL` at the top of `build.js`. Running
-  `node build.js` writes each page's canonical address and link-preview tags (Open Graph and a
-  Twitter card) between `<!-- @seo start -->` and `<!-- @seo end -->`, and regenerates `robots.txt`
-  and `sitemap.xml` (every page that can be indexed: not the editor, not `noindex` pages, not the
-  pages whose content depends on the address). Commit the results. The link-preview picture is
-  `assets/img/share.jpg` (1200 x 630); `node scripts/make-share-image.js` regenerates it from
-  `scripts/share-image.html` (needs Playwright and sharp). Limits: news posts and lifting orders are
-  not in the sitemap, and a shared link to one shows the general preview (their content loads after
-  the page, which link previews do not wait for). The home page also carries `SportsOrganization`
-  structured data. The editor is `noindex` and deliberately not blocked in `robots.txt`, so crawlers
-  can see that.
-- **Home tab.** The editor's Home tab changes the home page's headline and buttons, the *Upcoming
-  events* and *Latest news* headings and buttons, the *Resources* list (icon, colour, title, text,
-  link; up to 8), the *Find your place* cards (up to 6), the question band, and the hero photo
-  pool. Each block's wording is a JSON row in `site_settings` (`home.hero`, `home.events`,
-  `home.resources`, `home.cards`, `home.news`, `home.cta`); no row means the standard wording, which
-  is what `index.html` already says (the defaults live in `assets/js/home.js` and a test checks the
-  two agree). Events and news themselves still come from the Calendar and News tabs. The page works
-  without JavaScript and before the database answers; `home.js` keeps the last copy in
-  localStorage and applies it straight after each block, so edited wording does not flash the old
-  text. Links are checked (https, mailto, or a page on the site), text is always set as text, and
-  hero photo addresses must be the site's own pictures or the project's public storage.
-- **GL points calculator.** `glp-calculator.html` (address `/glp-calculator`) works out IPF GL points from sex, event (powerlifting or bench press only), kit (classic or equipped), bodyweight and result, live as you type, using the IPF's Table 1 constants (`assets/js/glp.js`, which also builds the constants table on the page, so the numbers have one source). Bodyweight must be at least 40 kg for men and 35 kg for women. It is deliberately **not in the main menu**: the only way in is a footer link, set in the editor's Footer tab (Competing column: label "GL points calculator", address `glp-calculator.html`), plus a link from the rules page on GL points.
-- **News pictures.** The news editor has an Add image step: pick, paste or drop a picture, it is shrunk in the browser (max 1600px wide, WebP at about 80%, metadata dropped), the editor must describe it (alt text), and it is uploaded to the public `news-images` Storage bucket (made by `schema.sql`; editors only can write; WebP/JPEG, 2 MB max). In a post it sits at the full width of the text, on its own line, with the whole picture shown and a 36rem height cap. Only pictures from that bucket are rendered anywhere markdown is shown; outside image URLs are removed. Files are named `<description>-<id>-<width>x<height>.webp` so the page can reserve space.
-- **Submit a record button.** The Records page opens with a "Submit a record" button linking to a Google Form. The link is a row in `site_settings` (`records_submit_url`), edited in the Records tab of the editor (blank hides the button). Until `schema.sql` is re-run the standard form is used (`RECORDS_FORM_DEFAULT` in `site.js`). `site_settings` is readable by everyone, so never put secrets in it.
-- **FAQ links.** Each FAQ category and question gets an address made from its title (`faqs#yne-worlds`, `faqs#how-do-i-enter`; a linked question opens). The editor shows each category's link. Renaming changes the address.
-- All user-written Markdown is sanitised before it is shown on the site.
+  The lifting order is built on the competition's **Lifting order** tab (sort once, arrange by hand, save, then
+  **Publish**). Once published, the calendar swaps *View entries* for *View lifting order*, which opens
+  `/lifting/?c=<address>`: a page headed with the competition name, listing lifters by day, session and flight
+  (club, age class, class, GLP and total, with the last two optional). The old Google Sheet field has been removed.
 
 ### Contact form
 

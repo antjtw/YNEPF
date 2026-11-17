@@ -260,3 +260,11 @@ Each session has a card showing **Weigh-in**, **Lift-off** and **Awards**, with 
 **Preview:** the **Preview** button (next to Publish) opens the lifting order page as the public will see it, from the saved order, before it is published. Only a signed-in entries team member can see it (sign in to the admin area first, in the same browser). The link is `/lifting/?c=<slug>&preview=1`. It is hidden from search engines. Save first, because it shows what is saved, not what is on screen. Run the latest all-in-one SQL once for this.
 
 **Public lifting order columns:** Name, Club, Age class, Class, GLP, Total. Club sits in its own column beside the name (hidden if nobody has a club). In **Settings** (bottom of the Lifting order tab) you can untick *Show GL points* and *Show best totals* to hide those columns on the public page. Run the latest all-in-one SQL once for these.
+
+### Building the order: sort once, then arrange by hand
+
+**Sort the entries** is used once, to make the first lifting order. After that the button is replaced by **Clear the order** (starts again, after a warning). Lifters who enter later appear in *Not in the lifting order*, ready to drag into a flight. Each session and flight has ghost buttons on its heading line: **Remove flight** and **Remove session** send their lifters to *Not in the lifting order*, **Add flight** adds an empty flight to a session, and **Add session** is at the bottom. Flight letters start again at A each day and session numbers from 1 each day, so they renumber when you add or remove.
+
+**Share with lifters** (next to Publish) emails everyone in the order, from the competitions address, with a link. It is sent as *provisional* while entry is open and as *final* once entry has closed (by date or by hand). It needs the order to be published and saved, asks you to confirm, and the page remembers when it was last shared. The competitions address gets a note of how many were sent. This needs the updated `waitlist` Edge Function deployed (paste the new `supabase/functions/waitlist/index.ts`) and the latest all-in-one SQL run once.
+
+The *Lifting order sheet* field on the competition has gone: the order now comes only from the builder.

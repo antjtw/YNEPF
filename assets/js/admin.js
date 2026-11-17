@@ -616,9 +616,6 @@
         { heading: "Full, closed and waiting list" },
         C({ name: "entries_full", label: "Entries full", type: "checkbox", show: function (v) { return v.method !== "online"; }, help: "Tick when a competition that is entered somewhere else fills up. Online entry marks itself full when the places run out, and the waiting list opens by itself." }),
         E({ name: "entries_closed_manually", label: "Close entries now", type: "checkbox", show: isOnline, help: "Stops new online entries straight away. Untick to reopen." }),
-        { heading: "Lifting order" },
-        C({ name: "lifting_order_url", label: "Lifting order sheet (optional)", type: "url", placeholder: "https://docs.google.com/spreadsheets/d/e/…/pub?output=csv",
-          help: "Add it a few days after entries open: a “View lifting order” button appears once it is here, and the page follows the sheet as you edit it. Use a published Google Sheet (File > Share > Publish to web > CSV), one row per lifter. Needs columns Day, Session, Flight and Name. Optional: Club, Instagram, Age class (blank = Open, otherwise J, SJ, M1, M2, M3 or M4), Class (for example M66), GLP, Total, Open IPF, and per session Weigh-in, Lift off and Session name. Only columns with something in them are shown." }),
         { heading: "On the website" },
         C({ name: "published", label: "Show on the website", type: "checkbox", help: "Untick to keep it as a draft. A draft can still be tried by signed-in entries staff." })
       ]);
@@ -683,7 +680,6 @@
           else if (v.method === "link" && !v.entry_url) problem = "Add the entry link, or choose another way of taking entries.";
           else if (v.entry_url && !/^https?:\/\//i.test(v.entry_url)) problem = "The entry link must start with https://";
           else if (v.map_url && !/^https?:\/\//i.test(v.map_url)) problem = "The map link must start with https://";
-          else if (v.lifting_order_url && !Y.sheetCsvUrl(v.lifting_order_url)) problem = "The lifting order link does not look usable. It must start with https://";
           else if (!v.name) problem = "Name is required.";
           else if (!v.start_date) problem = "The first day is required.";
         }
@@ -696,7 +692,7 @@
           venue_name: v.venue_name, venue_address: v.venue_address, map_url: v.map_url,
           capacity: v.capacity, entry_url: v.method === "link" ? v.entry_url : "",
           entry_opens: opens ? Y.fromLondonInput(opens) : null, entry_closes: closes ? Y.fromLondonInput(closes) : null,
-          entries_full: v.entries_full, lifting_order_url: v.lifting_order_url, published: v.published
+          entries_full: v.entries_full, published: v.published
         };
         var step = Promise.resolve(c.id);
         if (canComp()) {
@@ -717,13 +713,6 @@
           });
         }).then(function (id) {
           toast(isNew ? "Competition added." : "Saved.");
-          if (v.lifting_order_url && v.lifting_order_url !== c.lifting_order_url) {
-            Y.loadSheet(v.lifting_order_url).then(function (s) {
-              var r = Y.parseLiftingOrder(s);
-              toast("Lifting order read fine: " + r.lifters.length + " lifters in " + r.flightCount + " flights." +
-                (r.warnings.length ? " Check: " + r.warnings.slice(0, 3).join("; ") + (r.warnings.length > 3 ? " (and " + (r.warnings.length - 3) + " more)" : "") + "." : ""), r.warnings.length ? "error" : undefined);
-            }).catch(function (er) { toast("Saved, but the lifting order could not be read: " + er.message, "error"); });
-          }
           if (isNew) go("#competitions/" + id); else route();
         }).catch(function (err) { bar.busy(false); bar.fail(friendly(err)); });
       });
@@ -1051,11 +1040,34 @@
         S.showLots = true; lotToggle.querySelector("input").checked = true; S.dirty = true; status(); say("Lot numbers drawn. Save to keep them."); draw();
       }
       function runSort() {
-        if (flightsList().length && !window.confirm("Sorting again replaces the order below, including anything you moved by hand. Carry on?")) return;
+        if (S.sessions.length) return;           // the sort is run once; after that the order is arranged by hand
         var out = LSo.build(list, settingsNow());
         var oldTimes = {}; S.sessions.forEach(function (o) { oldTimes[o.day + ":" + o.sessionNo] = o; });
         S.showLots = false; lotToggle.querySelector("input").checked = false; S.sessions = out.sessions.map(function (s) { var ot = oldTimes[s.day + ":" + s.sessionNo] || {}; return { day: s.day, sessionNo: s.sessionNo, prime: s.prime, name: s.name, liftOff: ot.liftOff || null, weighIn: ot.weighIn || null, awards: ot.awards || null, flights: s.flights.map(function (f) { return { letter: f.letter, locked: false, lifters: f.lifters.map(function (l) { return { id: l.id, reason: l.reason, locked: false, lot: null }; }) }; }) }; });
         S.warnings = out.warnings; S.dirty = true; S.dropped = 0; status(); draw();
+      }
+      function clearOrder() {
+        if (!window.confirm("Clear the whole lifting order? Everyone goes back to Not in the lifting order, and you can sort the entries again. Times and lot numbers for these flights are lost.")) return;
+        S.sessions = []; S.warnings = []; S.showLots = false; lotToggle.querySelector("input").checked = false; S.dirty = true; status(); say("The lifting order has been cleared."); draw();
+      }
+      // letters run A, B, C through each day and start again the next day; sessions are numbered from 1 each day
+      function relabel() {
+        var perDay = {}, lastDay = {};
+        S.sessions.forEach(function (x) { perDay[x.day] = (perDay[x.day] || 0) + 1; x.sessionNo = perDay[x.day]; });
+        var li = {}; S.sessions.forEach(function (x) { x.flights.forEach(function (f) { li[x.day] = li[x.day] || 0; f.letter = LSo.letter(li[x.day]++); }); });
+      }
+      function removeFlight(s, f) {
+        s.flights = s.flights.filter(function (x) { return x !== f; }); relabel(); S.dirty = true; status();
+        say("Flight removed." + (f.lifters.length ? " " + f.lifters.length + " lifters are now not in the lifting order." : "")); draw();
+      }
+      function removeSession(s) {
+        S.sessions = S.sessions.filter(function (x) { return x !== s; }); relabel(); S.dirty = true; status();
+        say("Session removed. Its lifters are now not in the lifting order."); draw();
+      }
+      function addFlight(s) { s.flights.push({ letter: "", locked: false, lifters: [] }); relabel(); S.dirty = true; status(); say("Flight added."); draw(); }
+      function addSession() {
+        var day = S.sessions.length ? S.sessions[S.sessions.length - 1].day : 1;
+        S.sessions.push({ day: day, sessionNo: 0, prime: false, name: "", liftOff: null, weighIn: null, awards: null, flights: [{ letter: "", locked: false, lifters: [] }] }); relabel(); S.dirty = true; status(); say("Session added."); draw();
       }
       function remove(id) { flightsList().forEach(function (x) { x.f.lifters = x.f.lifters.filter(function (l) { return l.id !== id; }); }); }
       function find(id) { var out = null; flightsList().forEach(function (x, fi) { x.f.lifters.forEach(function (l, i) { if (l.id === id) out = { f: fi, i: i, flight: x.f, item: l }; }); }); return out; }
@@ -1195,12 +1207,14 @@
               : el("p", { class: "help" }, "Everyone is in. Drag a lifter here to take them out of the lifting order.")));
         }
         S.sessions.forEach(function (s) {
-          var box = el("section", { class: "lab-session", "aria-label": "Day " + s.day + ", session " + s.sessionNo }, el("h3", null, "Day " + s.day + ", session " + s.sessionNo + (s.prime ? ": prime time" : "")), timesRow(s));
+          var box = el("section", { class: "lab-session", "aria-label": "Day " + s.day + ", session " + s.sessionNo }, el("div", { class: "lab-headrow" }, el("h3", null, "Day " + s.day + ", session " + s.sessionNo + (s.prime ? ": prime time" : "")),
+            el("span", { class: "lab-headacts" }, btn("Add flight", function () { addFlight(s); }), btn("Remove session", function () { removeSession(s); }, "btn-ghost", { "aria-label": "Remove day " + s.day + " session " + s.sessionNo })) ), timesRow(s));
           s.flights.forEach(function (f) {
             var fp = f.lifters.filter(function (l) { return ent[l.id].event !== "bench_only"; }).length, sx = sexOf(f), st = settingsNow();
             var problems = []; if (sx === "mixed") problems.push("women and men in the same flight"); if (f.lifters.length > st.maxPerFlight) problems.push("over the " + st.maxPerFlight + " lifters limit"); if (fp > st.maxFullPower) problems.push("over the " + st.maxFullPower + " full power limit");
             box.appendChild(el("section", { class: "lab-flight", "data-flight": s.day + ":" + f.letter },
-              el("h4", null, "Flight " + f.letter + " ", el("span", { class: "sex-tag" + (sx === "women" ? " f" : "") }, sx === "women" ? "Women" : sx === "men" ? "Men" : sx === "mixed" ? "Mixed" : "Empty"), " · " + f.lifters.length + " lifters"),
+              el("div", { class: "lab-headrow" }, el("h4", null, "Flight " + f.letter + " ", el("span", { class: "sex-tag" + (sx === "women" ? " f" : "") }, sx === "women" ? "Women" : sx === "men" ? "Men" : sx === "mixed" ? "Mixed" : "Empty"), " · " + f.lifters.length + " lifters"),
+                el("span", { class: "lab-headacts" }, btn("Remove flight", function () { removeFlight(s, f); }, "btn-ghost", { "aria-label": "Remove flight " + f.letter }))),
               problems.length ? el("p", { class: "form-error" }, "Check this flight: " + problems.join(", ") + ".") : null,
               f.lifters.length ? el("div", { class: "table-scroll" }, el("table", { class: "admin-table lab-table" }, el("caption", { class: "visually-hidden" }, "Flight " + f.letter),
                 el("thead", null, el("tr", null, [el("th", { scope: "col" }, el("span", { class: "visually-hidden" }, "Move")), "#", "Lifter", "Class", "Age class", "Event", "Best total", "GL"].concat(S.showLots ? ["Lot"] : []).map(function (h) { return h.nodeType ? h : el("th", { scope: "col" }, h); }))),
@@ -1208,7 +1222,9 @@
           });
           kids.push(box);
         });
+        if (S.sessions.length) kids.push(el("div", { class: "lab-headacts", style: "margin-top:var(--space-4)" }, btn("Add session", addSession)));
         if (!list.length) kids.push(el("p", { class: "empty" }, "Nobody has entered yet, so there is nothing to sort."));
+        sortBtn.hidden = S.sessions.length > 0; clearBtn.hidden = S.sessions.length === 0;
         area.replaceChildren.apply(area, kids);
         if (focusKey) { var t = area.querySelector('[data-fk="' + focusKey + '"]'); if (t && !t.disabled) t.focus(); }
         if (moved) window.setTimeout(function () { var r = area.querySelector('tr[data-id="' + moved + '"]'); if (r) r.classList.remove("just-moved"); }, 1400);
@@ -1281,6 +1297,7 @@
       function pubStatus() {
         pubBtn.textContent = published ? "Unpublish" : "Publish";
         pubNote.textContent = published ? "Published (" + (row.published_as === "final" ? "final" : "provisional") + "). The calendar shows View lifting order instead of View entries. Saving changes updates the public page straight away." : "Not published. The calendar shows View entries. Preview shows the saved order to the entries team only.";
+        if (row.shared_at) pubNote.textContent += " Last shared as " + row.shared_as + " with " + row.shared_count + (row.shared_count === 1 ? " lifter" : " lifters") + " on " + new Date(row.shared_at).toLocaleDateString("en-GB", { timeZone: Y.TZ, dateStyle: "medium" }) + ".";
       }
       function publish() {
         if (!published && S.dirty) { toast("Save the order first, then publish.", "error"); return; }
@@ -1293,16 +1310,31 @@
         }).catch(function (e) { toast(friendly(e), "error"); }).then(function () { pubBtn.disabled = false; });
       }
       var pubBtn = btn("Publish", publish, "btn-secondary");
+      var closed = !!c.entries_closed_manually || (!!c.entry_closes && new Date(c.entry_closes) <= new Date());
+      function share() {
+        if (!published) { toast("Publish the lifting order first, then share it.", "error"); return; }
+        if (S.dirty) { toast("Save your changes first, so lifters see the current order.", "error"); return; }
+        var kind = closed ? "final" : "provisional", n = flightsList().reduce(function (t, x) { return t + x.f.lifters.length; }, 0);
+        if (!window.confirm("Email the " + kind + " lifting order to everyone in it (" + n + (n === 1 ? " lifter" : " lifters") + ")? Entry is " + (closed ? "closed, so it is sent as final." : "still open, so it is sent as provisional.") + " The email comes from the competitions address." + (row.shared_at ? " It was last shared on " + new Date(row.shared_at).toLocaleDateString("en-GB", { timeZone: Y.TZ, dateStyle: "medium" }) + "." : ""))) return;
+        shareBtn.disabled = true;
+        sb.auth.getSession().then(function (g) {
+          var token = g.data && g.data.session && g.data.session.access_token;
+          return fetch((window.YNEPF_CONFIG.supabaseUrl || "").replace(/\/$/, "") + "/functions/v1/waitlist", { method: "POST", headers: { "Content-Type": "application/json", apikey: window.YNEPF_CONFIG.supabaseAnonKey || "", Authorization: "Bearer " + token }, body: JSON.stringify({ action: "share_lifting_order", competition_id: c.id }) });
+        }).then(function (r) { return r.json().catch(function () { return {}; }).then(function (b) { if (!r.ok) throw new Error(b.error === "not_published" ? "Publish the lifting order first." : b.error === "not_allowed" ? "You do not have permission to do that." : "The email function did not answer. Check that it has been updated in Supabase."); return b; }); })
+          .then(function (b) { row.shared_at = new Date().toISOString(); row.shared_as = b.kind; row.shared_count = b.sent; pubStatus(); toast("Sent the " + b.kind + " lifting order to " + b.sent + (b.sent === 1 ? " lifter" : " lifters") + (b.failed ? ", and " + b.failed + " could not be sent" : "") + "."); })
+          .catch(function (e) { toast(friendly(e), "error"); }).then(function () { shareBtn.disabled = false; });
+      }
+      var shareBtn = btn("Share with lifters", share, "btn-secondary");
       function previewUrl() { return "../lifting/?c=" + encodeURIComponent(c.slug || c.id) + "&preview=1"; }        // the plain address: it does not depend on the /lifting-order rewrite
       var previewLink = el("a", { class: "btn btn-sm btn-secondary", href: previewUrl(), target: "_blank", rel: "noopener" }, "Preview ", el("span", { class: "visually-hidden" }, "(opens in a new tab)"));
-      var sortBtn = btn("Sort the entries", runSort, "btn-primary"), saveBtn = btn("Save", function () { save(saveBtn); }, "btn-secondary"),
+      var sortBtn = btn("Sort the entries", runSort, "btn-primary"), clearBtn = btn("Clear the order", clearOrder, "btn-ghost"), saveBtn = btn("Save", function () { save(saveBtn); }, "btn-secondary"),
         lotBtn = btn("Draw lot numbers", drawLots, "btn-secondary"),
         lotToggle = el("div", { class: "field field-check" }, el("input", { type: "checkbox", id: "lo-show-lots" }), el("div", null, el("label", { for: "lo-show-lots" }, "Show lot numbers")));
       lotToggle.querySelector("input").addEventListener("change", function (e) { S.showLots = e.target.checked; draw(); });
       view.replaceChildren(
         el("p", { class: "panel-intro" }, "Sort the entered lifters into sessions and flights, then drag anyone to change it. Best totals come from OpenIPF. Not public yet."),
         form.el,
-        el("div", { class: "actions", style: "margin:var(--space-3) 0" }, sortBtn, saveBtn, previewLink, pubBtn, statusNode),
+        el("div", { class: "actions", style: "margin:var(--space-3) 0" }, sortBtn, clearBtn, saveBtn, previewLink, pubBtn, shareBtn, statusNode),
         pubNote,
         live, area,
         el("section", { "aria-labelledby": "lo-lots-h", style: "margin:var(--space-5) 0" }, el("h3", { id: "lo-lots-h" }, "Lot numbers"),

@@ -312,6 +312,22 @@ await db.exec("reset role");
 await db.exec(`update public.competitions set entry_closes = now() - interval '1 day' where id = '${LO}'`);
 await pubLo(U.entries, true); ok((await stLo()).pa === "final", "published after entry closes it is final");
 ok((await asUser(U.entries, () => call("lifting_order_publish", [LO2, true]))).error?.includes("invalid:empty_order"), "an empty order cannot be published");
+// sharing with lifters: who gets the email, and whether it is provisional or final
+const shareInfo = async () => (await q(`select public.lifting_order_share_info('${LO}') r`))[0].r;
+let si = await shareInfo();
+ok(si.published === true && si.closed === true && si.people.length === 2 && si.people.every((p) => p.email && p.name), "share info: published, closed (so final), one entry per address: " + JSON.stringify(si).slice(0, 120));
+await db.exec(`update public.competitions set entry_closes = now() + interval '5 days' where id = '${LO}'`);
+ok((await shareInfo()).closed === false, "while entry is open it is provisional");
+await db.exec(`update public.competitions set entries_closed_manually = true where id = '${LO}'`);
+ok((await shareInfo()).closed === true, "closing entry by hand makes it final");
+await db.exec(`update public.competitions set entries_closed_manually = false where id = '${LO}'`);
+await db.exec(`update public.entries set email = 'shared@x.com' where competition_id = '${LO}'`);
+si = await shareInfo(); ok(si.people.length === 1 && /Lo \d and Lo \d/.test(si.people[0].name), "two lifters on one address get one email: " + JSON.stringify(si.people));
+await q(`select public.lifting_order_mark_shared('${LO}', 'final', 3)`);
+ok((await q(`select shared_as sa, shared_count n, shared_at is not null has from public.lifting_orders where competition_id = '${LO}'`))[0].n === 3, "the share is recorded");
+await db.exec("set role authenticated");
+ok(!(await can(`select public.lifting_order_share_info('${LO}')`)) && !(await can(`select public.lifting_order_mark_shared('${LO}', 'final', 1)`)), "signed-in users cannot call the share functions (only our server can)");
+await db.exec("reset role");
 
 // who may do what
 await db.exec("set role anon");

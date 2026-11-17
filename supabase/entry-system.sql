@@ -691,6 +691,41 @@ end $$;
 revoke all on function public.lifting_order_preview(uuid) from public, anon;
 grant execute on function public.lifting_order_preview(uuid) to authenticated;
 
+-- "Share with lifters": the email goes out from the waitlist Edge Function (service role only). These two functions give it
+-- who to email (one address once, even for a parent entering two children) and whether entry is closed (final) or open
+-- (provisional), and record when it was last shared.
+alter table public.lifting_orders add column if not exists shared_at timestamptz;
+alter table public.lifting_orders add column if not exists shared_as text check (shared_as in ('provisional', 'final'));
+alter table public.lifting_orders add column if not exists shared_count integer;
+
+create or replace function public.lifting_order_share_info(c uuid) returns jsonb
+language sql stable security definer set search_path = public
+as $$
+  select jsonb_build_object(
+    'published', lo.status = 'published',
+    'closed', (co.entries_closed_manually or (co.entry_closes is not null and co.entry_closes <= now())),
+    'people', coalesce((
+      select jsonb_agg(jsonb_build_object('email', g.email, 'name', g.names) order by g.email)
+      from (select lower(e.email) as email, string_agg(distinct e.full_name, ' and ') as names
+              from public.entries e
+              join public.lo_assignments a on a.entry_id = e.id
+              join public.lo_flights f on f.id = a.flight_id
+              join public.lo_sessions s on s.id = f.session_id and s.competition_id = c
+             where e.competition_id = c and e.status in ('paid', 'comped') and coalesce(e.email, '') <> ''
+             group by lower(e.email)) g), '[]'::jsonb))
+  from public.lifting_orders lo join public.competitions co on co.id = lo.competition_id
+  where lo.competition_id = c;
+$$;
+create or replace function public.lifting_order_mark_shared(c uuid, kind text, n integer) returns void
+language sql security definer set search_path = public
+as $$ update public.lifting_orders set shared_at = now(), shared_as = kind, shared_count = n where competition_id = c; $$;
+revoke all on function public.lifting_order_share_info(uuid), public.lifting_order_mark_shared(uuid, text, integer) from public, anon, authenticated;
+do $$ begin
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    grant execute on function public.lifting_order_share_info(uuid), public.lifting_order_mark_shared(uuid, text, integer) to service_role;
+  end if;
+end $$;
+
 revoke all on function public.lifting_order_save(uuid, jsonb) from public, anon;
 grant execute on function public.lifting_order_save(uuid, jsonb) to authenticated;
 

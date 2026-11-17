@@ -90,6 +90,17 @@ export function priorityEmail(o: Who & { link: string; windowStart: string; open
   ]);
 }
 
+export function liftingOrderEmail(o: Who & { link: string; kind: "provisional" | "final" }) {
+  return sign(o, [
+    `Hi ${o.name || "there"},`, "",
+    `The ${o.kind} lifting order for ${o.competition}${o.date ? ` (${o.date})` : ""} is now online:`,
+    o.link, "",
+    o.kind === "provisional"
+      ? "This is the provisional lifting order. Entry is still open, so it may change before the competition. Please check your flight and session, and get in touch if anything looks wrong."
+      : "This is the final lifting order. Entry has closed. Please check your flight and session, and get in touch straight away if anything looks wrong.",
+  ]);
+}
+
 // ---- OpenIPF -------------------------------------------------------------------------------------------------------------
 // A lifter's profile address looks like https://www.openipf.org/u/agatasitko. Their results are a CSV at /api/liftercsv/<name>.
 export function openipfSlug(url: string): string | null {
@@ -341,6 +352,32 @@ if (typeof Deno !== "undefined") {
       const people: { id: string; email: string; name: string }[] = await (await rpc("priority_pending", { c: c.id, only_id: only, include_sent: !!only })).json().catch(() => []);
       const r = await sendPriority(c, Array.isArray(people) ? people : [], !!only);
       return reply(200, { ok: true, ...r });
+    }
+
+    // ---- the entries team shares the published lifting order with everyone in it ------------------------------------
+    if (action === "share_lifting_order") {
+      const token = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
+      let allowed = false;
+      if (token && token !== anon) {
+        const who = await fetch(`${url}/rest/v1/rpc/is_entries`, { method: "POST", headers: { apikey: anon!, authorization: `Bearer ${token}`, "content-type": "application/json" }, body: "{}" });
+        allowed = who.ok && (await who.json()) === true;
+      }
+      if (!allowed) return reply(401, { error: "not_allowed" });
+      const c = await comp(String(body.competition_id ?? ""));
+      if (!c) return reply(404, { error: "not_found" });
+      const info = await (await rpc("lifting_order_share_info", { c: c.id })).json().catch(() => null) as { published: boolean; closed: boolean; people: { email: string; name: string }[] } | null;
+      if (!info) return reply(404, { error: "not_found" });
+      if (!info.published) return reply(409, { error: "not_published" });
+      const kind = info.closed ? "final" : "provisional";
+      const link = `${siteUrl}/lifting/?c=${encodeURIComponent(c.slug || c.id)}`;
+      let sent = 0, failed = 0;
+      for (const p of info.people ?? []) {
+        const ok = await send(p.email, `The ${kind} lifting order: ${c.name}`, liftingOrderEmail({ name: p.name, competition: c.name, date: dateText(c.start_date), entriesEmail: copy, link, kind }));
+        if (ok) sent++; else failed++;
+      }
+      if (sent) await rpc("lifting_order_mark_shared", { c: c.id, kind, n: sent });
+      await send(copy, `Lifting order shared: ${c.name}`, `The ${kind} lifting order for ${c.name} was emailed to ${sent} ${sent === 1 ? "lifter" : "lifters"}${failed ? `, and ${failed} could not be sent` : ""}. Link: ${link}`);
+      return reply(200, { ok: true, kind, sent, failed });
     }
 
     return reply(400, { error: "bad_request" });

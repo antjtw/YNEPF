@@ -305,18 +305,7 @@
         }).catch(function (e) { if (window.console) console.error(e); if (preview) return previewStop(e); root.replaceChildren(el("p", null, "We could not load the lifting order just now. Please try again in a moment.")); });
         return;
       }
-      if (!c.lifting_order_url) {
-        root.replaceChildren(el("p", null, "The lifting order will appear here once it has been published. We usually share it a few days after entries open."));
-        return;
-      }
-      Y.loadSheet(c.lifting_order_url).then(function (sheet) {
-        var parsed = Y.parseLiftingOrder(sheet);
-        if (!parsed.lifters.length) { root.replaceChildren(el("p", null, "The lifting order is not ready yet. Check back soon.")); return; }
-        renderLiftingOrder(root, c, parsed.lifters);
-      }).catch(function (e) {
-        if (window.console) console.error(e);
-        root.replaceChildren(el("p", null, "We could not load the lifting order just now. Please try again in a moment."));
-      });
+      root.replaceChildren(el("p", null, "The lifting order will appear here once it has been published. We usually share it a few days after entries close."));
     }).catch(function (e) { if (preview) previewStop(e); else fail(root, e); });
   }
 

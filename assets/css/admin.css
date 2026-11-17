@@ -178,3 +178,8 @@ body.dragging-lifter { user-select: none; cursor: grabbing; }
 .times-card .time-value { font-size: 1.25rem; line-height: 1.2; }
 .times-card .time-note { font-size: 0.8125rem; color: var(--text-muted, var(--grey-700)); }
 .times-card .btn { margin-left: auto; }
+
+/* Session and flight headings with their ghost buttons, right aligned on the same line */
+.lab-headrow { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
+.lab-headrow h3, .lab-headrow h4 { margin: 0; }
+.lab-headacts { display: inline-flex; gap: var(--space-2); margin-left: auto; }
