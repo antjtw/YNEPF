@@ -251,8 +251,13 @@
     };
     if (!key) return missing();
     var isId = /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(key);
-    load("competitions_public", function (t) { return t.select("*").eq(isId ? "id" : "slug", key).limit(1); }).then(function (rows) {
-      if (!rows.length) return missing();
+    // Preview (?preview=1): the saved order even if it is not published, for a signed-in entries team member only (the database checks that).
+    var preview = params.get("preview") === "1";
+    if (preview) { var rb = document.createElement("meta"); rb.name = "robots"; rb.content = "noindex"; document.head.appendChild(rb); }
+    var find = preview && Y.db() ? Y.db().from("competitions").select("*").eq(isId ? "id" : "slug", key).limit(1).then(function (r) { return r.data || []; })
+      : load("competitions_public", function (t) { return t.select("*").eq(isId ? "id" : "slug", key).limit(1); });
+    find.then(function (rows) {
+      if (!rows.length) { if (preview) { root.replaceChildren(el("p", null, "Sign in to the admin area first, then reload this page to see the preview.")); title.textContent = "Preview"; return; } return missing(); }
       var c = rows[0];
       document.title = c.name + " lifting order — YNEPF";
       title.textContent = c.name;
@@ -260,10 +265,10 @@
       sub.replaceChildren(el("span", null, Y.dateRange(c.start_date, c.end_date),
         c.venue_name ? [" · ", map ? el("a", { href: map, target: "_blank", rel: "noopener" }, c.venue_name) : c.venue_name] : null,
         " · ", el("a", { href: base + "calendar.html" }, "All competitions")));
-      if (c.lifting_published) {
+      if (c.lifting_published || preview) {
         var hm = function (t) { return t ? new Intl.DateTimeFormat("en-GB", { timeZone: Y.TZ, hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(t)) : ""; };
         var AGE = { SJ: "SJ", J: "J", M1: "M1", M2: "M2", M3: "M3", M4: "M4" };
-        Y.db().from("lifting_order_public").select("*").eq("competition_id", c.id).then(function (r) {
+        (preview ? Y.db().rpc("lifting_order_preview", { c: c.id }) : Y.db().from("lifting_order_public").select("*").eq("competition_id", c.id)).then(function (r) {
           if (r.error) throw r.error;
           var rows = (r.data || []).map(function (x) {
             var ig = Y.igHandle(x.instagram || "");
@@ -271,7 +276,7 @@
               ageClass: AGE[x.age_category || ""] || "Open", ageClassKnown: true, cls: x.weight_class || "", club: x.club || "", total: x.best_total_kg == null ? "" : String(Number(x.best_total_kg)),
               glp: x.best_glp == null ? null : Number(x.best_glp), weighIn: hm(x.weigh_in_at), liftOff: hm(x.lift_off_at), sessionName: x.is_prime_time ? "Prime time" : (x.session_name || ""), _as: x.published_as };
           });
-          if (!rows.length) { root.replaceChildren(el("p", null, "The lifting order is not ready yet. Check back soon.")); return; }
+          if (!rows.length) { root.replaceChildren(el("p", null, preview ? "Nothing is saved yet. Sort the entries and save the order first." : "The lifting order is not ready yet. Check back soon.")); return; }
           // times: lift-off as set; weigh-in two hours before and the finish estimated from the attempts, unless they were typed in
           var sess = {};
           (r.data || []).forEach(function (x) {
@@ -281,8 +286,9 @@
           Object.keys(sess).forEach(function (k) { var q = sess[k]; q.flights = Object.keys(q.flights).map(function (f) { return q.flights[f]; }); q.t = window.LiftingSort ? window.LiftingSort.sessionTimes(q, q.secs) : { weighIn: q.weighIn, liftOff: q.liftOff, awards: q.awards }; });
           rows.forEach(function (l) { var q = sess[l.day + "-" + l.session]; if (q) { l.weighIn = hm(q.t.weighIn); l.liftOff = hm(q.t.liftOff); l.awards = hm(q.t.awards); } });
           renderLiftingOrder(root, c, rows);
-          root.insertBefore(el("p", { class: "lo-key" }, el("strong", null, rows[0]._as === "final" ? "Final" : "Provisional"), rows[0]._as === "final" ? " lifting order." : " lifting order. It may change before the competition."), root.firstChild);
-        }).catch(function (e) { if (window.console) console.error(e); root.replaceChildren(el("p", null, "We could not load the lifting order just now. Please try again in a moment.")); });
+          if (preview) root.insertBefore(el("div", { class: "callout", role: "status" }, el("p", { class: "callout-title" }, "Preview"), el("p", { style: "margin:0" }, "This is the saved draft. " + (c.lifting_published ? "It is published, so this is what everyone sees." : "It is not published, and only the entries team can see this page."))), root.firstChild);
+          else root.insertBefore(el("p", { class: "lo-key" }, el("strong", null, rows[0]._as === "final" ? "Final" : "Provisional"), rows[0]._as === "final" ? " lifting order." : " lifting order. It may change before the competition."), root.firstChild);
+        }).catch(function (e) { if (window.console) console.error(e); root.replaceChildren(el("p", null, preview ? "The preview is only for the entries team. Sign in to the admin area with an entries account, then reload this page." : "We could not load the lifting order just now. Please try again in a moment.")); });
         return;
       }
       if (!c.lifting_order_url) {

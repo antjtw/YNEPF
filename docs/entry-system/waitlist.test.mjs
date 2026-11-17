@@ -293,6 +293,11 @@ const pubRows = (await db.query(`select * from public.lifting_order_public where
 ok(pubRows.length === 2 && !("lot_number" in pubRows[0]) && !("email" in pubRows[0]) && !("date_of_birth" in pubRows[0]) && pubRows[0].flight, "the public can read the published order, with no lot numbers, emails or birth dates");
 await db.exec("reset role");
 ok(!(await pubLo(U.entries, false)).error && (await stLo()).status === "draft", "unpublish returns it to a draft");
+const prev = (who) => asUser(who, async () => { try { return (await db.query(`select * from public.lifting_order_preview('${LO}')`)).rows; } catch (e) { return { error: e.message }; } });
+const pr = await prev(U.entries);
+ok(Array.isArray(pr) && pr.length === 2 && !("lot_number" in pr[0]) && !("email" in pr[0]), "the entries team can preview a draft order (no lot numbers or emails)");
+ok((await prev(U.editor)).error?.includes("forbidden"), "an editor cannot preview");
+await db.exec("set role anon"); ok(!(await can(`select * from public.lifting_order_preview('${LO}')`)), "the public cannot call the preview"); await db.exec("reset role");
 await db.exec("set role anon");
 ok((await db.query(`select * from public.lifting_order_public where competition_id = '${LO}'`)).rows.length === 0, "and the public sees nothing again");
 await db.exec("reset role");

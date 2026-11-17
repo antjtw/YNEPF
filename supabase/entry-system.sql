@@ -665,6 +665,30 @@ left join public.weight_classes wc on wc.id = e.weight_class_id
 where lo.status = 'published';
 grant select on public.lifting_order_public to anon, authenticated;
 
+-- The same rows for the entries team, whether or not the order is published, for the preview link (/lifting-order/<slug>?preview=1).
+create or replace function public.lifting_order_preview(c uuid) returns setof public.lifting_order_public
+language plpgsql stable security definer set search_path = public
+as $$
+begin
+  if not public.is_entries() then raise exception 'forbidden'; end if;
+  return query
+  select s.competition_id, s.day, s.session_no, s.name, s.is_prime_time, s.weigh_in_at, s.lift_off_at,
+         f.letter, a.position,
+         coalesce(nullif(e.display_name, ''), e.full_name), e.club, wc.label,
+         public.age_category_on(e.date_of_birth, co.start_date),
+         e.event, e.instagram, e.openipf_url, e.best_total_kg, e.best_glp, coalesce(lo.published_as, 'provisional'), s.awards_at, lo.seconds_per_attempt
+  from public.lifting_orders lo
+  join public.competitions co on co.id = lo.competition_id
+  join public.lo_sessions s on s.competition_id = lo.competition_id
+  join public.lo_flights f on f.session_id = s.id
+  join public.lo_assignments a on a.flight_id = f.id
+  join public.entries e on e.id = a.entry_id and e.status in ('paid', 'comped')
+  left join public.weight_classes wc on wc.id = e.weight_class_id
+  where lo.competition_id = c;
+end $$;
+revoke all on function public.lifting_order_preview(uuid) from public, anon;
+grant execute on function public.lifting_order_preview(uuid) to authenticated;
+
 revoke all on function public.lifting_order_save(uuid, jsonb) from public, anon;
 grant execute on function public.lifting_order_save(uuid, jsonb) to authenticated;
 

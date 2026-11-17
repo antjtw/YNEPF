@@ -1278,7 +1278,7 @@
       var published = row.status === "published", pubNote = el("p", { class: "help", id: "lo-pub-note", role: "status" });
       function pubStatus() {
         pubBtn.textContent = published ? "Unpublish" : "Publish";
-        pubNote.textContent = published ? "Published (" + (row.published_as === "final" ? "final" : "provisional") + "). The calendar shows View lifting order instead of View entries. Saving changes updates the public page straight away." : "Not published. The calendar shows View entries.";
+        pubNote.textContent = published ? "Published (" + (row.published_as === "final" ? "final" : "provisional") + "). The calendar shows View lifting order instead of View entries. Saving changes updates the public page straight away." : "Not published. The calendar shows View entries. Preview shows the saved order to the entries team only.";
       }
       function publish() {
         if (!published && S.dirty) { toast("Save the order first, then publish.", "error"); return; }
@@ -1291,6 +1291,8 @@
         }).catch(function (e) { toast(friendly(e), "error"); }).then(function () { pubBtn.disabled = false; });
       }
       var pubBtn = btn("Publish", publish, "btn-secondary");
+      function previewUrl() { return "../" + (c.slug ? "lifting-order/" + encodeURIComponent(c.slug) : "lifting/?c=" + encodeURIComponent(c.id)) + (c.slug ? "?preview=1" : "&preview=1"); }
+      var previewLink = el("a", { class: "btn btn-sm btn-secondary", href: previewUrl(), target: "_blank", rel: "noopener" }, "Preview ", el("span", { class: "visually-hidden" }, "(opens in a new tab)"));
       var sortBtn = btn("Sort the entries", runSort, "btn-primary"), saveBtn = btn("Save", function () { save(saveBtn); }, "btn-secondary"),
         lotBtn = btn("Draw lot numbers", drawLots, "btn-secondary"),
         lotToggle = el("div", { class: "field field-check" }, el("input", { type: "checkbox", id: "lo-show-lots" }), el("div", null, el("label", { for: "lo-show-lots" }, "Show lot numbers")));
@@ -1298,7 +1300,7 @@
       view.replaceChildren(
         el("p", { class: "panel-intro" }, "Sort the entered lifters into sessions and flights, then drag anyone to change it. Best totals come from OpenIPF. Not public yet."),
         form.el,
-        el("div", { class: "actions", style: "margin:var(--space-3) 0" }, sortBtn, saveBtn, pubBtn, statusNode),
+        el("div", { class: "actions", style: "margin:var(--space-3) 0" }, sortBtn, saveBtn, previewLink, pubBtn, statusNode),
         pubNote,
         live, area,
         el("section", { "aria-labelledby": "lo-lots-h", style: "margin:var(--space-5) 0" }, el("h3", { id: "lo-lots-h" }, "Lot numbers"),
