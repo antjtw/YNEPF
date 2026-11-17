@@ -990,8 +990,7 @@
         ent[e.id] = x; list.push(x);
       });
       var row = (res[1] && !res[1].error && res[1].data) || {};
-      var settings = { days: row.days || "", sessions: row.sessions || "", max_full_power: row.max_full_power_per_flight || 14, max_per_flight: row.max_per_flight || 20,
-        prime_time: !!row.prime_time_enabled, prime_women: row.prime_time_women || 14, prime_men: row.prime_time_men || 14, women_first: row.women_first !== false };
+      var settings = { days: row.days || "", sessions: row.sessions || "",         prime_time: !!row.prime_time_enabled, prime_women: row.prime_time_women || 14, prime_men: row.prime_time_men || 14, women_first: row.women_first !== false };
       var S = { sessions: [], dirty: false, warnings: [], dropped: 0 };
       // the saved arrangement (lifters who have cancelled since are dropped)
       ((res[2] && !res[2].error && res[2].data) || []).forEach(function (s) {
@@ -1007,8 +1006,6 @@
       var form = pageForm([
         { name: "days", label: "Days", type: "number", min: "1", half: true, placeholder: "Worked out for you" },
         { name: "sessions", label: "Sessions (not counting prime time)", type: "number", min: "1", half: true, placeholder: "Worked out for you" },
-        { name: "max_full_power", label: "Most full power lifters in a flight", type: "number", min: "4", half: true },
-        { name: "max_per_flight", label: "Most lifters in a flight, bench only included", type: "number", min: "4", half: true },
         { name: "prime_time", label: "Prime time: one last session for the top lifters by GL points", type: "checkbox" },
         { name: "prime_women", label: "Women in prime time", type: "number", min: "1", max: "14", half: true, show: function (v) { return v.prime_time; } },
         { name: "prime_men", label: "Men in prime time", type: "number", min: "1", max: "14", half: true, show: function (v) { return v.prime_time; } },
@@ -1020,7 +1017,7 @@
       var area = el("div"), statusNode = el("span", { class: "help", id: "lo-status", role: "status", style: "margin-left:var(--space-3)" });
       function settingsNow() {
         var v = form.values();
-        return { days: v.days ? Math.round(v.days) : null, sessions: v.sessions ? Math.round(v.sessions) : null, maxFullPower: Math.round(v.max_full_power) || 14, maxPerFlight: Math.round(v.max_per_flight) || 20,
+        return { days: v.days ? Math.round(v.days) : null, sessions: v.sessions ? Math.round(v.sessions) : null, maxFullPower: 14, maxPerFlight: 20,         // the federation's rules: not a setting
           womenFirst: !!v.women_first, primeTime: { enabled: !!v.prime_time, women: Math.round(v.prime_women) || 14, men: Math.round(v.prime_men) || 14 } };
       }
       function status() { statusNode.textContent = S.dirty ? "Not saved yet" : (S.sessions.length ? "Saved" : ""); window.onbeforeunload = S.dirty ? function () { return ""; } : null; }

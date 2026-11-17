@@ -62,7 +62,7 @@
     var lifters = s.build(Math.max(1, parseInt($("seed").value, 10) || 1));
     var settings = {
       days: parseInt($("days").value, 10) || null, sessions: parseInt($("sessions").value, 10) || null,
-      maxFullPower: parseInt($("maxfp").value, 10) || 14, maxPerFlight: parseInt($("maxall").value, 10) || 20, womenFirst: $("womenfirst").checked,
+      maxFullPower: 14, maxPerFlight: 20, womenFirst: $("womenfirst").checked,
       primeTime: { enabled: $("prime").checked, women: parseInt($("primew").value, 10) || 14, men: parseInt($("primem").value, 10) || 14 }
     };
     var res = LS.build(lifters, settings), out = $("result"), kids = [];

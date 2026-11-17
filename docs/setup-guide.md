@@ -192,7 +192,7 @@ Each time someone's entry is confirmed, `competitions@ynepf.co.uk` (the `NOTIFY_
 ## Part 5k: The lifting order (builder)
 
 Every online-entry competition has a **Lifting order** tab (entries team and admins). It takes the competition's real entered lifters (paid or free) and:
-- **Sort the entries** runs the auto sort: days, sessions and flights, with women and men apart, at most 14 full power / 20 in all per flight, optional prime time, classes running up, and lifters with no best total first. Set the days, sessions, flight limits and prime time above the button first, if you want to.
+- **Sort the entries** runs the auto sort: days, sessions and flights, with women and men apart, at most 14 full power / 20 in all per flight, optional prime time, classes running up, and lifters with no best total first. Set the days, sessions and prime time above the button first, if you want to. The flight limits are the federation's rules and can't be changed here.
 - **Drag a lifter by the handle** (the six dots on the left of their row) to move them: up or down in their flight, into another flight or session, or into the **Not in the lifting order** box to take them out. A line shows where they will land. On a touch screen, drag with a finger. Without a mouse: tab to the handle, press space to pick the lifter up, use the up and down arrow keys to move them through the order (the screen reader announces each move), then press space to drop them. Delete takes them out and Escape puts them back. A flight that breaks a rule (women and men mixed, or over the limits) is flagged.
 - Lifters who enter after you've sorted appear in the **Not in the lifting order** box: drag them into a flight. Lifters who have cancelled are taken out for you.
 - **Save** keeps the arrangement (nothing is lost if you leave and come back). Sorting again replaces everything, and asks first.
@@ -201,7 +201,7 @@ Best totals come from the OpenIPF check on each entry. Nothing here is public ye
 
 ## Part 5j: The lifting order lab
 
-Before the lifting order builder arrives, `/admin/lifting-lab` (on the preview site, or the live site once merged) lets you try the auto sort on pretend lifters: pick a scenario (including the real YNE Worlds 2026 mix), change the days, sessions, flight sizes and prime time, and see how it splits them. Nothing is saved and it uses no real data. It is there to review how the sort behaves and tell us what you would do differently.
+Before the lifting order builder arrives, `/admin/lifting-lab` (on the preview site, or the live site once merged) lets you try the auto sort on pretend lifters: pick a scenario (including the real YNE Worlds 2026 mix), change the days, sessions and prime time, and see how it splits them. Nothing is saved and it uses no real data. It is there to review how the sort behaves and tell us what you would do differently.
 
 ## Part 5b: The club list
 
