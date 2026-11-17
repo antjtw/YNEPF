@@ -1037,18 +1037,23 @@
         if (ls.any && !window.confirm("Lot numbers have already been drawn. Drawing again gives everyone a new number. Only do this if the old ones have not been used or sent out. Carry on?")) return;
         var lots = LSo.assignLots(flightsList().map(function (x) { return { lifters: x.f.lifters.map(function (l) { return { id: l.id, sex: ent[l.id].sex }; }) }; }));
         flightsList().forEach(function (x) { x.f.lifters.forEach(function (l) { l.lot = lots[l.id]; }); });
-        S.showLots = true; lotToggle.querySelector("input").checked = true; S.dirty = true; status(); say("Lot numbers drawn. Save to keep them."); draw();
+        S.showLots = true; S.dirty = true; status(); say("Lot numbers drawn. Save to keep them."); draw();
+      }
+      function removeLots() {
+        if (!window.confirm("Remove all lot numbers? You can draw them again afterwards, but they will be different numbers.")) return;
+        flightsList().forEach(function (x) { x.f.lifters.forEach(function (l) { l.lot = null; }); });
+        S.showLots = false; S.dirty = true; status(); say("Lot numbers removed. Save to keep that."); draw();
       }
       function runSort() {
         if (S.sessions.length) return;           // the sort is run once; after that the order is arranged by hand
         var out = LSo.build(list, settingsNow());
         var oldTimes = {}; S.sessions.forEach(function (o) { oldTimes[o.day + ":" + o.sessionNo] = o; });
-        S.showLots = false; lotToggle.querySelector("input").checked = false; S.sessions = out.sessions.map(function (s) { var ot = oldTimes[s.day + ":" + s.sessionNo] || {}; return { day: s.day, sessionNo: s.sessionNo, prime: s.prime, name: s.name, liftOff: ot.liftOff || null, weighIn: ot.weighIn || null, awards: ot.awards || null, flights: s.flights.map(function (f) { return { letter: f.letter, locked: false, lifters: f.lifters.map(function (l) { return { id: l.id, reason: l.reason, locked: false, lot: null }; }) }; }) }; });
+        S.showLots = false; S.sessions = out.sessions.map(function (s) { var ot = oldTimes[s.day + ":" + s.sessionNo] || {}; return { day: s.day, sessionNo: s.sessionNo, prime: s.prime, name: s.name, liftOff: ot.liftOff || null, weighIn: ot.weighIn || null, awards: ot.awards || null, flights: s.flights.map(function (f) { return { letter: f.letter, locked: false, lifters: f.lifters.map(function (l) { return { id: l.id, reason: l.reason, locked: false, lot: null }; }) }; }) }; });
         S.warnings = out.warnings; S.dirty = true; S.dropped = 0; status(); draw();
       }
       function clearOrder() {
         if (!window.confirm("Clear the whole lifting order? Everyone goes back to Not in the lifting order, and you can sort the entries again. Times and lot numbers for these flights are lost.")) return;
-        S.sessions = []; S.warnings = []; S.showLots = false; lotToggle.querySelector("input").checked = false; S.dirty = true; status(); say("The lifting order has been cleared."); draw();
+        S.sessions = []; S.warnings = []; S.showLots = false; S.dirty = true; status(); say("The lifting order has been cleared."); draw();
       }
       // letters run A, B, C through each day and start again the next day; sessions are numbered from 1 each day
       function relabel() {
@@ -1195,7 +1200,6 @@
         kids.push(el("p", { class: "panel-intro" }, list.length + (list.length === 1 ? " lifter" : " lifters") + " entered (" + women + " women, " + (list.length - women) + " men)" + (flights.length ? ". " + S.sessions.length + (S.sessions.length === 1 ? " session, " : " sessions, ") + flights.length + (flights.length === 1 ? " flight, " : " flights, ") + (list.length - unplaced.length) + " placed." : ". Not sorted yet.")));
         var noTotal = list.filter(function (e) { return e.total === null; }).length;
         var notes = S.warnings.slice(); if (S.dropped) notes.push(S.dropped + (S.dropped === 1 ? " lifter" : " lifters") + " on the saved order has cancelled since, and has been taken out. Save to keep that.");
-        var ls = lotsState(); if (ls.any && !ls.ok) notes.push("Lifters have moved since the lot numbers were drawn, so some flights no longer have their own block of numbers. Draw the lot numbers again once the order is settled.");
         if (!flights.length && noTotal) notes.push(noTotal + (noTotal === 1 ? " lifter has" : " lifters have") + " no best total yet (it comes from the OpenIPF check on the entry). They go first in their flight.");
         if (notes.length) kids.push(el("div", { class: "callout" }, el("ul", { style: "margin:0;padding-left:1.2em" }, notes.map(function (w) { return el("li", null, w); }))));
         kids.push(el("p", { class: "visually-hidden", id: "lo-grip-help" }, "Press space to pick this lifter up, then the up and down arrow keys to move them through the order, space to drop them, delete to take them out, or escape to cancel."));
@@ -1224,7 +1228,7 @@
         });
         if (S.sessions.length) kids.push(el("div", { class: "lab-headacts", style: "margin-top:var(--space-4)" }, btn("Add session", addSession)));
         if (!list.length) kids.push(el("p", { class: "empty" }, "Nobody has entered yet, so there is nothing to sort."));
-        sortBtn.hidden = S.sessions.length > 0; clearBtn.hidden = S.sessions.length === 0;
+        sortBtn.hidden = S.sessions.length > 0; clearBtn.hidden = S.sessions.length === 0; renderLots();
         area.replaceChildren.apply(area, kids);
         if (focusKey) { var t = area.querySelector('[data-fk="' + focusKey + '"]'); if (t && !t.disabled) t.focus(); }
         if (moved) window.setTimeout(function () { var r = area.querySelector('tr[data-id="' + moved + '"]'); if (r) r.classList.remove("just-moved"); }, 1400);
@@ -1275,15 +1279,23 @@
         if (errs.length && !window.confirm("OpenLifter may refuse this file:\n\n" + errs.slice(0, 6).join("\n") + (errs.length > 6 ? "\n…and " + (errs.length - 6) + " more" : "") + "\n\nDownload it anyway?")) return;
         var a = el("a", { href: URL.createObjectURL(new Blob([csv], { type: "text/csv" })), download: (c.slug || "competition") + "-openlifter.csv" }); document.body.appendChild(a); a.click(); a.remove();
       }
-      var exportBox = el("section", { "aria-labelledby": "lo-export-h", style: "margin:var(--space-4) 0" },
+      var ICON_PRINT = '<path d="M7 8V3h10v5M7 17H5a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M7 14h10v7H7z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
+        ICON_DOWNLOAD = '<path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v3h16v-3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
+        ICON_MAIL = '<rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="2"/><path d="m3 7 9 6 9-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
+      // a tertiary (ghost) button with a small icon, so it is clear what it does
+      function iconBtn(label, icon, fn, extra) { return el("button", Object.assign({ type: "button", class: "btn btn-sm btn-ghost", onclick: fn }, extra || {}), Y.svg(icon), " ", label); }
+      var exportBox = el("section", { "aria-labelledby": "lo-export-h", style: "margin:var(--space-5) 0" },
         el("h3", { id: "lo-export-h" }, "Exports"),
-        el("p", { class: "help" }, "The weigh-in sheet is in lot order. Score sheets, rack heights and kit check follow the lifting order. Sheets open in a new tab to print or save as PDF."),
+        el("p", { class: "help" }, "Print sheets open in a new tab, ready to print or save as PDF. The weigh-in sheet follows the lot numbers, so draw those first. The others follow the lifting order."),
+        el("h4", { class: "lo-sub" }, "Print sheets"),
         el("div", { class: "actions" },
-          btn("Weigh-in sheet", function () { if (exportReady(true)) openSheet(LEx.weighInSheet(exportSessions(), peopleMap(), c)); }, "btn-secondary"),
-          btn("Score sheets", function () { if (exportReady(true)) openSheet(LEx.scoreSheet(exportSessions(), peopleMap(), c)); }, "btn-secondary"),
-          btn("Rack heights", function () { if (exportReady(false)) openSheet(LEx.rackSheet(exportSessions(), peopleMap(), c)); }, "btn-secondary"),
-          btn("Kit check", function () { if (exportReady(false)) openSheet(LEx.kitSheet(exportSessions(), peopleMap(), c)); }, "btn-secondary"),
-          btn("OpenLifter file", olFile, "btn-secondary")),
+          iconBtn("Weigh-in sheet", ICON_PRINT, function () { if (exportReady(true)) openSheet(LEx.weighInSheet(exportSessions(), peopleMap(), c)); }),
+          iconBtn("Score sheets", ICON_PRINT, function () { if (exportReady(true)) openSheet(LEx.scoreSheet(exportSessions(), peopleMap(), c)); }),
+          iconBtn("Rack heights", ICON_PRINT, function () { if (exportReady(false)) openSheet(LEx.rackSheet(exportSessions(), peopleMap(), c)); }),
+          iconBtn("Kit check", ICON_PRINT, function () { if (exportReady(false)) openSheet(LEx.kitSheet(exportSessions(), peopleMap(), c)); })),
+        el("h4", { class: "lo-sub" }, "OpenLifter"),
+        el("p", { class: "help" }, "A CSV to import into OpenLifter."),
+        el("div", { class: "actions" }, iconBtn("OpenLifter file", ICON_DOWNLOAD, olFile)),
         el("details", { class: "ol-settings", style: "margin-top:var(--space-3)" }, el("summary", null, "OpenLifter settings"),
           el("div", { class: "field" }, el("label", { for: "ol-divisions" }, "Division codes"), el("p", { class: "help", id: "ol-div-help" }, "One per line, the code after the equals sign. Each must match a division set up in the OpenLifter meet exactly, or the import fails."), divText),
           el("div", { class: "field half" }, el("label", { for: "ol-classic" }, "Classic equipment"), classicBox),
@@ -1295,23 +1307,32 @@
             var next = { divisions: st.divisions, equipment: st.equipment, novice_for: nf, standard: st.standard };
             sb.from("site_settings").upsert({ key: "openlifter.settings", value: JSON.stringify(next) }).then(function (r) { if (r.error) throw r.error; olSaved = next; toast("OpenLifter settings saved."); }).catch(function (e) { toast(friendly(e), "error"); });
           }, "btn-secondary"))));
-      var published = row.status === "published", pubNote = el("p", { class: "help", id: "lo-pub-note", role: "status" });
+      var published = row.status === "published", shareBox = el("section", { "aria-labelledby": "lo-share-h", style: "margin:var(--space-5) 0" });
+      // Sharing: only the buttons that make sense now are shown. Not published: Publish. Published: Share with lifters, and Unpublish.
       function pubStatus() {
-        pubBtn.textContent = published ? "Unpublish" : "Publish";
-        pubNote.textContent = published ? "Published (" + (row.published_as === "final" ? "final" : "provisional") + "). The calendar shows View lifting order instead of View entries. Saving changes updates the public page straight away." : "Not published. The calendar shows View entries. Preview shows the saved order to the entries team only.";
-        if (row.shared_at) pubNote.textContent += " Last shared as " + row.shared_as + " with " + row.shared_count + (row.shared_count === 1 ? " lifter" : " lifters") + " on " + new Date(row.shared_at).toLocaleDateString("en-GB", { timeZone: Y.TZ, dateStyle: "medium" }) + ".";
+        var when = function (iso) { return new Date(iso).toLocaleDateString("en-GB", { timeZone: Y.TZ, dateStyle: "medium" }); };
+        var kids = [el("h3", { id: "lo-share-h" }, "Sharing")];
+        if (!published) {
+          kids.push(el("p", { class: "help", id: "lo-pub-note", role: "status" }, "Not published yet. Publishing puts the lifting order on the website, without lot numbers, and the calendar swaps View entries for View lifting order. Save your changes first. Use Preview above to see it before anyone else can."));
+          kids.push(el("div", { class: "actions" }, pubBtn));
+        } else {
+          kids.push(el("p", { class: "help", id: "lo-pub-note", role: "status" }, "Published (" + (row.published_as === "final" ? "final" : "provisional") + "). Anyone can see it on the website, and saving changes updates it straight away. Share with lifters emails everyone in the order from the competitions address, as provisional while entry is open and as final once it has closed."
+            + (row.shared_at ? " Last shared as " + row.shared_as + " with " + row.shared_count + (row.shared_count === 1 ? " lifter" : " lifters") + " on " + when(row.shared_at) + "." : "")));
+          kids.push(el("div", { class: "actions" }, shareBtn, unpubBtn));
+        }
+        shareBox.replaceChildren.apply(shareBox, kids);
       }
       function publish() {
         if (!published && S.dirty) { toast("Save the order first, then publish.", "error"); return; }
         if (!published && !S.sessions.length) { toast("Sort the entries and save first.", "error"); return; }
         if (!window.confirm(published ? "Unpublish the lifting order? The calendar goes back to View entries." : "Publish the lifting order? Anyone can see it, without lot numbers, and the calendar swaps View entries for View lifting order.")) return;
-        pubBtn.disabled = true;
+        pubBtn.disabled = true; unpubBtn.disabled = true;
         sb.rpc("lifting_order_publish", { c: c.id, publish: !published }).then(function (r) {
           if (r.error) throw new Error(/invalid:empty_order/.test(r.error.message || "") ? "There is nothing saved to publish. Save the order first." : /forbidden/.test(r.error.message || "") ? "You do not have permission to publish." : friendly(r.error));
           published = !published; row.published_as = published ? r.data : null; pubStatus(); toast(published ? "Lifting order published." : "Lifting order unpublished.");
-        }).catch(function (e) { toast(friendly(e), "error"); }).then(function () { pubBtn.disabled = false; });
+        }).catch(function (e) { toast(friendly(e), "error"); }).then(function () { pubBtn.disabled = false; unpubBtn.disabled = false; });
       }
-      var pubBtn = btn("Publish", publish, "btn-secondary");
+      var pubBtn = el("button", { type: "button", class: "btn btn-primary", onclick: publish }, "Publish"), unpubBtn = iconBtn("Unpublish", '<path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>', publish);
       var closed = !!c.entries_closed_manually || (!!c.entry_closes && new Date(c.entry_closes) <= new Date());
       function share() {
         if (!published) { toast("Publish the lifting order first, then share it.", "error"); return; }
@@ -1326,21 +1347,37 @@
           .then(function (b) { row.shared_at = new Date().toISOString(); row.shared_as = b.kind; row.shared_count = b.sent; pubStatus(); toast("Sent the " + b.kind + " lifting order to " + b.sent + (b.sent === 1 ? " lifter" : " lifters") + (b.failed ? ", and " + b.failed + " could not be sent" : "") + "."); })
           .catch(function (e) { toast(friendly(e), "error"); }).then(function () { shareBtn.disabled = false; });
       }
-      var shareBtn = btn("Share with lifters", share, "btn-secondary");
+      var shareBtn = iconBtn("Share with lifters", ICON_MAIL, share);
       function previewUrl() { return "../lifting/?c=" + encodeURIComponent(c.slug || c.id) + "&preview=1"; }        // the plain address: it does not depend on the /lifting-order rewrite
-      var previewLink = el("a", { class: "btn btn-sm btn-secondary", href: previewUrl(), target: "_blank", rel: "noopener" }, "Preview ", el("span", { class: "visually-hidden" }, "(opens in a new tab)"));
-      var sortBtn = btn("Sort the entries", runSort, "btn-primary"), clearBtn = btn("Clear the order", clearOrder, "btn-ghost"), saveBtn = btn("Save", function () { save(saveBtn); }, "btn-secondary"),
-        lotBtn = btn("Draw lot numbers", drawLots, "btn-secondary"),
-        lotToggle = el("div", { class: "field field-check" }, el("input", { type: "checkbox", id: "lo-show-lots" }), el("div", null, el("label", { for: "lo-show-lots" }, "Show lot numbers")));
-      lotToggle.querySelector("input").addEventListener("change", function (e) { S.showLots = e.target.checked; draw(); });
+      var previewLink = el("a", { class: "btn btn-sm btn-ghost", href: previewUrl(), target: "_blank", rel: "noopener" }, "Preview ", el("span", { class: "visually-hidden" }, "(opens in a new tab)"));
+      var sortBtn = btn("Sort the entries", runSort, "btn-primary"), clearBtn = btn("Clear the order", clearOrder, "btn-ghost"), saveBtn = btn("Save", function () { save(saveBtn); }, "btn-secondary");
+      // Lot numbers: again only the buttons that apply. No lots yet: Draw. Drawn: a note, Show lot numbers, Redraw and Remove.
+      var lotsBox = el("section", { "aria-labelledby": "lo-lots-h", style: "margin:var(--space-5) 0" });
+      function renderLots() {
+        var ls = lotsState(), n = flightsList().reduce(function (t, x) { return t + x.f.lifters.length; }, 0);
+        var kids = [el("h3", { id: "lo-lots-h" }, "Lot numbers"),
+          el("p", { class: "help" }, "Lot numbers decide the weigh-in order and are never shown publicly. Each flight gets its own block of numbers in flight order (flight A from 1, flight B carries on, and so on), women before men, shuffled at random within each group. Draw them once the flights are settled.")];
+        if (!S.sessions.length) kids.push(el("p", { class: "help" }, "Sort the entries first."));
+        else if (!ls.any) kids.push(el("div", { class: "actions" }, btn("Draw lot numbers", drawLots, "btn-secondary")));
+        else {
+          kids.push(el("p", { class: ls.ok ? "help" : "form-error", role: "status" }, ls.ok ? "Lot numbers are drawn for " + n + (n === 1 ? " lifter." : " lifters.") : "Lifters have moved since the lot numbers were drawn, so some flights no longer have their own block. Redraw them once the order is settled."));
+          var showBox = el("input", { type: "checkbox", id: "lo-show-lots" }); showBox.checked = !!S.showLots;
+          showBox.addEventListener("change", function (e) { S.showLots = e.target.checked; draw(); });
+          kids.push(el("div", { class: "field field-check" }, showBox, el("div", null, el("label", { for: "lo-show-lots" }, "Show lot numbers in the lists above"))));
+          kids.push(el("div", { class: "actions" }, btn("Redraw lot numbers", drawLots, "btn-ghost"), btn("Remove lot numbers", removeLots, "btn-ghost")));
+        }
+        lotsBox.replaceChildren.apply(lotsBox, kids);
+      }
       view.replaceChildren(
         el("p", { class: "panel-intro" }, "Sort the entered lifters into sessions and flights, then drag anyone to change it. Best totals come from OpenIPF. Not public yet."),
         form.el,
-        el("div", { class: "actions", style: "margin:var(--space-3) 0" }, sortBtn, clearBtn, saveBtn, previewLink, pubBtn, shareBtn, statusNode),
-        pubNote,
+        el("section", { "aria-labelledby": "lo-build-h", style: "margin:var(--space-4) 0" }, el("h3", { id: "lo-build-h" }, "Build and save"),
+          el("p", { class: "help" }, "Sort the entries once to make the first order, then arrange it by hand. Save your progress as you go. Preview shows what is saved, to the entries team only."),
+          el("div", { class: "actions", style: "margin:var(--space-3) 0" }, sortBtn, clearBtn, saveBtn, previewLink),
+          statusNode),
         live, area,
-        el("section", { "aria-labelledby": "lo-lots-h", style: "margin:var(--space-5) 0" }, el("h3", { id: "lo-lots-h" }, "Lot numbers"),
-          el("div", { class: "actions", style: "margin:var(--space-3) 0" }, lotBtn), lotToggle),
+        shareBox,
+        lotsBox,
         exportBox,
         el("section", { "aria-labelledby": "lo-settings-h", style: "margin:var(--space-5) 0" }, el("h3", { id: "lo-settings-h" }, "Settings"), secForm.el));
       status(); pubStatus(); draw();

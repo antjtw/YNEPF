@@ -268,3 +268,7 @@ Each session has a card showing **Weigh-in**, **Lift-off** and **Awards**, with 
 **Share with lifters** (next to Publish) emails everyone in the order, from the competitions address, with a link. It is sent as *provisional* while entry is open and as *final* once entry has closed (by date or by hand). It needs the order to be published and saved, asks you to confirm, and the page remembers when it was last shared. The competitions address gets a note of how many were sent. This needs the updated `waitlist` Edge Function deployed (paste the new `supabase/functions/waitlist/index.ts`) and the latest all-in-one SQL run once.
 
 The *Lifting order sheet* field on the competition has gone: the order now comes only from the builder.
+
+### How the Lifting order tab is laid out
+
+Top to bottom: the sort settings, then **Build and save** (Sort the entries or Clear the order, Save, Preview), the arrangement itself, **Sharing** (Publish, then Share with lifters and Unpublish once it is published), **Lot numbers** (Draw, then Show, Redraw and Remove once drawn), **Exports** (print sheets and the OpenLifter file, as small tertiary buttons with icons) and **Settings**. Only the buttons that apply right now are shown, so there are no greyed-out buttons.

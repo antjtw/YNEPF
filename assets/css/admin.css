@@ -183,3 +183,5 @@ body.dragging-lifter { user-select: none; cursor: grabbing; }
 .lab-headrow { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
 .lab-headrow h3, .lab-headrow h4 { margin: 0; }
 .lab-headacts { display: inline-flex; gap: var(--space-2); margin-left: auto; }
+
+.lo-sub { margin: var(--space-4) 0 var(--space-1); font-size: 1rem; color: var(--text); text-transform: none; letter-spacing: 0; }
