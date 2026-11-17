@@ -978,15 +978,16 @@
     var LSo = window.LiftingSort;
     view.replaceChildren(el("p", null, "Loading…"));
     Promise.all([
-      sb.from("entries").select("id,full_name,sex,event,date_of_birth,best_total_kg,best_glp,status,weight_classes(label)").eq("competition_id", c.id).in("status", ["paid", "comped"]),
+      sb.from("entries").select("id,full_name,sex,event,equipment,date_of_birth,best_total_kg,best_glp,status,bp_number,club,instagram,is_guest,can_break_records,weight_classes(label)").eq("competition_id", c.id).in("status", ["paid", "comped"]),
       sb.from("lifting_orders").select("*").eq("competition_id", c.id).maybeSingle(),
-      sb.from("lo_sessions").select("*, lo_flights(id,letter,locked, lo_assignments(entry_id,position,locked,lot_number,reason))").eq("competition_id", c.id).order("day").order("session_no")
+      sb.from("lo_sessions").select("*, lo_flights(id,letter,locked, lo_assignments(entry_id,position,locked,lot_number,reason))").eq("competition_id", c.id).order("day").order("session_no"),
+      sb.from("site_settings").select("value").eq("key", "openlifter.settings").maybeSingle().then(function (r) { return r; }, function () { return {}; })
     ]).then(function (res) {
       if (res[0].error) throw res[0].error;
       var ent = {}, list = [];
       (res[0].data || []).forEach(function (e) {
         var wc = one(e.weight_classes);
-        var x = { id: e.id, name: e.full_name, sex: e.sex, classLabel: wc ? wc.label : "", ageClass: e.date_of_birth ? CAT_LABEL[catFor(e.date_of_birth, c.start_date)] : "", event: e.event, total: e.best_total_kg === null || e.best_total_kg === undefined ? null : Number(e.best_total_kg), glp: e.best_glp === null || e.best_glp === undefined ? null : Number(e.best_glp) };
+        var x = { id: e.id, name: e.full_name, sex: e.sex, classLabel: wc ? wc.label : "", ageClass: e.date_of_birth ? CAT_LABEL[catFor(e.date_of_birth, c.start_date)] : "", ageCat: e.date_of_birth ? catFor(e.date_of_birth, c.start_date) : "", dob: e.date_of_birth, equipment: e.equipment, bp: e.bp_number, club: e.club, instagram: e.instagram, guest: !!e.is_guest, canBreakRecords: e.can_break_records !== false, event: e.event, total: e.best_total_kg === null || e.best_total_kg === undefined ? null : Number(e.best_total_kg), glp: e.best_glp === null || e.best_glp === undefined ? null : Number(e.best_glp) };
         ent[e.id] = x; list.push(x);
       });
       var row = (res[1] && !res[1].error && res[1].data) || {};
@@ -1193,6 +1194,64 @@
           S.dirty = false; S.dropped = 0; status(); toast("Lifting order saved."); draw();
         }).catch(function (e) { toast(friendly(e), "error"); }).then(function () { btnNode.disabled = false; });
       }
+      // ---- exports: weigh-in sheet, score sheet, OpenLifter file. They use what is on screen, in lot order.
+      var LEx = window.LiftingExport, olSaved = {};
+      try { olSaved = JSON.parse((res[3] && res[3].data && res[3].data.value) || "{}") || {}; } catch (x) { olSaved = {}; }
+      var CAT_KEYS = ["", "SJ", "J", "M1", "M2", "M3", "M4"];
+      function divisionLines() {
+        var out = [];
+        ["F", "M"].forEach(function (sx) { ["classic", "equipped"].forEach(function (eq) { CAT_KEYS.forEach(function (cat) {
+          var key = sx + ":" + eq + ":" + cat; out.push((sx === "F" ? "Women" : "Men") + ", " + eq + ", " + CAT_LABEL[cat] + " = " + ((olSaved.divisions || {})[key] || LEx.defaultDivisionCode(sx, eq, cat)));
+        }); }); });
+        return out.join("\n");
+      }
+      function parseDivisions(text) {
+        var map = {}, keys = [];
+        ["F", "M"].forEach(function (sx) { ["classic", "equipped"].forEach(function (eq) { CAT_KEYS.forEach(function (cat) { keys.push({ k: sx + ":" + eq + ":" + cat, label: (sx === "F" ? "Women" : "Men") + ", " + eq + ", " + CAT_LABEL[cat] }); }); }); });
+        text.split(/\r?\n/).forEach(function (line) {
+          var i = line.lastIndexOf("="); if (i < 0) return;
+          var lab = line.slice(0, i).trim(), code = LEx.clean(line.slice(i + 1)), hit = keys.filter(function (k) { return k.label === lab; })[0];
+          if (hit && code) map[hit.k] = code;
+        });
+        return map;
+      }
+      var divText = el("textarea", { id: "ol-divisions", rows: "14", "aria-describedby": "ol-div-help", spellcheck: "false" }); divText.value = divisionLines();
+      var noviceBox = el("input", { type: "checkbox", id: "ol-novice" }); noviceBox.checked = (olSaved.novice_for || []).indexOf(c.id) >= 0;
+      var classicBox = el("input", { type: "text", id: "ol-classic", value: (olSaved.equipment || {}).classic || "Sleeves" }), equippedBox = el("input", { type: "text", id: "ol-equipped", value: (olSaved.equipment || {}).equipped || "Single-ply" });
+      function olSettings() { return { divisions: parseDivisions(divText.value), equipment: { classic: classicBox.value.trim() || "Sleeves", equipped: equippedBox.value.trim() || "Single-ply" }, novice: noviceBox.checked, platforms: 1 }; }
+      function exportSessions() { return S.sessions.map(function (x) { return { day: x.day, sessionNo: x.sessionNo, prime: x.prime, flights: x.flights.map(function (f) { return { letter: f.letter, lifters: f.lifters.map(function (l) { return { id: l.id, lot: l.lot }; }) }; }) }; }); }
+      function exportReady(needLots) {
+        if (!S.sessions.length) { toast("Sort the entries first.", "error"); return false; }
+        if (S.dirty && !window.confirm("The order has changes that are not saved. Export what is on screen anyway?")) return false;
+        if (needLots && !flightsList().every(function (x) { return x.f.lifters.every(function (l) { return l.lot; }); }) && !window.confirm("Not everyone has a lot number yet. Draw them first if you can. Export anyway?")) return false;
+        return true;
+      }
+      function peopleMap() { var m = {}; list.forEach(function (e) { m[e.id] = e; }); return m; }
+      function openSheet(html) { var w = window.open(URL.createObjectURL(new Blob([html], { type: "text/html" })), "_blank"); if (!w) toast("Your browser blocked the new window. Allow pop-ups for this site and try again.", "error"); }
+      function olFile() {
+        if (!exportReady(true)) return;
+        var st = olSettings(), csv = LEx.openLifterCsv(LEx.openLifterRows(exportSessions(), peopleMap(), c, st), st);
+        var days = Math.max.apply(null, S.sessions.map(function (x) { return x.day; })), errs = LEx.validateOpenLifter(csv, { days: days, platforms: 1 });
+        if (errs.length && !window.confirm("OpenLifter may refuse this file:\n\n" + errs.slice(0, 6).join("\n") + (errs.length > 6 ? "\n…and " + (errs.length - 6) + " more" : "") + "\n\nDownload it anyway?")) return;
+        var a = el("a", { href: URL.createObjectURL(new Blob([csv], { type: "text/csv" })), download: (c.slug || "competition") + "-openlifter.csv" }); document.body.appendChild(a); a.click(); a.remove();
+      }
+      var exportBox = el("section", { "aria-labelledby": "lo-export-h", style: "margin:var(--space-4) 0" },
+        el("h3", { id: "lo-export-h" }, "Exports"),
+        el("p", { class: "help" }, "Lifters are listed in lot order, women then men. Weigh-in and score sheets open in a new tab to print or save as PDF."),
+        el("div", { class: "actions" },
+          btn("Weigh-in sheet", function () { if (exportReady(true)) openSheet(LEx.weighInSheet(exportSessions(), peopleMap(), c)); }, "btn-secondary"),
+          btn("Score sheet", function () { if (exportReady(true)) openSheet(LEx.scoreSheet(exportSessions(), peopleMap(), c)); }, "btn-secondary"),
+          btn("OpenLifter file", olFile, "btn-secondary")),
+        el("details", { class: "ol-settings", style: "margin-top:var(--space-3)" }, el("summary", null, "OpenLifter settings"),
+          el("div", { class: "field" }, el("label", { for: "ol-divisions" }, "Division codes"), el("p", { class: "help", id: "ol-div-help" }, "One per line, the code after the equals sign. Each must match a division set up in the OpenLifter meet exactly, or the import fails."), divText),
+          el("div", { class: "field half" }, el("label", { for: "ol-classic" }, "Classic equipment"), classicBox),
+          el("div", { class: "field half" }, el("label", { for: "ol-equipped" }, "Equipped equipment"), equippedBox),
+          el("div", { class: "field field-check" }, noviceBox, el("div", null, el("label", { for: "ol-novice" }, "This is a novice competition"))),
+          el("div", { class: "actions" }, btn("Save OpenLifter settings", function () {
+            var st = olSettings(), nf = (olSaved.novice_for || []).filter(function (id) { return id !== c.id; }); if (st.novice) nf.push(c.id);
+            var next = { divisions: st.divisions, equipment: st.equipment, novice_for: nf };
+            sb.from("site_settings").upsert({ key: "openlifter.settings", value: JSON.stringify(next) }).then(function (r) { if (r.error) throw r.error; olSaved = next; toast("OpenLifter settings saved."); }).catch(function (e) { toast(friendly(e), "error"); });
+          }, "btn-secondary"))));
       var sortBtn = btn("Sort the entries", runSort, "btn-primary"), saveBtn = btn("Save", function () { save(saveBtn); }, "btn-secondary"),
         lotBtn = btn("Draw lot numbers", drawLots, "btn-secondary"),
         lotToggle = el("div", { class: "field field-check" }, el("input", { type: "checkbox", id: "lo-show-lots" }), el("div", null, el("label", { for: "lo-show-lots" }, "Show lot numbers")));
@@ -1202,6 +1261,7 @@
         form.el,
         el("div", { class: "actions", style: "margin:var(--space-3) 0" }, sortBtn, lotBtn, saveBtn, statusNode),
         lotToggle,
+        exportBox,
         live, area);
       status(); draw();
     }).catch(function (e) { view.replaceChildren(el("p", { class: "form-error" }, friendly(e))); });

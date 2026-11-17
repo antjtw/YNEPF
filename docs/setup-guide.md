@@ -244,3 +244,12 @@ Everything for a competition is set up once, on one page in the **Calendar** tab
 ## Parts 7 and 8
 
 **(to be written)**, each just before it is needed.
+
+### Lot numbers and exports (Lifting order tab)
+
+- **Draw lot numbers** gives each flight its own block of consecutive numbers, in flight order (flight A has 1 to 10, flight B 11 to 20, and so on). Inside a flight the women come first, then the men, and each group is shuffled with the browser's cryptographic random generator, so a number never leaves its flight. Drawing again asks you first, because the old numbers may already have been used. Lot numbers are hidden until you tick **Show lot numbers**, are never public, and are kept when you press **Save** (the audit log records the save).
+- If you move a lifter after the draw, the page warns that the blocks no longer line up. Draw again once the order is settled.
+- **Weigh-in sheet** (one page per session) and **Score sheet** (one page per flight) open in a new tab, in lot order, ready to print or save as PDF.
+- **OpenLifter file** downloads a CSV with the reference header and runs the importer's checks first. Open **OpenLifter settings** to set the division codes (they must match the divisions in your OpenLifter meet exactly), the equipment names and whether the competition is a novice one.
+- The division codes start as `MR-O`, `FR-O`, `MR-J`, `FE-M1` and so on (sex, R for classic or E for equipped, age class). They are a best guess until the real list is supplied.
+- Tests: `node docs/entry-system/lifting-sort.test.mjs` and `node docs/entry-system/lifting-export.test.mjs`.
