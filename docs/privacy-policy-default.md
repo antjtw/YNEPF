@@ -2,7 +2,7 @@
 
 The Yorkshire and North East Powerlifting Federation (YNEPF) runs powerlifting competitions and events in our region. We are responsible for the personal information described in this policy. In data protection terms, we are the "controller". The Federation's Chairperson looks after data protection.
 
-You can contact us at ynepfentries@gmail.com.
+You can contact us at info@ynepf.co.uk.
 
 ## What information we collect
 
@@ -11,15 +11,16 @@ Most of this comes from you, when you enter a competition or volunteer. We colle
 - Your first and last name, and your date of birth.
 - Your age category, weight class and the region you compete in.
 - Your address.
-- Your sex and your gender. These are separate things, and we ask for both. We use them only to enter you into the right competition category. If your gender is different from your sex, you may compete in a different category if you hold a Therapeutic Use Exemption (TUE) for any hormones you take.
+- Your sex, which we use only to enter you into the right competition category (men's or women's). This should usually match your sex at birth. If you are a transgender athlete, please contact us before you enter and we will talk it through. We may ask whether you hold a Therapeutic Use Exemption (TUE) for hormones you take, because that can affect which category you compete in.
 - Your email address and phone number, and other contact details. We use them to contact you about your entry and to fix any problems.
-- Your social media handles, and links to public profiles such as OpenPowerlifting or OpenIPF.
+- Your social media handles, and links to public profiles such as OpenPowerlifting or OpenIPF. If you give us an OpenIPF profile link, we read your public results from it, to check qualifying totals and to show your best total in the lifting order.
 - Payment information. Stripe takes payments for us. We don't store any bank or card details. Stripe shows us the last four digits of the card used.
 - Your competition results: your lifts, scores and placings.
 - For volunteers, your name and email address, and which competitions you helped at.
 - Photos and video taken at our events and in livestreams.
+- If you join a competition's waiting list, your name and email address.
 - Messages you send us, and your email address if you join our mailing list.
-- Website information: we don't set any cookies of our own. Our website host may use cookies or collect its own information about visitors. That is covered by its own privacy policy, not this one.
+- Website information: we don't set any cookies of our own. Our website host and our payment provider (Stripe) may use cookies or collect their own information about visitors. That is covered by their own privacy policies, not this one.
 
 We don't ask for health information.
 
@@ -43,10 +44,10 @@ We never sell your information. We don't share it with anyone else without your 
 - White Lights Media and the member who photographs for each division. They can see who has ordered and paid for a photo package. This is only so they can deliver it on time and keep things consistent. They must not share this information or use it for anything else.
 - Referees and officials working at the event, who need to see lifting orders.
 - British Powerlifting and the IPF, who receive results when we upload them to OpenIPF. We only upload results.
-- Stripe, which processes payments, and Google, which provides the secure storage and email we use.
+- The services we use to run the website and our entries: Stripe (payments), Supabase (our secure database and sign-in), Resend (sending our emails), Vercel (hosting the website) and Google (our email accounts and shared documents). They handle information only on our behalf.
 - Anyone the law says we must tell, such as the police or a regulator.
 
-Some providers, such as Stripe and Google, may handle information outside the UK. When they do, we rely on the safeguards that UK data protection law requires.
+Some of these providers may handle information outside the UK. When they do, we rely on the safeguards that UK data protection law requires.
 
 ## Results, photos and livestreams
 
@@ -69,7 +70,7 @@ For lifters under 18, a parent or guardian enters them or gives permission. That
 
 ## Keeping it safe
 
-We store your information in secure YNEPF tools, such as Google Drive. Only people who need it can open it. If you think your information has been shared when it shouldn't have been, tell us straight away at ynepfentries@gmail.com.
+We store your information in the secure online services listed above. Only people who need it can open it, and our editing tools need a sign-in. If you think your information has been shared when it shouldn't have been, tell us straight away at info@ynepf.co.uk.
 
 ## Your rights
 
@@ -82,7 +83,7 @@ You can ask us to:
 - give you a copy to move to another service, where this applies
 - stop using it if we rely on your consent, and you withdraw that consent
 
-Email ynepfentries@gmail.com to use any of these rights. We will reply within one month. Some rights have limits. For example, we may need to keep results as a record of the sport.
+Email info@ynepf.co.uk to use any of these rights. We will reply within one month. Some rights have limits. For example, we may need to keep results as a record of the sport.
 
 If you are unhappy with how we have handled your information, you can complain to the Information Commissioner's Office (ICO) at [ico.org.uk](https://ico.org.uk) or on 0303 123 1113. We would like the chance to put things right first.
 
