@@ -21,7 +21,7 @@ export const MESSAGES: Record<string, string> = {
   not_full: "There are places left, so you can enter now instead of joining the waiting list.",
   already_entered: "You have already entered this competition. Check your email for the confirmation.",
   "invalid:email": "Please check your email address.",
-  "invalid:full_name": "Please enter your full name.",
+  "invalid:full_name": "Please enter your first and last name.",
 };
 
 export function errorCode(message: string): string {

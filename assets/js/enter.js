@@ -268,7 +268,7 @@
   }
   function stepAbout() {
     return [
-      text("full_name", "Full name", { autocomplete: "name", help: "Your name, club and weight class are shown on the entries list and the lifting order." }),
+      text("full_name", "First and last name", { autocomplete: "name", help: "Your name, club and weight class are shown on the entries list and the lifting order." }),
       text("email", "Email address", { type: "email", autocomplete: "email", max: 254, readonly: !!offerInfo, help: offerInfo ? "Your place was offered to this address, so it cannot be changed." : "We send your confirmation here." }),
       dobField(),
       el("p", { class: "callout", id: "cat-note", role: "status", hidden: myCategory() === null }, catNote()),
@@ -287,7 +287,7 @@
       el("h2", { class: "form-heading", style: "margin-top:0" }, "Parent or guardian"),
       el("p", null, "You are under 18 on the day of the competition, so we need you to name a parent or guardian who will be with you."),
       el("p", null, "They will need to be with you for weigh-in and on hand throughout the rest of the day. Please give their contact details. We will only use them as an emergency contact, or if we have a question about your entry. Only the entries team can see them, and we delete them 30 days after the competition."),
-      text("guardian_name", "Parent or guardian's full name", { max: 120, autocomplete: "off" }),
+      text("guardian_name", "Parent or guardian's first and last name", { max: 120, autocomplete: "off" }),
       text("guardian_phone", "Their phone number", { type: "tel", max: 30, autocomplete: "off" }),
       text("guardian_email", "Their email address", { type: "email", max: 254, autocomplete: "off" }),
       check("guardian_consent", "I am the parent or guardian, or I have their permission, and I consent to this entry and to photos being taken")
@@ -356,7 +356,7 @@
   function validate(n) {
     var e = [];
     if (n === "about") {
-      if (!trim(v.full_name)) e.push(["full_name", "Enter your full name"]);
+      if (!trim(v.full_name)) e.push(["full_name", "Enter your first and last name"]);
       if (!trim(v.email)) e.push(["email", "Enter your email address"]);
       else if (!EMAIL.test(trim(v.email))) e.push(["email", "Enter an email address in the correct format, like name@example.com"]);
       var iso = dobISO();
@@ -490,7 +490,7 @@
     var form = el("form", { novalidate: true, onsubmit: function (ev) {
       ev.preventDefault(); errBox.hidden = true;
       var name = trim(v.full_name), email = trim(v.email);
-      if (!name) { errBox.textContent = "Enter your full name"; errBox.hidden = false; return document.getElementById("full_name").focus(); }
+      if (!name) { errBox.textContent = "Enter your first and last name"; errBox.hidden = false; return document.getElementById("full_name").focus(); }
       if (!EMAIL.test(email)) { errBox.textContent = "Enter your email address in the right format, like name@example.com"; errBox.hidden = false; return document.getElementById("email").focus(); }
       btn.disabled = true; btn.textContent = "Joining…";
       callFunction("waitlist", { action: "join", competition_id: comp.id, full_name: name, email: email }).then(function (r) {
@@ -503,7 +503,7 @@
     } },
       note ? el("p", { class: "callout" }, note) : null,
       el("p", null, "All the places have been taken, but places do come up. Join the waiting list and we will email you a personal link if one does. You will then have " + hours + " hours to use it, and after that the place goes to the next person."),
-      text("full_name", "Full name", { autocomplete: "name" }), text("email", "Email address", { type: "email", autocomplete: "email", max: 254, help: "We email you here if a place comes up." }),
+      text("full_name", "First and last name", { autocomplete: "name" }), text("email", "Email address", { type: "email", autocomplete: "email", max: 254, help: "We email you here if a place comes up." }),
       errBox, el("div", { class: "form-actions" }, btn));
     app.replaceChildren(form); app.hidden = false;
   }

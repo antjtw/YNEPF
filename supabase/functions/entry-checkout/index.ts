@@ -34,7 +34,7 @@ export const MESSAGES: Record<string, string> = {
   sold_out: "Sorry, one of the extras you chose has just sold out. Please go back, untick it and try again.",
   "invalid:extras": "Something is wrong with the extras you chose. Please go back and check them.",
   no_price: "We could not work out a price for that combination. Please email the entries team.",
-  "invalid:full_name": "Please enter your full name.",
+  "invalid:full_name": "Please enter your first and last name.",
   "invalid:email": "Please check your email address.",
   "invalid:date_of_birth": "Please check your date of birth.",
   "invalid:too_young": "Lifters must be at least 14 in the year of the competition.",
