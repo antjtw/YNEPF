@@ -132,3 +132,10 @@ console.log("PASS " + runs + " different competitions all obey the rules");
   console.log("PASS lot numbers: consecutive block per flight, women then men, random inside the flight");
 }
 console.log("\nlifting sort tests passed");
+{
+  const r = LS.build(lifters(120, 8), { ...O, sessions: 4, primeTime: { enabled: true } });
+  assert.strictEqual(r.sessions.length, 4, "sessions = 4 with prime time means 3 ordinary sessions and prime time last");
+  assert(r.sessions[3].prime && !r.sessions[2].prime, "prime time is the last session");
+  assert.strictEqual(LS.build(lifters(120, 8), { ...O, sessions: 4 }).sessions.length, 4, "without prime time, 4 is 4");
+  console.log("PASS the sessions setting includes prime time");
+}

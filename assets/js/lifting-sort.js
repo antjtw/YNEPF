@@ -6,7 +6,7 @@
    The rules (from the YNEPF's own descriptions, see docs/entry-system/plan.md section 7):
      * Women and men are never in the same flight.
      * Flights hold at most 14 full power lifters, or 20 counting bench only lifters.
-     * Prime time (optional) is ONE session, last, with two flights: the top 14 women and the top 14 men by best GL points
+     * Prime time (optional) is ONE session, last (it counts in the number of sessions), with two flights: the top 14 women and the top 14 men by best GL points
        (full power only). They are taken out of the other sessions.
      * The rest go in sessions that run up through the weight classes, lightest first. A session has at most one women's flight
        and one men's flight (more only if you fix the number of sessions).
@@ -129,7 +129,8 @@
     var women = pool.filter(function (e) { return e.sex === "F"; }).sort(classThenOrder);
     var men = pool.filter(function (e) { return e.sex !== "F"; }).sort(classThenOrder);
     var wFlights = splitIntoFlights(women, o), mFlights = splitIntoFlights(men, o);
-    var sessionCount = o.sessions ? Math.max(1, Math.floor(o.sessions)) : Math.max(wFlights.length, mFlights.length, pool.length ? 1 : 0);
+    var primeSession = prime.women.length || prime.men.length ? 1 : 0;      // the sessions setting counts prime time, which is always the last session
+    var sessionCount = o.sessions ? Math.max(1, Math.floor(o.sessions) - primeSession) : Math.max(wFlights.length, mFlights.length, pool.length ? 1 : 0);
     var wBy = distribute(wFlights, sessionCount), mBy = distribute(mFlights, sessionCount);
 
     var main = [];
