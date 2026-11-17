@@ -13,8 +13,8 @@
 
   // The reference file's header, in its order. The column list is a setting (settings.columns), so it can change without code.
   var COLUMNS = ["Day", "Session", "Platform", "Flight", "Name", "Sex", "Equipment", "Division1", "Event1", "BirthDate", "Age", "SquatRack", "BenchRack", "MemberID", "Country", "State", "Lot", "Guest", "Novice", "CanBreakRecords", "Team", "Instagram", "Notes"];
-  // The public OpenLifter does not know Session, Novice or CanBreakRecords and refuses a file with them ("Unknown header Session").
-  // A newer build does (the YNE Worlds file has them). The standard list is the default; "extended" adds those three back.
+  // The YNEPF's own OpenLifter build knows Session, Novice and CanBreakRecords (the YNE Worlds file has them), so the file has them by default.
+  // The public OpenLifter does not and refuses such a file ("Unknown header Session"); the "standard" setting leaves those three out.
   var EXTRA = ["Session", "Novice", "CanBreakRecords"];
   var STANDARD = COLUMNS.filter(function (c) { return EXTRA.indexOf(c) < 0; });
   var ACCEPTED = STANDARD.concat(["Division2", "Division3", "Division4", "Division5", "Event2", "Event3", "Event4", "Event5"]);
@@ -26,8 +26,8 @@
   // Age classes are not separate divisions in OpenLifter. The code table must mirror the OpenLifter meet and can be changed on the screen.
   function defaultDivisionCode(sex, equipment) { return (sex === "F" ? "F" : "M") + (equipment === "equipped" ? "E" : "R") + "-O"; }
   var DEFAULTS = {
-    columns: null,                // null: the standard list, or the extended one when extended is on
-    extended: false,
+    columns: null,                // null: the full list, or the standard (public OpenLifter) one when standard is on
+    standard: false,
     platforms: 1,
     equipment: { classic: "Sleeves", equipped: "Single-ply" },
     divisions: {},                // "F:classic" -> "FR-O"; anything not listed uses defaultDivisionCode
@@ -69,17 +69,17 @@
     return rows;
   }
   function openLifterCsv(rows, settings) {
-    var cols = (settings && settings.columns) || (settings && settings.extended ? COLUMNS : STANDARD);
+    var cols = (settings && settings.columns) || (settings && settings.standard ? STANDARD : COLUMNS);
     return [cols.join(",")].concat(rows.map(function (r) { return cols.map(function (c) { var v = r[c]; return v === 0 ? "" : clean(v); }).join(","); })).join("\r\n") + "\r\n";
   }
 
   // A port of what OpenLifter's importer rejects. Returns a list of plain sentences; an empty list means it should import.
   function validateOpenLifter(csv, opts) {
-    var o = Object.assign({ days: 1, platforms: 1, extended: false }, opts || {}), errs = [];
+    var o = Object.assign({ days: 1, platforms: 1, standard: false }, opts || {}), errs = [];
     var lines = String(csv).split(/\r?\n/).filter(function (l) { return l.length; });
     if (!lines.length) return ["The file is empty."];
     var head = lines[0].split(","), seen = {};
-    head.forEach(function (h) { if (ACCEPTED.indexOf(h) < 0 && !(o.extended && EXTRA.indexOf(h) >= 0)) errs.push("Unknown header " + h + " in column " + (head.indexOf(h) + 1) + "."); if (seen[h]) errs.push("The column " + h + " appears twice."); seen[h] = 1; });
+    head.forEach(function (h) { if (ACCEPTED.indexOf(h) < 0 && !(!o.standard && EXTRA.indexOf(h) >= 0)) errs.push("Unknown header " + h + " in column " + (head.indexOf(h) + 1) + "."); if (seen[h]) errs.push("The column " + h + " appears twice."); seen[h] = 1; });
     if (head.indexOf("Platform") >= 0 && head.indexOf("Day") < 0) errs.push("Platform needs a Day column before it.");
     if (head.indexOf("Platform") >= 0 && head.indexOf("Day") > head.indexOf("Platform")) errs.push("The Day column must come before Platform.");
     ["Name", "Sex", "Division1", "Event1"].forEach(function (m) { if (head.indexOf(m) < 0) errs.push("The " + m + " column is missing."); });

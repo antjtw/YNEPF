@@ -1255,10 +1255,10 @@
         return map;
       }
       var divText = el("textarea", { id: "ol-divisions", rows: "4", "aria-describedby": "ol-div-help", spellcheck: "false" }); divText.value = divisionLines();
-      var extBox = el("input", { type: "checkbox", id: "ol-extended" }); extBox.checked = !!olSaved.extended;
+      var stdBox = el("input", { type: "checkbox", id: "ol-standard" }); stdBox.checked = !!olSaved.standard;
       var noviceBox = el("input", { type: "checkbox", id: "ol-novice" }); noviceBox.checked = (olSaved.novice_for || []).indexOf(c.id) >= 0;
       var classicBox = el("input", { type: "text", id: "ol-classic", value: (olSaved.equipment || {}).classic || "Sleeves" }), equippedBox = el("input", { type: "text", id: "ol-equipped", value: (olSaved.equipment || {}).equipped || "Single-ply" });
-      function olSettings() { return { divisions: parseDivisions(divText.value), equipment: { classic: classicBox.value.trim() || "Sleeves", equipped: equippedBox.value.trim() || "Single-ply" }, novice: noviceBox.checked, extended: extBox.checked, platforms: 1 }; }
+      function olSettings() { return { divisions: parseDivisions(divText.value), equipment: { classic: classicBox.value.trim() || "Sleeves", equipped: equippedBox.value.trim() || "Single-ply" }, novice: noviceBox.checked, standard: stdBox.checked, platforms: 1 }; }
       function exportSessions() { return S.sessions.map(function (x) { return { day: x.day, sessionNo: x.sessionNo, prime: x.prime, flights: x.flights.map(function (f) { return { letter: f.letter, lifters: f.lifters.map(function (l) { return { id: l.id, lot: l.lot }; }) }; }) }; }); }
       function exportReady(needLots) {
         if (!S.sessions.length) { toast("Sort the entries first.", "error"); return false; }
@@ -1271,7 +1271,7 @@
       function olFile() {
         if (!exportReady(true)) return;
         var st = olSettings(), csv = LEx.openLifterCsv(LEx.openLifterRows(exportSessions(), peopleMap(), c, st), st);
-        var days = Math.max.apply(null, S.sessions.map(function (x) { return x.day; })), errs = LEx.validateOpenLifter(csv, { days: days, platforms: 1, extended: st.extended });
+        var days = Math.max.apply(null, S.sessions.map(function (x) { return x.day; })), errs = LEx.validateOpenLifter(csv, { days: days, platforms: 1, standard: st.standard });
         if (errs.length && !window.confirm("OpenLifter may refuse this file:\n\n" + errs.slice(0, 6).join("\n") + (errs.length > 6 ? "\n…and " + (errs.length - 6) + " more" : "") + "\n\nDownload it anyway?")) return;
         var a = el("a", { href: URL.createObjectURL(new Blob([csv], { type: "text/csv" })), download: (c.slug || "competition") + "-openlifter.csv" }); document.body.appendChild(a); a.click(); a.remove();
       }
@@ -1288,11 +1288,11 @@
           el("div", { class: "field" }, el("label", { for: "ol-divisions" }, "Division codes"), el("p", { class: "help", id: "ol-div-help" }, "One per line, the code after the equals sign. Each must match a division set up in the OpenLifter meet exactly, or the import fails."), divText),
           el("div", { class: "field half" }, el("label", { for: "ol-classic" }, "Classic equipment"), classicBox),
           el("div", { class: "field half" }, el("label", { for: "ol-equipped" }, "Equipped equipment"), equippedBox),
-          el("div", { class: "field field-check" }, extBox, el("div", null, el("label", { for: "ol-extended" }, "My OpenLifter accepts Session, Novice and CanBreakRecords"), el("p", { class: "help" }, "Leave unticked for the standard OpenLifter, which refuses a file with those columns. Tick it only for a newer build that has them."))),
-          el("div", { class: "field field-check" }, noviceBox, el("div", null, el("label", { for: "ol-novice" }, "This is a novice competition"), el("p", { class: "help" }, "Only used when the extra columns are ticked above."))),
+          el("div", { class: "field field-check" }, stdBox, el("div", null, el("label", { for: "ol-standard" }, "Use the public OpenLifter's columns"), el("p", { class: "help" }, "Leaves out Session, Novice and CanBreakRecords. Only for the public OpenLifter: ours accepts them."))),
+          el("div", { class: "field field-check" }, noviceBox, el("div", null, el("label", { for: "ol-novice" }, "This is a novice competition"), el("p", { class: "help" }, "Written to the Novice column."))),
           el("div", { class: "actions" }, btn("Save OpenLifter settings", function () {
             var st = olSettings(), nf = (olSaved.novice_for || []).filter(function (id) { return id !== c.id; }); if (st.novice) nf.push(c.id);
-            var next = { divisions: st.divisions, equipment: st.equipment, novice_for: nf, extended: st.extended };
+            var next = { divisions: st.divisions, equipment: st.equipment, novice_for: nf, standard: st.standard };
             sb.from("site_settings").upsert({ key: "openlifter.settings", value: JSON.stringify(next) }).then(function (r) { if (r.error) throw r.error; olSaved = next; toast("OpenLifter settings saved."); }).catch(function (e) { toast(friendly(e), "error"); });
           }, "btn-secondary"))));
       var published = row.status === "published", pubNote = el("p", { class: "help", id: "lo-pub-note", role: "status" });
