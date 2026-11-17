@@ -23,7 +23,8 @@ assert(lines[1].startsWith("1,1,1,A,Smith Jo,F,Sleeves,FR-O,SBD,'1998-02-16,28,"
 assert(lines[1].includes(",Iron Works Leeds,"), "commas and double quotes removed from values, spaces collapsed");
 assert(lines[2].includes("Ann Lee,F,Single-ply,FE-O,B,'1975-12-01,50,"), "equipped bench only maps to Single-ply and B; double spaces collapsed");
 assert.strictEqual(lines[3].split(",")[17], "Yes", "guest is Yes");
-assert.strictEqual(lines[3].split(",")[19], "No", "can't break records is No"); assert.strictEqual(lines[3].split(",")[22], "North West Guest", "a guest's note names their division"); assert.strictEqual(lines[1].split(",")[21], "jo", "the @ is dropped from Instagram");
+assert.strictEqual(lines[3].split(",")[19], "No", "can't break records is No"); assert.strictEqual(lines[3].split(",")[22], "North West Guest", "a guest who cannot break records is noted by their own division");
+assert.strictEqual(X.openLifterRows(sessions, { ...people, c: { ...people.c, canBreakRecords: true } }, comp, {})[2].Notes, "Divisional Guest", "a guest who can break records is a Divisional Guest"); assert.strictEqual(lines[1].split(",")[21], "jo", "the @ is dropped from Instagram");
 assert.deepStrictEqual(X.validateOpenLifter(csv, { days: 1, platforms: 1 }), [], "a generated file passes OpenLifter's checks");
 
 // the validator catches what OpenLifter would reject

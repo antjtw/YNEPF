@@ -56,7 +56,7 @@
             Equipment: o.equipment[eq] || "", Division1: divisionFor(e, o), Event1: e.event === "bench_only" ? "B" : "SBD",
             BirthDate: e.dob ? "'" + String(e.dob).slice(0, 10) : "", Age: ageOn(e.dob, comp.start_date), SquatRack: "", BenchRack: "",
             MemberID: e.bp || "", Country: "", State: "", Lot: l.lot || "", Guest: e.guest ? "Yes" : "No", Novice: o.novice ? "Yes" : "No",
-            CanBreakRecords: e.canBreakRecords === false ? "No" : "Yes", Team: e.club || "", Instagram: String(e.instagram || "").replace(/^@/, ""), Notes: e.guest ? (e.divisionName ? e.divisionName + " Guest" : "Guest") : ""
+            CanBreakRecords: e.canBreakRecords === false ? "No" : "Yes", Team: e.club || "", Instagram: String(e.instagram || "").replace(/^@/, ""), Notes: e.guest ? (e.canBreakRecords === false ? (e.divisionName ? e.divisionName + " Guest" : "Guest") : "Divisional Guest") : ""
           });
         });
       });
