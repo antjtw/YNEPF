@@ -1,5 +1,14 @@
 # Setting up @ynepf.co.uk email
 
+> **How it was actually set up (November 2026).** The generic guide below is kept for reference. What the federation uses:
+>
+> - **Addresses:** `competitions@`, `info@` and `treasury@ynepf.co.uk`. Each is an IONOS **Mail Basic** mailbox (IONOS keeps a copy).
+> - **Receiving:** in Gmail (`ynepfentries@gmail.com`), **Settings > Accounts and Import > Check mail from other accounts**: POP3, server `pop.ionos.co.uk`, port 995, SSL, username the full address, with a label per address and "archive incoming messages" ticked. (If Google ever removes this feature, switch each mailbox to forward to Gmail from inside IONOS webmail instead.)
+> - **Sending from Gmail:** **Send mail as** for each address, SMTP `smtp.ionos.co.uk`, port 587, TLS, username the full address.
+> - **Automatic emails from the website:** Resend, domain `ynepf.co.uk` (Ireland), verified with three records added in IONOS DNS: a TXT `resend._domainkey`, and an MX and a TXT on `send`. The domain already has a DMARC record; do not add another. "Enable receiving" stays off.
+> - **Supabase secrets:** `MAIL_FROM` = `YNEPF Competitions <competitions@ynepf.co.uk>`, `NOTIFY_TO` = `competitions@ynepf.co.uk`. Contact form messages go to `info@ynepf.co.uk` (`CONTACT_TO`, optional).
+> - **Where mail goes:** general enquiries and the contact form: `info@`. Entries, waiting list, priority links, refunds: `competitions@`. Money: `treasury@`.
+
 This guide gets you two things:
 
 1. **A proper address for people to write to**, such as `entries@ynepf.co.uk`, instead of the Gmail address.

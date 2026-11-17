@@ -7,7 +7,7 @@
 //   checkout.session.completed, checkout.session.expired
 //
 // Secrets: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET (whsec_...), RESEND_API_KEY,
-//          MAIL_FROM, NOTIFY_TO (the entries inbox gets a copy of every confirmation).
+//          MAIL_FROM, NOTIFY_TO (the competitions inbox gets a copy of every confirmation).
 // Supabase fills in SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY by itself.
 
 const enc = new TextEncoder();
@@ -102,7 +102,7 @@ if (typeof Deno !== "undefined") {
         });
         const [row] = await (await db(`entries?id=eq.${entryId}&select=email,full_name,event,equipment,price_pence,date_of_birth,club,discount_pence,divisions(name,is_home),competitions(name,start_date,entry_closes)`)).json();
         const from = Deno.env.get("MAIL_FROM") ?? "YNEPF <onboarding@resend.dev>";
-        const copy = Deno.env.get("NOTIFY_TO") ?? "ynepfentries@gmail.com";
+        const copy = Deno.env.get("NOTIFY_TO") ?? "competitions@ynepf.co.uk";
         const send = (to: string[], subject: string, text: string) => fetch("https://api.resend.com/emails", {
           method: "POST", headers: { authorization: `Bearer ${Deno.env.get("RESEND_API_KEY")}`, "content-type": "application/json" },
           body: JSON.stringify({ from, to, subject, text, reply_to: copy }),

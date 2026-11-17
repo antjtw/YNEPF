@@ -94,7 +94,7 @@ if (typeof Deno !== "undefined") {
       if (!upd.ok) { console.error("entry not updated", await upd.text()); return reply(500, { error: "not_recorded", message: "The money moved, but the entry could not be updated. Please tell the website administrator." }); }
     }
     if (body.notify !== false) {
-      const from = Deno.env.get("MAIL_FROM") ?? "YNEPF <onboarding@resend.dev>", copy = Deno.env.get("NOTIFY_TO") ?? "ynepfentries@gmail.com";
+      const from = Deno.env.get("MAIL_FROM") ?? "YNEPF <onboarding@resend.dev>", copy = Deno.env.get("NOTIFY_TO") ?? "competitions@ynepf.co.uk";
       const sent = await fetch("https://api.resend.com/emails", {
         method: "POST", headers: { authorization: `Bearer ${Deno.env.get("RESEND_API_KEY")}`, "content-type": "application/json" },
         body: JSON.stringify({ from, to: [entry.email, copy], reply_to: copy, subject: plan.cancel ? `Your entry has been cancelled: ${entry.competitions?.name ?? ""}` : `A refund for your entry: ${entry.competitions?.name ?? ""}`,

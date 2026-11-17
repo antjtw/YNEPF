@@ -196,7 +196,7 @@ if (typeof Deno !== "undefined") {
     if ((out as { free?: boolean }).free) {
       const [row] = await (await fetch(`${url}/rest/v1/entries?id=eq.${entry_id}&select=email,full_name,event,equipment,price_pence,discount_pence,date_of_birth,club,divisions(name,is_home),competitions(name,start_date,entry_closes)`, { headers: { apikey: svc, authorization: `Bearer ${svc}` } })).json();
       if (row) {
-        const from = Deno.env.get("MAIL_FROM") ?? "YNEPF <onboarding@resend.dev>", copy = Deno.env.get("NOTIFY_TO") ?? "ynepfentries@gmail.com";
+        const from = Deno.env.get("MAIL_FROM") ?? "YNEPF <onboarding@resend.dev>", copy = Deno.env.get("NOTIFY_TO") ?? "competitions@ynepf.co.uk";
         const compYear = new Date(row.competitions.start_date).getFullYear();
         const sent = await fetch("https://api.resend.com/emails", {
           method: "POST", headers: { authorization: `Bearer ${Deno.env.get("RESEND_API_KEY")}`, "content-type": "application/json" },

@@ -610,7 +610,7 @@ Footer changes show within about a minute.
 
 ## 12. The Contact form
 
-There is nothing to manage in the editor for the Contact page. When someone uses the form, it is **emailed straight to the federation entries inbox** (ynepfentries@gmail.com unless your technical admin has chosen another address).
+There is nothing to manage in the editor for the Contact page. When someone uses the form, it is **emailed straight to the federation entries inbox** (`info@ynepf.co.uk` unless your technical admin has chosen another address).
 
 - The email's subject starts with **[Website]**, followed by the subject they wrote.
 - It is sent so that **pressing Reply goes to the person who wrote in**, not to a no-reply address. Whoever looks after the inbox simply replies as normal.

@@ -9,7 +9,7 @@ appears in the footer and under the contact form. Share the Doc as
 
 ## Who we are
 
-The Yorkshire & North East Powerlifting Federation (YNEPF) runs this website. We decide what personal information is collected and how it is used. You can contact us at ynepfentries@gmail.com or through the contact form on the website. [Add the full legal name and address of the organisation.]
+The Yorkshire & North East Powerlifting Federation (YNEPF) runs this website. We decide what personal information is collected and how it is used. You can contact us at info@ynepf.co.uk or through the contact form on the website. [Add the full legal name and address of the organisation.]
 
 ## What we collect
 
@@ -63,11 +63,11 @@ We do not sell your information. [Confirm where each service stores data and whe
 
 **Who else handles it.** Stripe (payments), Resend (emails), Supabase (our database, [region to be confirmed, expected West EU]), Vercel (the website), and White Lights Media (see above). [Confirm where each stores data.]
 
-**Your rights.** You can ask what we hold about you, ask us to correct or delete it (we can keep payment records we are required to keep), or withdraw your consent for access needs. Email ynepfentries@gmail.com and we will reply within one month.
+**Your rights.** You can ask what we hold about you, ask us to correct or delete it (we can keep payment records we are required to keep), or withdraw your consent for access needs. Email info@ynepf.co.uk and we will reply within one month.
 
 ## Your rights
 
-You can ask us for a copy of the information we hold about you, ask us to correct it, or ask us to delete it. You can also object to how we use it. Email ynepfentries@gmail.com.
+You can ask us for a copy of the information we hold about you, ask us to correct it, or ask us to delete it. You can also object to how we use it. Email info@ynepf.co.uk.
 
 If you are unhappy with how we have handled your information, you can complain to the Information Commissioner's Office at https://ico.org.uk/make-a-complaint/
 

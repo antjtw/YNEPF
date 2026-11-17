@@ -60,7 +60,7 @@ You also need photo ID, such as a driving licence or passport. A photo of it is 
 The only other exception is a competition that needs a qualifying total. If that applies, we say so clearly in the competition details.$q$, 20),
 ((select id from c), $q$Can I compete with YNEPF if I have competed in a non-IPF event?$q$, $q$Possibly. Under IPF by-law 15.8, anyone who takes part in an event run by a body that is not recognised by the World Anti-Doping Agency (WADA) becomes ineligible for authorised **National or International** competitions for 12 months from that event.
 
-Our competitions are divisional, which sits below national level, so this restriction does not automatically rule you out of a YNEPF competition. If you have competed in a non-IPF event and are unsure where you stand, email us at [ynepfentries@gmail.com](mailto:ynepfentries@gmail.com) before you enter and we will check for you.$q$, 30),
+Our competitions are divisional, which sits below national level, so this restriction does not automatically rule you out of a YNEPF competition. If you have competed in a non-IPF event and are unsure where you stand, email us at [info@ynepf.co.uk](mailto:info@ynepf.co.uk) before you enter and we will check for you.$q$, 30),
 ((select id from c), $q$What kit am I allowed to use?$q$, $q$You may only use kit from the [IPF Approved Kit List](https://www.powerlifting.sport/rules/codes/info/approved-list). Anything not on that list is not allowed. Lifting straps are not allowed.
 
 Chalk is provided on the day. Liquid chalk is not allowed.$q$, 40),
@@ -79,11 +79,11 @@ If you pre-ordered a media package and then pull out, we will refund that.$q$, 3
 
 We send it out by email as soon as we can. At the latest, this will be shortly after entries close, around three weeks before the competition.
 
-If you have not received the email, check your spam or junk folder, or contact us at [ynepfentries@gmail.com](mailto:ynepfentries@gmail.com). The lifting order is also always on our [Linktree](https://linktr.ee/ynepf), so you can check there too.$q$, 50),
+If you have not received the email, check your spam or junk folder, or contact us at [info@ynepf.co.uk](mailto:info@ynepf.co.uk). The lifting order is also always on our [Linktree](https://linktr.ee/ynepf), so you can check there too.$q$, 50),
 ((select id from c), $q$Can I request which day to lift on at a multi-day competition?$q$, $q$No. The lifting order flexes around how many lifters we have, which we try to balance across the competition days. If we accommodated one lifter's preference, we would have to accommodate everyone's.
 
 Please keep both competition days free.$q$, 60),
-((select id from c), $q$How do I claim a discount?$q$, $q$If you have volunteer points to spend, you can claim a discount from us by email. Please do this at least 24 hours before entry opens. Email [ynepfentries@gmail.com](mailto:ynepfentries@gmail.com).
+((select id from c), $q$How do I claim a discount?$q$, $q$If you have volunteer points to spend, you can claim a discount from us by email. Please do this at least 24 hours before entry opens. Email [info@ynepf.co.uk](mailto:info@ynepf.co.uk).
 
 Discount codes are non-transferable. Any lifter who uses a discount code without authorisation will be refunded and refused entry.$q$, 70);
 with c as (insert into public.faq_categories (title, sort_order) values ($q$Volunteering, points and discounts$q$, 30) returning id)
@@ -121,7 +121,7 @@ You can bank points for 24 months. After that, they expire 24 months after being
 Here is how each one works:
 
 - Priority entry: links are emailed to all volunteers 24 hours before general entry opens. Do not pass your link on to anyone else.
-- Entry discounts: issued as a code on request by email. Email [ynepfentries@gmail.com](mailto:ynepfentries@gmail.com) at least 24 hours before general entry. Codes are for you only and cannot be added after you have paid.
+- Entry discounts: issued as a code on request by email. Email [info@ynepf.co.uk](mailto:info@ynepf.co.uk) at least 24 hours before general entry. Codes are for you only and cannot be added after you have paid.
 - Memberships: refunded in part or in full on request by email, with proof of purchase.
 
 We are also looking at gift cards and discount codes with our federation partners.$q$, 40),
@@ -157,7 +157,7 @@ There is a pre-order discount if you buy your photos at the same time as your en
 Photos are supplied by White Lights Media, not by YNEPF. They usually aim to deliver media packages within two weeks.$q$, 10),
 ((select id from c), $q$Can I opt out of my photos being used?$q$, $q$Yes. We take photos and videos at our competitions and may use them to promote the sport and the division, for example on our social media and website.
 
-When you enter, you can opt out of your photos and videos being used this way. You can change your choice at any time by emailing [ynepfentries@gmail.com](mailto:ynepfentries@gmail.com).$q$, 20);
+When you enter, you can opt out of your photos and videos being used this way. You can change your choice at any time by emailing [info@ynepf.co.uk](mailto:info@ynepf.co.uk).$q$, 20);
 with c as (insert into public.faq_categories (title, sort_order) values ($q$On the day$q$, 70) returning id)
 insert into public.faqs (category_id, question, answer_md, sort_order) values
 ((select id from c), $q$When and how does weigh-in work?$q$, $q$Weigh-in is on competition day, two hours before your flight starts. Try to arrive as it opens, or a little earlier. Some competitions call you in lot-number order. If you miss your turn, you wait until everyone else has weighed in.

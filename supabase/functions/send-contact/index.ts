@@ -12,7 +12,7 @@
 //
 // Secrets (Edge Functions > Secrets, or `supabase secrets set`):
 //   RESEND_API_KEY   required
-//   NOTIFY_TO        optional, defaults to ynepfentries@gmail.com
+//   CONTACT_TO       optional, where contact form messages go. Defaults to info@ynepf.co.uk
 //   MAIL_FROM        optional, defaults to "YNEPF website <onboarding@resend.dev>"
 //   ALLOWED_ORIGIN   optional, the website address (for example https://www.ynepf.co.uk).
 //                    Leave unset to allow any website to call it.
@@ -97,7 +97,7 @@ Deno.serve(async (req: Request) => {
 
   const email = buildEmail(body as never, {
     from: Deno.env.get("MAIL_FROM") ?? "YNEPF website <onboarding@resend.dev>",
-    to: Deno.env.get("NOTIFY_TO") ?? "ynepfentries@gmail.com",
+    to: Deno.env.get("CONTACT_TO") ?? "info@ynepf.co.uk",
   });
 
   const res = await fetch("https://api.resend.com/emails", {

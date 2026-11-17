@@ -73,8 +73,9 @@ Useful to know: in test mode you pay with fake cards, for example `4242 4242 424
 | `STRIPE_PUBLISHABLE_KEY` | the `pk_test_...` key |
 | `SITE_URL` | the address of the test pages, with no slash at the end. In Vercel, open the project, **Deployments**, find the `entry-system` branch deployment and copy its address, for example `https://ynepf-micro-site-git-entry-system-yourname.vercel.app` |
 | `RESEND_API_KEY` | already there from the contact form |
-| `NOTIFY_TO` | `ynepfentries@gmail.com` (already there) |
-| `MAIL_FROM` | leave as it is until Part 5 is done |
+| `NOTIFY_TO` | `competitions@ynepf.co.uk` (copies of entry emails, and where replies go) |
+| `MAIL_FROM` | `YNEPF Competitions <competitions@ynepf.co.uk>` (once the domain shows Verified in Resend) |
+| `CONTACT_TO` | optional. Where contact form messages go. It defaults to `info@ynepf.co.uk`, so you do not need to add it |
 
 **B. Create the two functions.** Under **Edge Functions** press **Deploy a new function** > **Via editor**, and do this twice:
 

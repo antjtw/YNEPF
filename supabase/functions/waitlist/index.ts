@@ -112,7 +112,7 @@ if (typeof Deno !== "undefined") {
 
     const H = { apikey: svc, authorization: `Bearer ${svc}`, "content-type": "application/json" };
     const rpc = (fn: string, args: Record<string, unknown>) => fetch(`${url}/rest/v1/rpc/${fn}`, { method: "POST", headers: H, body: JSON.stringify(args) });
-    const from = Deno.env.get("MAIL_FROM") ?? "YNEPF <onboarding@resend.dev>", copy = Deno.env.get("NOTIFY_TO") ?? "ynepfentries@gmail.com";
+    const from = Deno.env.get("MAIL_FROM") ?? "YNEPF <onboarding@resend.dev>", copy = Deno.env.get("NOTIFY_TO") ?? "competitions@ynepf.co.uk";
     const send = async (to: string, subject: string, text: string): Promise<boolean> => {
       const r = await fetch("https://api.resend.com/emails", { method: "POST", headers: { authorization: `Bearer ${Deno.env.get("RESEND_API_KEY")}`, "content-type": "application/json" }, body: JSON.stringify({ from, to: [to], reply_to: copy, subject, text }) });
       if (!r.ok) console.error("Resend failed", r.status);

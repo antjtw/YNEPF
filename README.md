@@ -419,8 +419,9 @@ total per hour (best effort, per running instance). About ten minutes to set up:
    self-contained file; there is nothing else to add.
 3. In that function's settings switch **Verify JWT** off (visitors are not signed
    in, and the publishable key is not a JWT).
-4. **Edge Functions > Secrets**: add `RESEND_API_KEY`. Optional: `NOTIFY_TO`
-   (defaults to `ynepfentries@gmail.com`), `MAIL_FROM`, and `ALLOWED_ORIGIN` (the
+4. **Edge Functions > Secrets**: add `RESEND_API_KEY`. Optional: `CONTACT_TO`
+   (where contact form messages go; defaults to `info@ynepf.co.uk`), `NOTIFY_TO`
+   (copies of entry emails; defaults to `competitions@ynepf.co.uk`), `MAIL_FROM`, and `ALLOWED_ORIGIN` (the
    live site address, so other websites cannot use the function).
 5. Send yourself a test from the Contact page.
 

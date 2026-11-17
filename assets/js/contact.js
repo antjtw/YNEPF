@@ -73,7 +73,7 @@
     clearErrors();
     var li = document.createElement("li");
     li.appendChild(document.createTextNode(text + " "));
-    var a = document.createElement("a"); a.href = "mailto:ynepfentries@gmail.com"; a.textContent = "ynepfentries@gmail.com";
+    var a = document.createElement("a"); a.href = "mailto:info@ynepf.co.uk"; a.textContent = "info@ynepf.co.uk";
     li.appendChild(a);
     list.appendChild(li);
     summary.hidden = false; summary.focus(); summary.scrollIntoView({ block: "start" });
