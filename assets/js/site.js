@@ -264,10 +264,9 @@
     soon: ["tag tag-closed", "Entry not open yet"]
   };
 
-  // Lifting orders live at /lifting-order/<slug> (see vercel.json); the page also
-  // works as /lifting/?c=<slug> where there is no rewrite rule.
+  // Lifting orders open at /lifting/?c=<slug>. (The /lifting-order/<slug> rewrite in vercel.json gave a 404 on the Vercel preview, so links use the plain address.)
   function liftingHref(c) {
-    return c.slug ? "lifting-order/" + encodeURIComponent(c.slug) : "lifting/?c=" + encodeURIComponent(c.id);
+    return "lifting/?c=" + encodeURIComponent(c.slug || c.id);
   }
   function Y_EXT() {
     var s = svg('<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>');
