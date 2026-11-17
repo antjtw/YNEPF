@@ -1022,7 +1022,7 @@
           womenFirst: !!v.women_first, primeTime: { enabled: !!v.prime_time, women: Math.round(v.prime_women) || 14, men: Math.round(v.prime_men) || 14 } };
       }
       function status() { statusNode.textContent = S.dirty ? "Not saved yet" : (S.sessions.length ? "Saved" : ""); window.onbeforeunload = S.dirty ? function () { return ""; } : null; }
-      function flightsList() { var out = []; S.sessions.forEach(function (s) { s.flights.forEach(function (f) { out.push({ s: s, f: f }); }); }); return out; }
+      function flightsList() { var out = []; S.sessions.forEach(function (s) { s.flights.forEach(function (f) { out.push({ s: s, f: f, key: s.day + ":" + f.letter }); }); }); return out; }
       function placed() { var m = {}; flightsList().forEach(function (x) { x.f.lifters.forEach(function (l) { m[l.id] = true; }); }); return m; }
       function sexOf(f) { var a = {}; f.lifters.forEach(function (l) { a[(ent[l.id] || {}).sex === "F" ? "F" : "M"] = 1; }); var k = Object.keys(a); return k.length > 1 ? "mixed" : k[0] === "F" ? "women" : k[0] === "M" ? "men" : ""; }
 
@@ -1061,7 +1061,7 @@
         var was = find(id), item = was ? was.item : { id: id, reason: "", locked: false, lot: null }, fromLetter = was ? was.flight.letter : "out";
         remove(id);
         if (letter === "out") { S.dirty = true; status(); return fromLetter !== "out"; }
-        var target = flightsList().filter(function (x) { return x.f.letter === letter; })[0]; if (!target) return false;
+        var target = flightsList().filter(function (x) { return x.key === letter; })[0]; if (!target) return false;
         var at = besideId ? target.f.lifters.findIndex(function (l) { return l.id === besideId; }) + (before ? 0 : 1) : target.f.lifters.length;
         if (besideId && at < (before ? 0 : 1)) at = target.f.lifters.length;
         item.reason = "Moved here by hand"; target.f.lifters.splice(at, 0, item); S.dirty = true; status(); return true;
@@ -1112,7 +1112,7 @@
           handle.removeEventListener("pointermove", move); handle.removeEventListener("pointerup", up); handle.removeEventListener("pointercancel", cancel); document.removeEventListener("keydown", esc);
           window.cancelAnimationFrame(scroller); ghost.remove(); document.body.classList.remove("dragging-lifter"); rowEl.classList.remove("is-dragging"); clear();
           var moved = commit && drop ? placeAt(id, drop.letter, drop.beside, drop.before) : false;
-          if (moved) { say(drop.letter === "out" ? ent[id].name + " taken out of the lifting order." : ent[id].name + " moved to flight " + drop.letter + "."); draw("grip:" + id, id); }
+          if (moved) { say(drop.letter === "out" ? ent[id].name + " taken out of the lifting order." : ent[id].name + " moved to flight " + String(drop.letter).split(":")[1] + "."); draw("grip:" + id, id); }
         }
         function up() { finish(true); } function cancel() { finish(false); } function esc(ev) { if (ev.key === "Escape") finish(false); }
         handle.addEventListener("pointermove", move); handle.addEventListener("pointerup", up); handle.addEventListener("pointercancel", cancel); document.addEventListener("keydown", esc);
@@ -1169,7 +1169,7 @@
           s.flights.forEach(function (f) {
             var fp = f.lifters.filter(function (l) { return ent[l.id].event !== "bench_only"; }).length, sx = sexOf(f), st = settingsNow();
             var problems = []; if (sx === "mixed") problems.push("women and men in the same flight"); if (f.lifters.length > st.maxPerFlight) problems.push("over the " + st.maxPerFlight + " lifters limit"); if (fp > st.maxFullPower) problems.push("over the " + st.maxFullPower + " full power limit");
-            box.appendChild(el("section", { class: "lab-flight", "data-flight": f.letter },
+            box.appendChild(el("section", { class: "lab-flight", "data-flight": s.day + ":" + f.letter },
               el("h4", null, "Flight " + f.letter + " ", el("span", { class: "sex-tag" + (sx === "women" ? " f" : "") }, sx === "women" ? "Women" : sx === "men" ? "Men" : sx === "mixed" ? "Mixed" : "Empty"), " · " + f.lifters.length + " lifters"),
               problems.length ? el("p", { class: "form-error" }, "Check this flight: " + problems.join(", ") + ".") : null,
               f.lifters.length ? el("div", { class: "table-scroll" }, el("table", { class: "admin-table lab-table" }, el("caption", { class: "visually-hidden" }, "Flight " + f.letter),

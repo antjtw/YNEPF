@@ -563,7 +563,7 @@ create table if not exists public.lo_sessions (
 create table if not exists public.lo_flights (
   id uuid primary key default gen_random_uuid(),
   session_id uuid not null references public.lo_sessions (id) on delete cascade,
-  letter text not null,                                    -- runs on across the whole competition: A, B, C ...
+  letter text not null,                                    -- runs on through a day (A, B, C ...) and starts again each day, as in OpenLifter
   locked boolean not null default false
 );
 create table if not exists public.lo_assignments (
@@ -607,8 +607,8 @@ begin
               nullif(s->>'weigh_in_at', '')::timestamptz, nullif(s->>'lift_off_at', '')::timestamptz, nullif(s->>'awards_at', '')::timestamptz)
       returning id into v_sess;
     for f in select * from jsonb_array_elements(coalesce(s->'flights', '[]'::jsonb)) loop
-      if coalesce(f->>'letter', '') = '' or f->>'letter' = any (letters) then raise exception 'invalid:flight_letter'; end if;
-      letters := letters || (f->>'letter');
+      if coalesce(f->>'letter', '') = '' or (coalesce((s->>'day')::int, 1)::text || ':' || (f->>'letter')) = any (letters) then raise exception 'invalid:flight_letter'; end if;      -- letters start again each day
+      letters := letters || (coalesce((s->>'day')::int, 1)::text || ':' || (f->>'letter'));
       insert into public.lo_flights (session_id, letter, locked) values (v_sess, left(f->>'letter', 4), coalesce((f->>'locked')::boolean, false)) returning id into v_flight;
       j := 0;
       for l in select * from jsonb_array_elements(coalesce(f->'lifters', '[]'::jsonb)) loop

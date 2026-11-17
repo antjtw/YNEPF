@@ -262,6 +262,9 @@ ok(set.days === 2 && set.mf === 12 && set.ma === 18 && set.pt === true && set.pw
 // saving again replaces everything
 await saveLo(U.entries, arrangement([{ entry_id: l3 }], [{ entry_id: l1 }]));
 got = await rowsLo(); ok(got.length === 2 && got.find((r) => r.letter === "A").entry_id === l3 && got.find((r) => r.letter === "B").entry_id === l1, "saving again replaces the earlier arrangement, leaving nothing behind");
+// the same letter on two different days is fine (letters start again each day)
+ok(!(await saveLo(U.entries, { settings: {}, sessions: [{ day: 1, session_no: 1, flights: [{ letter: "A", lifters: [{ entry_id: l1 }] }] }, { day: 2, session_no: 1, flights: [{ letter: "A", lifters: [{ entry_id: l2 }] }] }] }))?.error, "flight A on day 1 and flight A on day 2 can both be saved");
+await saveLo(U.entries, arrangement([{ entry_id: l3 }], [{ entry_id: l1 }]));
 // bad input is refused and the saved arrangement is left exactly as it was
 const before = JSON.stringify(await rowsLo());
 for (const [what, payload, msg] of [

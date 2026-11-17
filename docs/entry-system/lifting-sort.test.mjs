@@ -22,9 +22,10 @@ const O = { maxFullPower: 14, maxPerFlight: 20 };
 function checkInvariants(input, res, opt, label) {
   const placed = all(res), ids = placed.map((l) => l.id).sort();
   assert.deepStrictEqual(ids, input.map((l) => l.id).sort(), label + ": every lifter is placed exactly once");
-  let expectLetter = 0;
+  let expectLetter = 0, lastDay = null;
   res.sessions.forEach((s) => s.flights.forEach((f) => {
-    assert.strictEqual(f.letter, LS.letter(expectLetter++), label + ": flight letters run on A, B, C");
+    if (s.day !== lastDay) { expectLetter = 0; lastDay = s.day; }
+    assert.strictEqual(f.letter, LS.letter(expectLetter++), label + ": flight letters run A, B, C through a day and start again each day");
     assert(new Set(f.lifters.map((l) => l.sex)).size === 1, label + ": women and men are never in the same flight");
     assert(f.lifters.length <= (opt.maxPerFlight ?? 20) && f.lifters.filter((l) => l.event !== "bench_only").length <= (opt.maxFullPower ?? 14), label + ": flight within limits (" + f.lifters.length + ")");
     const keys = f.lifters.map((l) => [l.total === null ? -1 : 0, LS.classKey(l.classLabel), l.total ?? 0]);
@@ -138,4 +139,11 @@ console.log("\nlifting sort tests passed");
   assert(r.sessions[3].prime && !r.sessions[2].prime, "prime time is the last session");
   assert.strictEqual(LS.build(lifters(120, 8), { ...O, sessions: 4 }).sessions.length, 4, "without prime time, 4 is 4");
   console.log("PASS the sessions setting includes prime time");
+}
+{
+  const r = LS.build(lifters(120, 9), { ...O, days: 2 });
+  const d2 = r.sessions.filter((s) => s.day === 2);
+  assert(d2.length && d2[0].flights[0].letter === "A" && r.sessions.find((s) => s.day === 1).flights[0].letter === "A", "flight letters start again at A on day 2");
+  assert.strictEqual(r.stats.flights, r.sessions.reduce((n, s) => n + s.flights.length, 0), "the flight count is the real total");
+  console.log("PASS flight letters restart each day");
 }

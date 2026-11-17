@@ -11,7 +11,7 @@
      * The rest go in sessions that run up through the weight classes, lightest first. A session has at most one women's flight
        and one men's flight (more only if you fix the number of sessions).
      * Inside a flight: weight class (lightest first), then best total (lowest first). Lifters with no best total yet go first.
-     * Flight letters run on across the competition: A, B, C ...
+     * Flight letters run on through a day (A, B, C ...) and start again at A on the next day, as OpenLifter does.
    Nothing here touches who is locked or has been moved by hand: that is the builder's job (it passes `locked` placements in).
    ========================================================================== */
 (function (root, factory) {
@@ -159,10 +159,12 @@
     }
 
     // ---- letters, reasons, positions, warnings
-    var li = 0, noTotal = 0;
+    var li = 0, noTotal = 0, flightTotal = 0, lastDay = null;
     main.forEach(function (sess) {
       sess.name = sess.prime ? "Prime time" : "";
+      if (sess.day !== lastDay) { li = 0; lastDay = sess.day; }        // as in OpenLifter, the letters start again at A each day
       sess.flights.forEach(function (f) {
+        flightTotal++;
         f.letter = letter(li++);
         f.lifters.forEach(function (e, i) {
           e.position = i + 1;
@@ -182,7 +184,7 @@
           flights: s.flights.map(function (f) { return { letter: f.letter, sex: f.sex, counts: f.counts, lifters: f.lifters.map(function (e) { return { id: e.id, name: e.name, sex: e.sex, classLabel: e.classLabel, event: e.event, total: num(e.total), glp: num(e.glp), position: e.position, reason: e._reason }; }) }; }) };
       }),
       warnings: warnings,
-      stats: { lifters: entries.length, sessions: main.length, flights: li }
+      stats: { lifters: entries.length, sessions: main.length, flights: flightTotal }
     };
   }
 
