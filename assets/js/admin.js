@@ -1006,7 +1006,7 @@
       var form = pageForm([
         { name: "days", label: "Days", type: "number", min: "1", half: true, placeholder: "Worked out for you" },
         { name: "sessions", label: "Sessions (not counting prime time)", type: "number", min: "1", half: true, placeholder: "Worked out for you" },
-        { name: "prime_time", label: "Prime time: one last session for the top lifters by GL points", type: "checkbox" },
+        { name: "prime_time", label: "Prime time", type: "checkbox", help: "Final session for the top lifters by GL points." },
         { name: "prime_women", label: "Women in prime time", type: "number", min: "1", max: "14", half: true, show: function (v) { return v.prime_time; } },
         { name: "prime_men", label: "Men in prime time", type: "number", min: "1", max: "14", half: true, show: function (v) { return v.prime_time; } },
         { name: "women_first", label: "Put the women's flight first in each session", type: "checkbox" }
