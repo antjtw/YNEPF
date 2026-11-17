@@ -541,12 +541,16 @@
         db.rpc("places_open", { c: comp.id }),
         db.from("clubs").select("name,region").eq("active", true).order("name"),
         db.from("addons").select("id,kind,name,description,price_pence,stock,sort_order,addon_options(id,label,sort_order)").eq("competition_id", comp.id).order("sort_order").order("name"),
-        Promise.resolve(db.rpc("server_time")).then(function (t) { return t; }, function () { return {}; })
+        Promise.resolve(db.rpc("server_time")).then(function (t) { return t; }, function () { return {}; }),
+        found.preview ? Promise.resolve(db.rpc("is_entries")).then(function (t) { return t; }, function () { return {}; }) : Promise.resolve({ data: true })
       ]).then(function (a) {
         var st = a[0].data, settings = a[1].data;
         if (a[9] && a[9].data) { var serverMs = new Date(a[9].data).getTime(); if (isFinite(serverMs)) clockSkew = serverMs - Date.now(); }
         if (st) st.places_left = a[6].data;
         preview = found.preview;
+        // An unpublished (test) competition can be opened by anyone who can read it in the editor, but only the entries team can enter it.
+        // Say so plainly, instead of letting the payment step answer "closed".
+        if (found.preview && a[10] && a[10].data !== true) { title.textContent = comp.name; return stop("This competition is not open to the public yet", "<p>It is a test competition that has not been published, so only the entries team can enter it. If you should be able to, sign out of the site editor and back in with your entries account.</p>"); }
         title.textContent = "Enter " + comp.name;
         lede.textContent = Y.dateRange(comp.start_date, comp.end_date) + (comp.venue_name ? " at " + comp.venue_name : "");
         if (!st || !settings || st.entry_method !== "yne")
