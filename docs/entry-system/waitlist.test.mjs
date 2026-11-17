@@ -329,6 +329,12 @@ await db.exec("set role authenticated");
 ok(!(await can(`select public.lifting_order_share_info('${LO}')`)) && !(await can(`select public.lifting_order_mark_shared('${LO}', 'final', 1)`)), "signed-in users cannot call the share functions (only our server can)");
 await db.exec("reset role");
 
+// the entry page asks the database for the time (so a phone with the wrong clock is not told entry is closed)
+await db.exec("set role anon");
+const stime = (await db.query("select public.server_time() t")).rows[0].t;
+ok(stime && Math.abs(new Date(stime) - Date.now()) < 60000, "anyone can read the server time: " + stime);
+await db.exec("reset role");
+
 // who may do what
 await db.exec("set role anon");
 ok(!(await can(`select public.waitlist_join('{}'::jsonb)`)) && !(await can(`select public.waitlist_sweep('${W}')`)) && !(await can(`select public.waitlist_make_offer('${W}'::uuid, 'x')`)), "the public cannot call the waiting list functions (only our server can)");

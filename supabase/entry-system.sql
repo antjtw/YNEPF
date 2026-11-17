@@ -1997,3 +1997,7 @@ select g.id, 'Privacy policy', 'privacy', 10
   from public.footer_groups g
  where g.placement = 'bottom' and not exists (select 1 from public.footer_links where url = 'privacy')
  order by g.sort_order limit 1;
+
+-- The entry page asks the database for the time, so a phone with the wrong clock is not told entry is closed when it is not.
+create or replace function public.server_time() returns timestamptz language sql stable as $$ select now() $$;
+grant execute on function public.server_time() to anon, authenticated;

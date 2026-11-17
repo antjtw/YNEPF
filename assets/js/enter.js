@@ -69,7 +69,11 @@
     if (!d || d.is_home || !ctx.comp.entry_opens) return null;
     return new Date(new Date(ctx.comp.entry_opens).getTime() + (ctx.settings.guest_delay_days || 0) * 86400000);
   }
-  function guestBlocked() { var t = guestOpensAt(); return !!t && t > new Date(); }
+  // The time the page uses for "is entry open / closed?". It is the database's clock, not the phone's, so a device with the wrong date or
+  // time zone is not told that entry is closed (or not open yet) when it is not. The skew is measured when the page loads.
+  var clockSkew = 0;
+  function nowDate() { return new Date(Date.now() + clockSkew); }
+  function guestBlocked() { var t = guestOpensAt(); return !!t && t > nowDate(); }
   function whenText(d) { return d.toLocaleString("en-GB", { timeZone: Y.TZ, dateStyle: "full", timeStyle: "short" }); }
   // Classes this lifter may enter: men's 53 and women's 43 are for sub-juniors only (the database checks this too).
   function allowedClasses() {
@@ -245,7 +249,7 @@
     var days = ctx.settings.guest_delay_days || 0;
     if (!ctx.comp.entry_opens || !days) return "";
     var t = new Date(new Date(ctx.comp.entry_opens).getTime() + days * 86400000);
-    return t > new Date() ? " Guests can enter from " + whenText(t) + "." : "";
+    return t > nowDate() ? " Guests can enter from " + whenText(t) + "." : "";
   }
   function divisionField() {
     return el("div", { class: "field", "data-field": "division_id" },
@@ -536,16 +540,18 @@
         db.from("divisions").select("*").order("sort_order"),
         db.rpc("places_open", { c: comp.id }),
         db.from("clubs").select("name,region").eq("active", true).order("name"),
-        db.from("addons").select("id,kind,name,description,price_pence,stock,sort_order,addon_options(id,label,sort_order)").eq("competition_id", comp.id).order("sort_order").order("name")
+        db.from("addons").select("id,kind,name,description,price_pence,stock,sort_order,addon_options(id,label,sort_order)").eq("competition_id", comp.id).order("sort_order").order("name"),
+        Promise.resolve(db.rpc("server_time")).then(function (t) { return t; }, function () { return {}; })
       ]).then(function (a) {
         var st = a[0].data, settings = a[1].data;
+        if (a[9] && a[9].data) { var serverMs = new Date(a[9].data).getTime(); if (isFinite(serverMs)) clockSkew = serverMs - Date.now(); }
         if (st) st.places_left = a[6].data;
         preview = found.preview;
         title.textContent = "Enter " + comp.name;
         lede.textContent = Y.dateRange(comp.start_date, comp.end_date) + (comp.venue_name ? " at " + comp.venue_name : "");
         if (!st || !settings || st.entry_method !== "yne")
           return stop("Enter " + comp.name, "<p>Entries for this competition are not taken on this page." + (comp.entry_url ? " <a href='" + encodeURI(comp.entry_url) + "'>Enter here</a>." : "") + "</p>");
-        var now = new Date();
+        var now = nowDate();
         if (st.entries_closed_manually || (comp.entry_closes && new Date(comp.entry_closes) <= now)) return stop("Entries are closed", "<p>Entries for " + Y.el("span", null, comp.name).textContent + " are closed.</p>");
         var opensAt = comp.entry_opens ? new Date(comp.entry_opens) : null, priority = false;
         if (opensAt && opensAt > now) {
