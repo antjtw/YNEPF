@@ -254,10 +254,24 @@
     // Preview (?preview=1): the saved order even if it is not published, for a signed-in entries team member only (the database checks that).
     var preview = params.get("preview") === "1";
     if (preview) { var rb = document.createElement("meta"); rb.name = "robots"; rb.content = "noindex"; document.head.appendChild(rb); }
-    var find = preview && Y.db() ? Y.db().from("competitions").select("*").eq(isId ? "id" : "slug", key).limit(1).then(function (r) { return r.data || []; })
+    // In preview, say exactly what is wrong instead of a general message.
+    var why = function (e) {
+      var m = String((e && e.message) || e || "");
+      return /Could not find the function|schema cache|does not exist/i.test(m) ? "The preview function is not in the database yet. Run the latest all-in-one SQL in Supabase, then reload."
+        : /forbidden/i.test(m) ? "You are signed in, but this account is not on the entries team." : "Preview problem: " + m;
+    };
+    var previewStop = function (e) {
+      title.textContent = "Preview";
+      Y.db().auth.getSession().then(function (g) {
+        var u = g.data && g.data.session && g.data.session.user;
+        root.replaceChildren(el("p", null, !u ? "You are not signed in on this web address. Sign in to the admin area at " + location.origin + "/admin first (signing in on a different address does not carry over), then reload this page."
+          : e ? why(e) : "Signed in as " + u.email + ", but that competition could not be read. Check the address, and that this account can see the calendar."));
+      });
+    };
+    var find = preview && Y.db() ? Y.db().from("competitions").select("*").eq(isId ? "id" : "slug", key).limit(1).then(function (r) { if (r.error) throw r.error; return r.data || []; })
       : load("competitions_public", function (t) { return t.select("*").eq(isId ? "id" : "slug", key).limit(1); });
     find.then(function (rows) {
-      if (!rows.length) { if (preview) { root.replaceChildren(el("p", null, "Sign in to the admin area first, then reload this page to see the preview.")); title.textContent = "Preview"; return; } return missing(); }
+      if (!rows.length) { if (preview) return previewStop(null); return missing(); }
       var c = rows[0];
       document.title = c.name + " lifting order — YNEPF";
       title.textContent = c.name;
@@ -288,7 +302,7 @@
           renderLiftingOrder(root, c, rows);
           if (preview) root.insertBefore(el("div", { class: "callout", role: "status" }, el("p", { class: "callout-title" }, "Preview"), el("p", { style: "margin:0" }, "This is the saved draft. " + (c.lifting_published ? "It is published, so this is what everyone sees." : "It is not published, and only the entries team can see this page."))), root.firstChild);
           else root.insertBefore(el("p", { class: "lo-key" }, el("strong", null, rows[0]._as === "final" ? "Final" : "Provisional"), rows[0]._as === "final" ? " lifting order." : " lifting order. It may change before the competition."), root.firstChild);
-        }).catch(function (e) { if (window.console) console.error(e); root.replaceChildren(el("p", null, preview ? "The preview is only for the entries team. Sign in to the admin area with an entries account, then reload this page." : "We could not load the lifting order just now. Please try again in a moment.")); });
+        }).catch(function (e) { if (window.console) console.error(e); if (preview) return previewStop(e); root.replaceChildren(el("p", null, "We could not load the lifting order just now. Please try again in a moment.")); });
         return;
       }
       if (!c.lifting_order_url) {
@@ -303,7 +317,7 @@
         if (window.console) console.error(e);
         root.replaceChildren(el("p", null, "We could not load the lifting order just now. Please try again in a moment."));
       });
-    }).catch(function (e) { fail(root, e); });
+    }).catch(function (e) { if (preview) previewStop(e); else fail(root, e); });
   }
 
   // ---- Home: next events + latest news ---------------------------------------
