@@ -189,6 +189,10 @@ To switch from Stripe's test mode to real money, and test it with a £1 entry an
 
 Each time someone's entry is confirmed, `competitions@ynepf.co.uk` (the `NOTIFY_TO` address) gets a short "New entry" note: who, which event and weight class, what they paid, extras, any guest or under-18 flag, how many places are taken, and a link to the entries desk. The lifter gets only their own confirmation. Refunds work the same way: the lifter gets their refund or cancellation email, and `competitions@` gets a separate note saying who did it, how much, why, and how many places are now taken. That covers refunds from the entries desk, refunds made in Stripe's own dashboard, and the automatic refund when someone pays after their place was released. This needs the updated `stripe-webhook`, `entry-checkout` and `entry-refund` functions pasted into Supabase.
 
+## Part 5j: The lifting order lab
+
+Before the lifting order builder arrives, `/admin/lifting-lab` (on the preview site, or the live site once merged) lets you try the auto sort on pretend lifters: pick a scenario (including the real YNE Worlds 2026 mix), change the days, sessions, flight sizes and prime time, and see how it splits them. Nothing is saved and it uses no real data. It is there to review how the sort behaves and tell us what you would do differently.
+
 ## Part 5b: The club list
 
 Lifters in English divisions can choose their club (it is optional) from the English Powerlifting Association's list of approved clubs, copied from the EPA website. Only club **names** are copied, never contact details. Lifters from other nations have no club question, and clubs from other bodies are not included.
