@@ -990,7 +990,7 @@
         ent[e.id] = x; list.push(x);
       });
       var row = (res[1] && !res[1].error && res[1].data) || {};
-      var settings = { days: row.days || "", sessions: row.sessions || "",         prime_time: !!row.prime_time_enabled, prime_women: row.prime_time_women || 14, prime_men: row.prime_time_men || 14, women_first: row.women_first !== false, seconds_per_attempt: row.seconds_per_attempt || 45 };
+      var settings = { days: row.days || "", sessions: row.sessions || "",         prime_time: !!row.prime_time_enabled, prime_women: row.prime_time_women || 14, prime_men: row.prime_time_men || 14, women_first: row.women_first !== false, seconds_per_attempt: row.seconds_per_attempt || 45, show_glp: row.show_glp !== false, show_total: row.show_total !== false };
       var S = { sessions: [], dirty: false, warnings: [], dropped: 0, showLots: false };
       // the saved arrangement (lifters who have cancelled since are dropped)
       ((res[2] && !res[2].error && res[2].data) || []).forEach(function (s) {
@@ -1011,7 +1011,9 @@
         { name: "prime_men", label: "Men in prime time", type: "number", min: "1", max: "14", half: true, show: function (v) { return v.prime_time; } },
         { name: "women_first", label: "Put the women's flight first in each session", type: "checkbox" }
       ], settings);
-      var secForm = pageForm([{ name: "seconds_per_attempt", label: "Seconds per attempt", type: "number", min: "15", max: "180", half: true, help: "Used to estimate when each session finishes. 45 is the usual: about 3.5 hours for two full flights." }], { seconds_per_attempt: settings.seconds_per_attempt });
+      var secForm = pageForm([{ name: "seconds_per_attempt", label: "Seconds per attempt", type: "number", min: "15", max: "180", half: true, help: "Used to estimate when each session finishes. 45 is the usual: about 3.5 hours for two full flights." },
+        { name: "show_glp", label: "Show GL points on the public lifting order", type: "checkbox" },
+        { name: "show_total", label: "Show best totals on the public lifting order", type: "checkbox" }], { seconds_per_attempt: settings.seconds_per_attempt, show_glp: settings.show_glp, show_total: settings.show_total });
       secForm.el.addEventListener("change", function () { S.dirty = true; status(); draw(); });
       form.el.addEventListener("input", function () { S.dirty = true; status(); });
       form.el.addEventListener("change", function () { S.dirty = true; status(); });
@@ -1020,7 +1022,7 @@
       function settingsNow() {
         var v = form.values();
         return { days: v.days ? Math.round(v.days) : null, sessions: v.sessions ? Math.round(v.sessions) : null, maxFullPower: 14, maxPerFlight: 20,         // the federation's rules: not a setting
-          womenFirst: !!v.women_first, secondsPerAttempt: Math.round(secForm.values().seconds_per_attempt) || 45, primeTime: { enabled: !!v.prime_time, women: Math.round(v.prime_women) || 14, men: Math.round(v.prime_men) || 14 } };
+          womenFirst: !!v.women_first, secondsPerAttempt: Math.round(secForm.values().seconds_per_attempt) || 45, showGlp: !!secForm.values().show_glp, showTotal: !!secForm.values().show_total, primeTime: { enabled: !!v.prime_time, women: Math.round(v.prime_women) || 14, men: Math.round(v.prime_men) || 14 } };
       }
       function status() { statusNode.textContent = S.dirty ? "Not saved yet" : (S.sessions.length ? "Saved" : ""); window.onbeforeunload = S.dirty ? function () { return ""; } : null; }
       function flightsList() { var out = []; S.sessions.forEach(function (s) { s.flights.forEach(function (f) { out.push({ s: s, f: f, key: s.day + ":" + f.letter }); }); }); return out; }
@@ -1215,7 +1217,7 @@
         var st = settingsNow();
         btnNode.disabled = true;
         sb.rpc("lifting_order_save", { c: c.id, p: {
-          settings: { days: st.days, sessions: st.sessions, max_full_power: st.maxFullPower, max_per_flight: st.maxPerFlight, prime_time: st.primeTime.enabled, prime_women: st.primeTime.women, prime_men: st.primeTime.men, women_first: st.womenFirst, seconds_per_attempt: st.secondsPerAttempt },
+          settings: { days: st.days, sessions: st.sessions, max_full_power: st.maxFullPower, max_per_flight: st.maxPerFlight, prime_time: st.primeTime.enabled, prime_women: st.primeTime.women, prime_men: st.primeTime.men, women_first: st.womenFirst, seconds_per_attempt: st.secondsPerAttempt, show_glp: st.showGlp, show_total: st.showTotal },
           sessions: S.sessions.map(function (s) { return { day: s.day, session_no: s.sessionNo, prime: s.prime, name: s.name, weigh_in_at: s.weighIn, lift_off_at: s.liftOff, awards_at: s.awards, flights: s.flights.map(function (f) { return { letter: f.letter, locked: f.locked, lifters: f.lifters.map(function (l) { return { entry_id: l.id, locked: l.locked, lot_number: l.lot, reason: l.reason }; }) }; }) }; })
         } }).then(function (r) {
           if (r.error) { var m = (r.error.message || "").trim(); throw new Error(m === "forbidden" ? "You do not have permission to save the lifting order." : /invalid:lifter/.test(m) ? "Someone on the order is no longer an entered lifter. Reload the page and sort again." : friendly(r.error)); }

@@ -169,7 +169,7 @@
   // Columns appear only if the sheet has something in them, so a worlds-style sheet
   // (best total, GLP) and a simpler one both come out sensibly.
   var LO_TABLE = [
-    { key: "name", label: "Name" }, { key: "ageClass", label: "Age class" }, { key: "cls", label: "Class" },
+    { key: "name", label: "Name" }, { key: "club", label: "Club" }, { key: "ageClass", label: "Age class" }, { key: "cls", label: "Class" },
     { key: "glp", label: "GLP" }, { key: "total", label: "Total (kg)" }
   ];
   // The name cell carries everything about the person: the name (a link to their
@@ -184,7 +184,7 @@
         top.appendChild(el("a", { class: "lo-ig", href: "https://www.instagram.com/" + encodeURIComponent(l.instagram) + "/",
           target: "_blank", rel: "noopener", "aria-label": l.name + " on Instagram (opens in a new tab)" }, Y.svg(Y.ICONS.instagram)));
       }
-      return el("th", { scope: "row", class: "c-name" }, top, l.club ? el("span", { class: "lo-club" }, l.club) : null);
+      return el("th", { scope: "row", class: "c-name" }, top);
     }
     return el("td", { class: "c-" + col }, col === "glp" ? fmtGlp(l.glp) : l[col]);
   }
@@ -287,8 +287,8 @@
           var rows = (r.data || []).map(function (x) {
             var ig = Y.igHandle(x.instagram || "");
             return { day: x.day, session: x.session_no, flight: x.flight, position: x.position, name: x.name, openIpf: /^https:\/\//i.test(x.openipf_url || "") ? x.openipf_url : "", instagram: /^[A-Za-z0-9._]{1,30}$/.test(ig) ? ig : "",
-              ageClass: AGE[x.age_category || ""] || "Open", ageClassKnown: true, cls: x.weight_class || "", club: x.club || "", total: x.best_total_kg == null ? "" : String(Number(x.best_total_kg)),
-              glp: x.best_glp == null ? null : Number(x.best_glp), weighIn: hm(x.weigh_in_at), liftOff: hm(x.lift_off_at), sessionName: x.is_prime_time ? "Prime time" : (x.session_name || ""), _as: x.published_as };
+              ageClass: AGE[x.age_category || ""] || "Open", ageClassKnown: true, cls: x.weight_class || "", club: x.club || "", total: x.best_total_kg == null || x.show_total === false ? "" : String(Number(x.best_total_kg)),
+              glp: x.best_glp == null || x.show_glp === false ? null : Number(x.best_glp), weighIn: hm(x.weigh_in_at), liftOff: hm(x.lift_off_at), sessionName: x.is_prime_time ? "Prime time" : (x.session_name || ""), _as: x.published_as };
           });
           if (!rows.length) { root.replaceChildren(el("p", null, preview ? "Nothing is saved yet. Sort the entries and save the order first." : "The lifting order is not ready yet. Check back soon.")); return; }
           // times: lift-off as set; weigh-in two hours before and the finish estimated from the attempts, unless they were typed in

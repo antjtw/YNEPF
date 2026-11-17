@@ -267,6 +267,14 @@ await saveLo(U.entries, { settings: { seconds_per_attempt: 50 }, sessions: [{ da
 const tms = (await q(`select to_char(s.weigh_in_at at time zone 'utc','HH24:MI') w, to_char(s.lift_off_at at time zone 'utc','HH24:MI') l, s.awards_at a, lo.seconds_per_attempt sp from public.lo_sessions s join public.lifting_orders lo on lo.competition_id = s.competition_id where s.competition_id = '${LO}'`))[0];
 ok(tms.w === "08:00" && tms.l === "10:00" && tms.a === null && tms.sp === 50, "session times and seconds per attempt are saved: " + JSON.stringify(tms));
 await saveLo(U.entries, arrangement([{ entry_id: l3 }], [{ entry_id: l1 }]));
+// the show GLP / show total choices are saved, and reach the public view
+await saveLo(U.entries, { settings: { show_glp: false, show_total: false }, sessions: [{ day: 1, session_no: 1, flights: [{ letter: "A", lifters: [{ entry_id: l1 }] }] }] });
+const shows = (await q(`select show_glp g, show_total t from public.lifting_orders where competition_id = '${LO}'`))[0];
+ok(shows.g === false && shows.t === false, "show GLP and show total are saved: " + JSON.stringify(shows));
+const pv = (await asUser(U.entries, async () => (await db.query(`select show_glp, show_total from public.lifting_order_preview('${LO}')`)).rows))[0];
+ok(pv && pv.show_glp === false && pv.show_total === false, "and the preview rows carry them");
+await saveLo(U.entries, arrangement([{ entry_id: l3 }], [{ entry_id: l1 }]));
+ok((await q(`select show_glp g from public.lifting_orders where competition_id = '${LO}'`))[0].g === true, "they default to shown");
 // the same letter on two different days is fine (letters start again each day)
 ok(!(await saveLo(U.entries, { settings: {}, sessions: [{ day: 1, session_no: 1, flights: [{ letter: "A", lifters: [{ entry_id: l1 }] }] }, { day: 2, session_no: 1, flights: [{ letter: "A", lifters: [{ entry_id: l2 }] }] }] }))?.error, "flight A on day 1 and flight A on day 2 can both be saved");
 await saveLo(U.entries, arrangement([{ entry_id: l3 }], [{ entry_id: l1 }]));

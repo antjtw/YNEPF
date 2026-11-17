@@ -577,6 +577,8 @@ create table if not exists public.lo_assignments (
 alter table public.lifting_orders add column if not exists days integer check (days is null or days between 1 and 6);
 alter table public.lifting_orders add column if not exists sessions integer check (sessions is null or sessions between 1 and 24);
 alter table public.lifting_orders add column if not exists seconds_per_attempt integer not null default 45 check (seconds_per_attempt between 15 and 180);
+alter table public.lifting_orders add column if not exists show_glp boolean not null default true;
+alter table public.lifting_orders add column if not exists show_total boolean not null default true;
 alter table public.lifting_orders add column if not exists women_first boolean not null default true;
 alter table public.lifting_orders add column if not exists updated_at timestamptz not null default now();
 
@@ -593,12 +595,12 @@ begin
   if not public.is_entries() then raise exception 'forbidden'; end if;
   if not exists (select 1 from public.competitions where id = c) then raise exception 'not_found'; end if;
   if jsonb_typeof(coalesce(p->'sessions', '[]'::jsonb)) <> 'array' then raise exception 'invalid:sessions'; end if;
-  insert into public.lifting_orders (competition_id, prime_time_enabled, prime_time_women, prime_time_men, max_full_power_per_flight, max_per_flight, days, sessions, women_first, seconds_per_attempt, updated_at)
+  insert into public.lifting_orders (competition_id, prime_time_enabled, prime_time_women, prime_time_men, max_full_power_per_flight, max_per_flight, days, sessions, women_first, seconds_per_attempt, show_glp, show_total, updated_at)
     values (c, coalesce((st->>'prime_time')::boolean, false), coalesce((st->>'prime_women')::int, 14), coalesce((st->>'prime_men')::int, 14),
-            coalesce((st->>'max_full_power')::int, 14), coalesce((st->>'max_per_flight')::int, 20), nullif(st->>'days', '')::int, nullif(st->>'sessions', '')::int, coalesce((st->>'women_first')::boolean, true), coalesce(nullif(st->>'seconds_per_attempt', '')::int, 45), now())
+            coalesce((st->>'max_full_power')::int, 14), coalesce((st->>'max_per_flight')::int, 20), nullif(st->>'days', '')::int, nullif(st->>'sessions', '')::int, coalesce((st->>'women_first')::boolean, true), coalesce(nullif(st->>'seconds_per_attempt', '')::int, 45), coalesce((st->>'show_glp')::boolean, true), coalesce((st->>'show_total')::boolean, true), now())
     on conflict (competition_id) do update set prime_time_enabled = excluded.prime_time_enabled, prime_time_women = excluded.prime_time_women, prime_time_men = excluded.prime_time_men,
       max_full_power_per_flight = excluded.max_full_power_per_flight, max_per_flight = excluded.max_per_flight, days = excluded.days, sessions = excluded.sessions,
-      women_first = excluded.women_first, seconds_per_attempt = excluded.seconds_per_attempt, updated_at = now();
+      women_first = excluded.women_first, seconds_per_attempt = excluded.seconds_per_attempt, show_glp = excluded.show_glp, show_total = excluded.show_total, updated_at = now();
   delete from public.lo_sessions where competition_id = c;                -- flights and placements go with them
   i := 0;
   for s in select * from jsonb_array_elements(coalesce(p->'sessions', '[]'::jsonb)) loop
@@ -654,7 +656,7 @@ select s.competition_id, s.day, s.session_no, s.name as session_name, s.is_prime
        f.letter as flight, a.position,
        coalesce(nullif(e.display_name, ''), e.full_name) as name, e.club, wc.label as weight_class,
        public.age_category_on(e.date_of_birth, c.start_date) as age_category,
-       e.event, e.instagram, e.openipf_url, e.best_total_kg, e.best_glp, lo.published_as, s.awards_at, lo.seconds_per_attempt
+       e.event, e.instagram, e.openipf_url, e.best_total_kg, e.best_glp, lo.published_as, s.awards_at, lo.seconds_per_attempt, lo.show_glp, lo.show_total
 from public.lifting_orders lo
 join public.lo_sessions s on s.competition_id = lo.competition_id
 join public.lo_flights f on f.session_id = s.id
@@ -676,7 +678,7 @@ begin
          f.letter, a.position,
          coalesce(nullif(e.display_name, ''), e.full_name), e.club, wc.label,
          public.age_category_on(e.date_of_birth, co.start_date),
-         e.event, e.instagram, e.openipf_url, e.best_total_kg, e.best_glp, coalesce(lo.published_as, 'provisional'), s.awards_at, lo.seconds_per_attempt
+         e.event, e.instagram, e.openipf_url, e.best_total_kg, e.best_glp, coalesce(lo.published_as, 'provisional'), s.awards_at, lo.seconds_per_attempt, lo.show_glp, lo.show_total
   from public.lifting_orders lo
   join public.competitions co on co.id = lo.competition_id
   join public.lo_sessions s on s.competition_id = lo.competition_id

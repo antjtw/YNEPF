@@ -258,3 +258,5 @@ Each session has a card showing **Weigh-in**, **Lift-off** and **Awards**, with 
 **Settings** (the last section, below Exports) holds *Seconds per attempt*, 45 by default (about 3.5 hours for two full flights). Run the latest all-in-one SQL once for this setting.
 
 **Preview:** the **Preview** button (next to Publish) opens the lifting order page as the public will see it, from the saved order, before it is published. Only a signed-in entries team member can see it (sign in to the admin area first, in the same browser). The link is `/lifting/?c=<slug>&preview=1`. It is hidden from search engines. Save first, because it shows what is saved, not what is on screen. Run the latest all-in-one SQL once for this.
+
+**Public lifting order columns:** Name, Club, Age class, Class, GLP, Total. Club sits in its own column beside the name (hidden if nobody has a club). In **Settings** (bottom of the Lifting order tab) you can untick *Show GL points* and *Show best totals* to hide those columns on the public page. Run the latest all-in-one SQL once for these.

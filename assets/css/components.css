@@ -624,12 +624,13 @@ fieldset.choice legend { padding: 0; margin-bottom: var(--space-2); font-weight:
 .lo-flight { margin-bottom: var(--space-6); max-width: none; }
 .lo-flight-label { display: inline-block; margin: 0 0 var(--space-2); padding: 0.1rem var(--space-3); border-radius: var(--radius-pill); background: var(--navy-800); color: #fff; font-weight: 700; font-size: var(--fs-16); }
 .lo-flight .table-wrap { max-width: none; }
-table.lifters { table-layout: fixed; width: 100%; min-width: 34rem; }
-table.lifters .c-name { width: 40%; }
-table.lifters .c-ageClass { width: 13%; }
-table.lifters .c-cls { width: 13%; }
-table.lifters .c-glp { width: 13%; }
-table.lifters .c-total { width: 17%; }
+table.lifters { table-layout: fixed; width: 100%; min-width: 36rem; }
+table.lifters .c-name { width: 34%; }
+table.lifters .c-club { width: 22%; }
+table.lifters .c-ageClass { width: 11%; }
+table.lifters .c-cls { width: 10%; }
+table.lifters .c-glp { width: 10%; }
+table.lifters .c-total { width: 13%; }
 table.lifters td, table.lifters th { overflow-wrap: break-word; padding-inline: var(--space-2); }
 table.lifters th:first-child, table.lifters td:first-child { padding-left: var(--space-4); }
 table.lifters thead th { overflow-wrap: normal; }
