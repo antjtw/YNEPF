@@ -929,7 +929,8 @@
         el("div", { class: "actions", style: "margin-bottom:var(--space-3)" },
           btn("Add entry", function () { addEntry(c, refs, reload); }, "btn-primary"),
           c.slug ? el("a", { class: "btn btn-sm btn-secondary", href: "../entries?c=" + encodeURIComponent(c.slug), target: "_blank", rel: "noopener" }, "Public list") : null,
-          btn("Download CSV", function () { downloadEntries(c); }, "btn-ghost")),
+          btn("Download CSV", function () { downloadEntries(c); }, "btn-ghost"),
+          el("a", { class: "btn btn-sm btn-ghost", href: "lifting-lab.html", target: "_blank", rel: "noopener" }, "Try the lifting order lab ", el("span", { class: "visually-hidden" }, "(opens in a new tab)"))),
         el("p", { class: "panel-intro" }, live.length + " entered of " + (c.capacity || "?") + " places. Entry money taken: " + entryMoney(total) + "." +
           (toCheck ? " " + toCheck + (toCheck === 1 ? " guest" : " guests") + " to check." : "") + (belowStd ? " " + belowStd + " below the qualifying standard." : "") + (Object.keys(dup).length ? " " + Object.keys(dup).length + " entries share an email or membership number with another." : "")),
         el("div", { class: "control-row" }, q, st, so), el("div", { class: "control-row checks" }, g, dp), count, list);
