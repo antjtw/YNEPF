@@ -673,7 +673,19 @@
     }).catch(function (e) { fail(root, e); });
   }
 
-  var routes = { calendar: calendar, committee: committee, news: news, post: post, faqs: faqs, records: records, lifting: lifting };
+  // The privacy policy: the text and the "last updated" date are edited in the site editor and kept in site_settings (key page.privacy).
+  function privacy(root) {
+    load("site_settings", function (t) { return t.select("value").eq("key", "page.privacy").limit(1); }).then(function (rows) {
+      var v = {}; try { v = JSON.parse((rows[0] && rows[0].value) || "{}") || {}; } catch (e) { v = {}; }
+      if (!v.body_md) { root.replaceChildren(el("p", null, "The privacy policy is not available just now. Please email info@ynepf.co.uk and we will send it to you.")); return; }
+      var body = Y.markdown(v.body_md); body.className = "md article-body";
+      var lede = document.getElementById("privacy-updated");
+      if (lede && v.updated) lede.textContent = "Last updated: " + Y.longDate(v.updated);
+      root.replaceChildren(body);
+    }).catch(function (e) { fail(root, e); });
+  }
+
+  var routes = { privacy: privacy, calendar: calendar, committee: committee, news: news, post: post, faqs: faqs, records: records, lifting: lifting };
   function boot() {
     var page = document.body.getAttribute("data-view") || document.body.getAttribute("data-page");
     var root = document.getElementById("live");

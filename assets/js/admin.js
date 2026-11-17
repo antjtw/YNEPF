@@ -67,7 +67,8 @@
 
     var save = el("button", { class: "btn " + (opt.danger ? "btn-danger-solid" : "btn-primary"), type: "submit" }, opt.saveLabel || "Save");
     form.appendChild(el("div", { class: "dialog-actions" }, save,
-      el("button", { class: "btn btn-secondary", type: "button", onclick: function () { dlg.close(); } }, "Cancel")));
+      el("button", { class: "btn btn-secondary", type: "button", onclick: function () { dlg.close(); } }, "Cancel"),
+      (opt.extra || []).map(function (x) { return el("button", { class: "btn btn-ghost", type: "button", onclick: function () { dlg.close(); x.onclick(); } }, x.label); })));
 
     var api = {
       get: function (n) { return controls[n].get(); },
@@ -257,7 +258,7 @@
           opts.hooks = { addImageBlobHook: function (blob, callback) { imageDialog(blob).then(function (r) { if (r) callback(r.url, r.alt); }); } };
         }
         ed = new window.toastui.Editor(Object.assign({
-          el: host, height: "380px", initialEditType: "wysiwyg", previewStyle: "tab",
+          el: host, height: f.height || "380px", initialEditType: "wysiwyg", previewStyle: "tab",
           initialValue: value || "", usageStatistics: false, autofocus: false,
           toolbarItems: [["heading", "bold", "italic", "strike"], ["ul", "ol"], ["quote", "hr"], links, ["code"]]
         }, opts));
@@ -2112,10 +2113,46 @@
     ],
     gSub: function (g) { return PLACEMENTS[g.placement] || ""; },
     iTitle: function (l) { return l.label; },
-    iSub: function (l) { return l.url === "#" ? "# (placeholder: add the real address)" : l.url; },
+    iSub: function (l) { return l.url === "privacy" ? "Our own page, written in the page editor" : l.url === "#" ? "# (placeholder: add the real address)" : l.url; },
+    // The privacy policy link is a page of our own: its address is fixed, it cannot be deleted, and the page is edited in the page editor.
+    isFixed: function (l) { return !!l && l.url === "privacy"; },
+    fixedAction: { label: "Edit the privacy policy page", hash: "#privacy" },
     normalise: function (v) { v.url = v.url.trim(); v.label = v.label.trim(); return v; },
     validate: function (v) { return footerUrlOk(v.url) ? null : "The address must start with https://, or be a page on this site (like faqs.html), or be # for now."; }
   };
+
+  // ---- the privacy policy page: a rich text editor, kept in site_settings under page.privacy ----------------------
+  function renderPrivacy(panel) {
+    panel.replaceChildren(el("p", null, el("a", { href: "#footer" }, "← Back to the footer")), panelHead("Privacy policy"), el("p", null, "Loading…"));
+    sb.from("site_settings").select("value").eq("key", "page.privacy").maybeSingle().then(function (r) {
+      if (r.error) throw r.error;
+      var v = {}; try { v = JSON.parse((r.data && r.data.value) || "{}") || {}; } catch (e) { v = {}; }
+      var editors = []; editors.pending = [];
+      var dateC = makeControl({ name: "updated", label: "Last updated", type: "date", required: true, help: "Shown at the top of the page. Change it when you change what the policy says." }, v.updated || Y.todayLondon(), editors);
+      var bodyC = makeControl({ name: "body_md", label: "Policy text", type: "md", height: "620px", help: "Use the toolbar for headings, bold, lists and links. This is what the page shows." }, v.body_md || "", editors);
+      var errBox = el("p", { class: "form-error", role: "alert", hidden: true });
+      var saveBtn = el("button", { class: "btn btn-primary", type: "submit" }, "Save changes");
+      var form = el("form", { novalidate: true }, dateC.wrap, bodyC.wrap, errBox,
+        el("div", { class: "actions", style: "margin-top:var(--space-4)" }, saveBtn,
+          el("a", { class: "btn btn-secondary", href: "#footer" }, "Cancel"),
+          el("a", { class: "btn btn-ghost", href: "../privacy", target: "_blank", rel: "noopener" }, "View the page ", el("span", { class: "visually-hidden" }, "(opens in a new tab)"))));
+      form.addEventListener("submit", function (e) {
+        e.preventDefault(); errBox.hidden = true;
+        var d = dateC.get(), md = bodyC.get();
+        if (!d) { errBox.textContent = "Add the date it was last updated."; errBox.hidden = false; return; }
+        if (!String(md || "").trim()) { errBox.textContent = "The policy text cannot be empty."; errBox.hidden = false; return; }
+        saveBtn.disabled = true;
+        sb.from("site_settings").upsert({ key: "page.privacy", value: JSON.stringify({ body_md: md, updated: d }) }).then(function (res) {
+          if (res.error) throw res.error;
+          toast("Privacy policy saved. The page is updated.");
+        }).catch(function (er) { errBox.textContent = friendly(er); errBox.hidden = false; }).then(function () { saveBtn.disabled = false; });
+      });
+      panel.lastChild.remove();
+      panel.appendChild(el("p", { class: "panel-intro" }, "This is the text on the Privacy policy page, linked from the footer. Saving updates the page straight away."));
+      panel.appendChild(form);
+      window.setTimeout(function () { editors.pending.forEach(function (fn) { fn(); }); }, 0);
+    }).catch(function (e) { panel.lastChild.textContent = friendly(e); });
+  }
 
   function renderGrouped(panel, cfg) {
     var cap = cfg.gWord.charAt(0).toUpperCase() + cfg.gWord.slice(1);
@@ -2149,8 +2186,9 @@
               cfg.iSub(it) ? el("p", { class: "item-sub" }, cfg.iSub(it)) : null),
             el("span", { class: "actions" },
               moveBtns(mine, ii, cfg.iTable, "i" + it.id, cfg.iTitle(it)),
+              cfg.isFixed && cfg.isFixed(it) ? btn("Edit page", function () { go(cfg.fixedAction.hash); }) : null,
               btn("Edit", function () { editItem(it, g, groups); }),
-              btn("Delete", function () { removeItem(it); }, "btn-danger"))));
+              cfg.isFixed && cfg.isFixed(it) ? null : btn("Delete", function () { removeItem(it); }, "btn-danger"))));
         });
         if (!mine.length) list.appendChild(el("li", { class: "item-row" }, el("p", { class: "empty", style: "margin:0;" }, "No " + cfg.iPlural + " in this " + cfg.gWord + " yet.")));
         card.appendChild(list);
@@ -2215,8 +2253,9 @@
 
     function editItem(it, group, groups) {
       var isNew = !it;
-      var fields = cfg.iFields.slice();
-      fields.unshift({
+      var fixed = !!(cfg.isFixed && cfg.isFixed(it));
+      var fields = fixed ? cfg.iFields.filter(function (f) { return f.name === "label"; }) : cfg.iFields.slice();
+      if (!fixed) fields.unshift({
         name: cfg.fk, label: cap, type: "select",
         options: groups.map(function (g) { return { value: g.id, label: g.title }; })
       });
@@ -2226,8 +2265,11 @@
         title: isNew ? "Add " + cfg.iWord : "Edit " + cfg.iWord,
         values: values, fields: fields,
         saveLabel: isNew ? "Add " + cfg.iWord : "Save changes",
-        validate: function (v) { return cfg.validate(cfg.normalise(Object.assign({}, v))); },
+        extra: fixed ? [{ label: cfg.fixedAction.label, onclick: function () { go(cfg.fixedAction.hash); } }] : null,
+        intro: fixed ? "This link goes to our own privacy policy page, so its address is fixed. You can change the link text. To change what the page says, use the page editor." : null,
+        validate: function (v) { return fixed ? null : cfg.validate(cfg.normalise(Object.assign({}, v))); },
         onSave: function (v) {
+          if (fixed) return sb.from(cfg.iTable).update({ label: String(v.label || "").trim() }).eq("id", it.id).then(ok).then(function () { toast("Saved."); route(); });
           v = cfg.normalise(v);
           var moved = !isNew && it[cfg.fk] !== v[cfg.fk];
           var write = (isNew || moved)
@@ -2740,13 +2782,14 @@
     users: renderUsers,
     faqs: function (p) { renderGrouped(p, FAQ); },
     footer: function (p) { renderGrouped(p, FOOTER); },
+    privacy: renderPrivacy,
     account: renderAccount
   };
 
   // Which roles see which tab. contributor: news only. entries: the entries desk. editor: site content.
   var TAB_ROLES = {
     competitions: ["admin", "editor", "entries"], news: ["admin", "editor", "contributor"], home: ["admin", "editor"],
-    organisation: ["admin", "editor"], records: ["admin", "editor"], faqs: ["admin", "editor"], footer: ["admin", "editor"], users: ["admin"],
+    organisation: ["admin", "editor"], records: ["admin", "editor"], faqs: ["admin", "editor"], footer: ["admin", "editor"], privacy: ["admin", "editor"], users: ["admin"],
     account: ["admin", "entries", "editor", "contributor"]
   };
   function canSee(tab) { return (TAB_ROLES[tab] || []).indexOf(state.role) >= 0; }
@@ -2755,7 +2798,7 @@
     var tab = parts[0];
     if (!TABS[tab] || !canSee(tab)) { tab = state.role === "contributor" ? "news" : "competitions"; parts = [tab]; }
     Array.prototype.forEach.call(document.querySelectorAll(".admin-tabs a"), function (a) {
-      if (a.getAttribute("data-tab") === tab) a.setAttribute("aria-current", "page");
+      if (a.getAttribute("data-tab") === (tab === "privacy" ? "footer" : tab)) a.setAttribute("aria-current", "page");
       else a.removeAttribute("aria-current");
     });
     // Each draw works on its own fresh surface that is swapped into the page whole. A slower,

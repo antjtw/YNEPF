@@ -272,3 +272,7 @@ The *Lifting order sheet* field on the competition has gone: the order now comes
 ### How the Lifting order tab is laid out
 
 Top to bottom: the sort settings, then **Build and save** (Sort the entries or Clear the order, Save, Preview), the arrangement itself, **Sharing** (Publish, then Share with lifters and Unpublish once it is published), **Lot numbers** (Draw, then Show, Redraw and Remove once drawn), **Exports** (print sheets and the OpenLifter file, as small tertiary buttons with icons) and **Settings**. Only the buttons that apply right now are shown, so there are no greyed-out buttons.
+
+### The privacy policy page
+
+The page is at `/privacy` and is linked from the footer. Its text is edited in the site editor: **Footer**, find **Privacy policy** in the Legal group, press **Edit page** (or **Edit**, then **Edit the privacy policy page**). The page editor is a what-you-see-is-what-you-get editor with a **Last updated** date. Saving updates the page straight away. The footer link's address is fixed and it cannot be deleted, only its link text can be changed. The first version (`docs/privacy-policy-default.md`) is loaded once by the all-in-one SQL and never overwrites later edits. Run the latest all-in-one SQL once to get it, and to point the footer's Privacy policy link at the new page.

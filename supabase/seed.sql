@@ -269,7 +269,7 @@ insert into public.footer_links (group_id, label, url, sort_order) values
 ((select id from g), $q$GL points calculator$q$, $q$glp-calculator.html$q$, 40);
 with g as (insert into public.footer_groups (title, placement, sort_order) values ($q$Legal$q$, $q$bottom$q$, 30) returning id)
 insert into public.footer_links (group_id, label, url, sort_order) values
-((select id from g), $q$Privacy policy$q$, $q$#$q$, 10),
+((select id from g), $q$Privacy policy$q$, $q$privacy$q$, 10),
 ((select id from g), $q$Franchise agreements$q$, $q$#$q$, 20);
 with g as (insert into public.footer_groups (title, placement, sort_order) values ($q$Social$q$, $q$social$q$, 40) returning id)
 insert into public.footer_links (group_id, label, url, sort_order) values

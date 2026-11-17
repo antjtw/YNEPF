@@ -48,6 +48,7 @@ const pages = [
   "news.html",
   "post.html",
   "faqs.html",
+  "privacy.html",
   "chairperson.html",
   "rules.html",
   "contact.html",

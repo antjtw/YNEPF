@@ -42,4 +42,5 @@ If Google shows `redirect_uri_mismatch`, the redirect URI in Part 1 step 5 is no
 
 - **Same person, two ways in.** A person who already created a password login with the same email can use either. Supabase links them by email.
 - **Google Workspace or Gmail both work.** The email just has to match what is in the Users tab.
+- **Google asks for a privacy policy link** before it lets you publish the app: use `https://www.ynepf.co.uk/privacy` (the site editor now has a privacy policy page; it goes live on that address when the site is merged).
 - **Apple sign-in** is not set up (it needs a paid Apple Developer account). The button only shows for providers listed in `authProviders`.
