@@ -5,7 +5,9 @@ const X = createRequire(import.meta.url)("../../assets/js/lifting-export.js");
 const LS = createRequire(import.meta.url)("../../assets/js/lifting-sort.js");
 
 const SPEC_HEADER = "Day,Session,Platform,Flight,Name,Sex,Equipment,Division1,Event1,BirthDate,Age,SquatRack,BenchRack,MemberID,Country,State,Lot,Guest,Novice,CanBreakRecords,Team,Instagram,Notes";
-assert.strictEqual(X.COLUMNS.join(","), SPEC_HEADER, "the header is the reference header, in order");
+assert.strictEqual(X.COLUMNS.join(","), SPEC_HEADER, "the extended header is the YNE Worlds header, in order");
+const STD_HEADER = "Day,Platform,Flight,Name,Sex,Equipment,Division1,Event1,BirthDate,Age,SquatRack,BenchRack,MemberID,Country,State,Lot,Guest,Team,Instagram,Notes";
+assert.strictEqual(X.STANDARD.join(","), STD_HEADER, "the standard header has no Session, Novice or CanBreakRecords");
 
 const people = {
   a: { name: "Smith, Jo", sex: "F", event: "full_power", equipment: "classic", dob: "1998-02-16", ageCat: "J", bp: "BP1", club: 'Iron "Works", Leeds', instagram: "@jo", classLabel: "63" },
@@ -15,7 +17,8 @@ const people = {
 const sessions = [{ day: 1, sessionNo: 1, flights: [{ letter: "A", lifters: [{ id: "b", lot: 2 }, { id: "a", lot: 1 }] }, { letter: "B", lifters: [{ id: "c", lot: 3 }] }] }];
 const comp = { name: "TEST Open", start_date: "2026-06-13" };
 const rows = X.openLifterRows(sessions, people, comp, {});
-const csv = X.openLifterCsv(rows);
+const EXT = { extended: true };
+const csv = X.openLifterCsv(rows, EXT);
 const lines = csv.trim().split("\r\n");
 assert.strictEqual(lines[0], SPEC_HEADER, "the file starts with the reference header, byte for byte");
 assert.strictEqual(lines.length, 4, "a header and three lifters");
@@ -25,11 +28,17 @@ assert(lines[2].includes("Ann Lee,F,Single-ply,FE-O,B,'1975-12-01,50,"), "equipp
 assert.strictEqual(lines[3].split(",")[17], "Yes", "guest is Yes");
 assert.strictEqual(lines[3].split(",")[19], "No", "can't break records is No"); assert.strictEqual(lines[3].split(",")[22], "North West Guest", "a guest who cannot break records is noted by their own division");
 assert.strictEqual(X.openLifterRows(sessions, { ...people, c: { ...people.c, canBreakRecords: true } }, comp, {})[2].Notes, "Divisional Guest", "a guest who can break records is a Divisional Guest"); assert.strictEqual(lines[1].split(",")[21], "jo", "the @ is dropped from Instagram");
-assert.deepStrictEqual(X.validateOpenLifter(csv, { days: 1, platforms: 1 }), [], "a generated file passes OpenLifter's checks");
+assert.deepStrictEqual(X.validateOpenLifter(csv, { days: 1, platforms: 1, extended: true }), [], "a generated extended file passes OpenLifter's checks");
+// the standard file (the default) has no Session, Novice or CanBreakRecords, and is what the public OpenLifter accepts
+const stdCsv = X.openLifterCsv(rows), stdLines = stdCsv.trim().split("\r\n");
+assert.strictEqual(stdLines[0], STD_HEADER, "the default file has the standard header"); assert(!/Session|Novice|CanBreakRecords/.test(stdLines[0]), "no unknown headers");
+assert.deepStrictEqual(X.validateOpenLifter(stdCsv, { days: 1, platforms: 1 }), [], "the standard file passes");
+assert(/Unknown header Session in column/.test(X.validateOpenLifter(csv, { days: 1 }).join("|")), "an extended file is refused by the standard rules, as the real OpenLifter did");
+assert.strictEqual(stdLines[1].split(",").length, 20, "20 columns in the standard file");
 
 // the validator catches what OpenLifter would reject
-const bad = (c, o) => X.validateOpenLifter(c, o).join(" | ");
-assert(/Unknown column/.test(bad(csv.replace("Instagram", "Insta"))), "unknown header");
+const bad = (c, o) => X.validateOpenLifter(c, { extended: true, ...o }).join(" | ");
+assert(/Unknown header Insta in column/.test(bad(csv.replace("Instagram", "Insta"))), "unknown header");
 assert(/appears twice/.test(bad(csv.replace("Country", "State"))), "repeated header");
 assert(/Day column must come before Platform/.test(bad(csv.replace("Day,Session,Platform", "Platform,Session,Day"))), "Platform before Day");
 assert(/outside the 1 day/.test(bad(csv.replace(/\r\n2,/, "\r\n2,"), { days: 1 }) + bad(csv.replace("1,1,1,A,Smith", "3,1,1,A,Smith"), { days: 1 })), "day beyond the meet");
@@ -53,15 +62,15 @@ const built = LS.build(many, { days: 2 });
 const flights = built.sessions.flatMap((s) => s.flights), lots = LS.assignLots(flights);
 const ppl = {}; many.forEach((m) => { ppl[m.id] = { ...m, equipment: "classic", dob: "1995-05-05", ageCat: "", bp: "B" + m.id }; });
 const arr = built.sessions.map((s) => ({ day: s.day, sessionNo: s.sessionNo, prime: s.prime, flights: s.flights.map((f) => ({ letter: f.letter, lifters: f.lifters.map((l) => ({ id: l.id, lot: lots[l.id] })) })) }));
-const big = X.openLifterCsv(X.openLifterRows(arr, ppl, comp, {}));
-assert.deepStrictEqual(X.validateOpenLifter(big, { days: 2, platforms: 1 }), [], "96 lifters pass the validation");
+const big = X.openLifterCsv(X.openLifterRows(arr, ppl, comp, {}), EXT);
+assert.deepStrictEqual(X.validateOpenLifter(big, { days: 2, platforms: 1, extended: true }), [], "96 lifters pass the validation");
 assert.strictEqual(big.trim().split("\r\n").length, 97);
 
 // the real file from YNE Worlds 2026: same header byte for byte, and it passes our port of the importer's checks
 import fs from "node:fs";
 const real = fs.readFileSync(new URL("./fixtures/yne-worlds-2026-openlifter.csv", import.meta.url), "utf8");
 assert.strictEqual(real.split(/\r?\n/)[0], X.COLUMNS.join(","), "our header matches the real file's header");
-assert.deepStrictEqual(X.validateOpenLifter(real, { days: 2, platforms: 1 }), [], "the real file passes our validation");
+assert.deepStrictEqual(X.validateOpenLifter(real, { days: 2, platforms: 1, extended: true }), [], "the real file passes our validation");
 
 // printable sheets, in the federation's layouts
 const cmp = { name: "TEST <Open>", start_date: "2026-11-07", venue_name: "Riccall Regen Centre" };
