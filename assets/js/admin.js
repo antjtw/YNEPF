@@ -978,7 +978,7 @@
     var LSo = window.LiftingSort;
     view.replaceChildren(el("p", null, "Loading…"));
     Promise.all([
-      sb.from("entries").select("id,full_name,sex,event,best_total_kg,best_glp,status,weight_classes(label)").eq("competition_id", c.id).in("status", ["paid", "comped"]),
+      sb.from("entries").select("id,full_name,sex,event,date_of_birth,best_total_kg,best_glp,status,weight_classes(label)").eq("competition_id", c.id).in("status", ["paid", "comped"]),
       sb.from("lifting_orders").select("*").eq("competition_id", c.id).maybeSingle(),
       sb.from("lo_sessions").select("*, lo_flights(id,letter,locked, lo_assignments(entry_id,position,locked,lot_number,reason))").eq("competition_id", c.id).order("day").order("session_no")
     ]).then(function (res) {
@@ -986,7 +986,7 @@
       var ent = {}, list = [];
       (res[0].data || []).forEach(function (e) {
         var wc = one(e.weight_classes);
-        var x = { id: e.id, name: e.full_name, sex: e.sex, classLabel: wc ? wc.label : "", event: e.event, total: e.best_total_kg === null || e.best_total_kg === undefined ? null : Number(e.best_total_kg), glp: e.best_glp === null || e.best_glp === undefined ? null : Number(e.best_glp) };
+        var x = { id: e.id, name: e.full_name, sex: e.sex, classLabel: wc ? wc.label : "", ageClass: e.date_of_birth ? CAT_LABEL[catFor(e.date_of_birth, c.start_date)] : "", event: e.event, total: e.best_total_kg === null || e.best_total_kg === undefined ? null : Number(e.best_total_kg), glp: e.best_glp === null || e.best_glp === undefined ? null : Number(e.best_glp) };
         ent[e.id] = x; list.push(x);
       });
       var row = (res[1] && !res[1].error && res[1].data) || {};
@@ -1119,7 +1119,7 @@
       }
       function lifterRow(l, f, i) {
         var e = ent[l.id];
-        return el("tr", { "data-id": l.id, class: l.id === justMoved ? "just-moved" : null }, el("td", { class: "grip-cell" }, grip(l.id)), el("td", null, String(i + 1)), el("th", { scope: "row" }, e.name), el("td", null, (e.sex === "F" ? "W " : "M ") + e.classLabel), el("td", null, e.event === "bench_only" ? "Bench only" : "Full power"),
+        return el("tr", { "data-id": l.id, class: l.id === justMoved ? "just-moved" : null }, el("td", { class: "grip-cell" }, grip(l.id)), el("td", null, String(i + 1)), el("th", { scope: "row" }, e.name), el("td", null, (e.sex === "F" ? "W " : "M ") + e.classLabel), el("td", null, e.ageClass), el("td", null, e.event === "bench_only" ? "Bench only" : "Full power"),
           el("td", null, e.total === null ? "none yet" : e.total + " kg"), el("td", null, e.glp === null ? "–" : String(e.glp)));
       }
       var justMoved = null;
@@ -1136,8 +1136,8 @@
         if (flights.length) {
           kids.push(el("section", { id: "lo-unplaced-zone", class: "lab-unplaced", "aria-labelledby": "lo-unplaced" }, el("h3", { id: "lo-unplaced" }, "Not in the lifting order" + (unplaced.length ? " (" + unplaced.length + ")" : "")),
             unplaced.length ? el("div", { class: "table-scroll" }, el("table", { class: "admin-table lab-table" }, el("caption", { class: "visually-hidden" }, "Lifters not yet in the lifting order"),
-              el("thead", null, el("tr", null, [el("th", { scope: "col" }, el("span", { class: "visually-hidden" }, "Move")), "Lifter", "Class", "Best total"].map(function (h) { return h.nodeType ? h : el("th", { scope: "col" }, h); }))),
-              el("tbody", null, unplaced.map(function (e) { return el("tr", { "data-id": e.id }, el("td", { class: "grip-cell" }, grip(e.id)), el("th", { scope: "row" }, e.name), el("td", null, (e.sex === "F" ? "W " : "M ") + e.classLabel), el("td", null, e.total === null ? "none yet" : e.total + " kg")); }))))
+              el("thead", null, el("tr", null, [el("th", { scope: "col" }, el("span", { class: "visually-hidden" }, "Move")), "Lifter", "Class", "Age class", "Best total"].map(function (h) { return h.nodeType ? h : el("th", { scope: "col" }, h); }))),
+              el("tbody", null, unplaced.map(function (e) { return el("tr", { "data-id": e.id }, el("td", { class: "grip-cell" }, grip(e.id)), el("th", { scope: "row" }, e.name), el("td", null, (e.sex === "F" ? "W " : "M ") + e.classLabel), el("td", null, e.ageClass), el("td", null, e.total === null ? "none yet" : e.total + " kg")); }))))
               : el("p", { class: "help" }, "Everyone is in. Drag a lifter here to take them out of the lifting order.")));
         }
         S.sessions.forEach(function (s) {
@@ -1149,7 +1149,7 @@
               el("h4", null, "Flight " + f.letter + " ", el("span", { class: "sex-tag" + (sx === "women" ? " f" : "") }, sx === "women" ? "Women" : sx === "men" ? "Men" : sx === "mixed" ? "Mixed" : "Empty"), " · " + f.lifters.length + " lifters"),
               problems.length ? el("p", { class: "form-error" }, "Check this flight: " + problems.join(", ") + ".") : null,
               f.lifters.length ? el("div", { class: "table-scroll" }, el("table", { class: "admin-table lab-table" }, el("caption", { class: "visually-hidden" }, "Flight " + f.letter),
-                el("thead", null, el("tr", null, [el("th", { scope: "col" }, el("span", { class: "visually-hidden" }, "Move")), "#", "Lifter", "Class", "Event", "Best total", "GL"].map(function (h) { return h.nodeType ? h : el("th", { scope: "col" }, h); }))),
+                el("thead", null, el("tr", null, [el("th", { scope: "col" }, el("span", { class: "visually-hidden" }, "Move")), "#", "Lifter", "Class", "Age class", "Event", "Best total", "GL"].map(function (h) { return h.nodeType ? h : el("th", { scope: "col" }, h); }))),
                 el("tbody", null, f.lifters.map(function (l, i) { return lifterRow(l, f, i); })))) : el("p", { class: "empty" }, "Nobody in this flight. Drag someone here.")));
           });
           kids.push(box);

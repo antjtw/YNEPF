@@ -160,3 +160,13 @@ body.dragging-lifter { user-select: none; cursor: grabbing; }
 @keyframes lo-moved { from { background: color-mix(in srgb, var(--accent) 22%, transparent); } to { background: transparent; } }
 .lab-table tr.just-moved > * { animation: lo-moved 1.4s ease-out; }
 @media (prefers-reduced-motion: reduce) { .lab-table tr.just-moved > * { animation: none; background: color-mix(in srgb, var(--accent) 12%, transparent); } }
+
+.lab-table th, .lab-table td { vertical-align: middle; }
+/* In the builder every flight's table has the same columns in the same places, so the eye can run down the page. */
+.lab-flight .lab-table:has(.grip) { table-layout: fixed; width: 100%; min-width: 40rem; }
+.lab-flight .lab-table:has(.grip) th:nth-child(1) { width: 3.25rem; }
+.lab-flight .lab-table:has(.grip) th:nth-child(2) { width: 3rem; }
+.lab-flight .lab-table:has(.grip) th:nth-child(3) { width: 28%; }
+.lab-flight .lab-table:has(.grip) th:nth-child(4) { width: 9%; }
+.lab-flight .lab-table:has(.grip) th:nth-child(5) { width: 11%; }
+.lab-flight .lab-table:has(.grip) th:nth-child(6) { width: 15%; }
