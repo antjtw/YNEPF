@@ -622,6 +622,48 @@ begin
     end loop;
   end loop;
 end $$;
+-- Publish or unpublish the lifting order. Published: the calendar's "View entries" link becomes "View lifting order" and the order is
+-- public (without lot numbers). Provisional until entry closes, final after. Entries team only.
+create or replace function public.lifting_order_publish(c uuid, publish boolean) returns text
+language plpgsql security definer set search_path = public
+as $$
+declare v_as text;
+begin
+  if not public.is_entries() then raise exception 'forbidden'; end if;
+  if publish then
+    if not exists (select 1 from public.lo_assignments a join public.lo_flights f on f.id = a.flight_id
+                   join public.lo_sessions s on s.id = f.session_id where s.competition_id = c) then
+      raise exception 'invalid:empty_order';
+    end if;
+    select case when co.entry_closes is null or co.entry_closes > now() then 'provisional' else 'final' end into v_as
+      from public.competitions co where co.id = c;
+    update public.lifting_orders set status = 'published', published_as = coalesce(v_as, 'provisional'), published_at = now() where competition_id = c;
+    return coalesce(v_as, 'provisional');
+  else
+    update public.lifting_orders set status = 'draft', published_as = null, published_at = null where competition_id = c;
+    return 'draft';
+  end if;
+end $$;
+revoke all on function public.lifting_order_publish(uuid, boolean) from public, anon;
+grant execute on function public.lifting_order_publish(uuid, boolean) to authenticated;
+
+-- What the public lifting order page reads: one row per lifter, never lot numbers, emails or dates of birth.
+create or replace view public.lifting_order_public as
+select s.competition_id, s.day, s.session_no, s.name as session_name, s.is_prime_time, s.weigh_in_at, s.lift_off_at,
+       f.letter as flight, a.position,
+       coalesce(nullif(e.display_name, ''), e.full_name) as name, e.club, wc.label as weight_class,
+       public.age_category_on(e.date_of_birth, c.start_date) as age_category,
+       e.event, e.instagram, e.openipf_url, e.best_total_kg, e.best_glp, lo.published_as
+from public.lifting_orders lo
+join public.lo_sessions s on s.competition_id = lo.competition_id
+join public.lo_flights f on f.session_id = s.id
+join public.lo_assignments a on a.flight_id = f.id
+join public.entries e on e.id = a.entry_id and e.status in ('paid', 'comped')
+join public.competitions c on c.id = lo.competition_id and c.published
+left join public.weight_classes wc on wc.id = e.weight_class_id
+where lo.status = 'published';
+grant select on public.lifting_order_public to anon, authenticated;
+
 revoke all on function public.lifting_order_save(uuid, jsonb) from public, anon;
 grant execute on function public.lifting_order_save(uuid, jsonb) to authenticated;
 
@@ -873,7 +915,8 @@ select
   case when k.entry_method = 'yne' and k.auto_full and k.slug <> '' then '/enter?c=' || k.slug else '' end as waitlist_url,
   k.lifting_order_url,
   k.openipf_url,
-  k.slug
+  k.slug,
+  exists (select 1 from public.lifting_orders lo where lo.competition_id = k.id and lo.status = 'published') as lifting_published
 from (
   select c.*, (c.entry_method = 'yne' and not c.entries_closed_manually and (c.entry_opens is null or c.entry_opens <= now())
                and (c.entry_closes is null or c.entry_closes > now()) and public.places_open(c.id) < 1) as auto_full

@@ -1237,10 +1237,12 @@
       }
       var exportBox = el("section", { "aria-labelledby": "lo-export-h", style: "margin:var(--space-4) 0" },
         el("h3", { id: "lo-export-h" }, "Exports"),
-        el("p", { class: "help" }, "Lifters are listed in lot order, women then men. Weigh-in and score sheets open in a new tab to print or save as PDF."),
+        el("p", { class: "help" }, "The weigh-in sheet is in lot order. Score sheets, rack heights and kit check follow the lifting order. Sheets open in a new tab to print or save as PDF."),
         el("div", { class: "actions" },
           btn("Weigh-in sheet", function () { if (exportReady(true)) openSheet(LEx.weighInSheet(exportSessions(), peopleMap(), c)); }, "btn-secondary"),
-          btn("Score sheet", function () { if (exportReady(true)) openSheet(LEx.scoreSheet(exportSessions(), peopleMap(), c)); }, "btn-secondary"),
+          btn("Score sheets", function () { if (exportReady(true)) openSheet(LEx.scoreSheet(exportSessions(), peopleMap(), c)); }, "btn-secondary"),
+          btn("Rack heights", function () { if (exportReady(false)) openSheet(LEx.rackSheet(exportSessions(), peopleMap(), c)); }, "btn-secondary"),
+          btn("Kit check", function () { if (exportReady(false)) openSheet(LEx.kitSheet(exportSessions(), peopleMap(), c)); }, "btn-secondary"),
           btn("OpenLifter file", olFile, "btn-secondary")),
         el("details", { class: "ol-settings", style: "margin-top:var(--space-3)" }, el("summary", null, "OpenLifter settings"),
           el("div", { class: "field" }, el("label", { for: "ol-divisions" }, "Division codes"), el("p", { class: "help", id: "ol-div-help" }, "One per line, the code after the equals sign. Each must match a division set up in the OpenLifter meet exactly, or the import fails."), divText),
@@ -1252,6 +1254,22 @@
             var next = { divisions: st.divisions, equipment: st.equipment, novice_for: nf };
             sb.from("site_settings").upsert({ key: "openlifter.settings", value: JSON.stringify(next) }).then(function (r) { if (r.error) throw r.error; olSaved = next; toast("OpenLifter settings saved."); }).catch(function (e) { toast(friendly(e), "error"); });
           }, "btn-secondary"))));
+      var published = row.status === "published", pubNote = el("p", { class: "help", id: "lo-pub-note", role: "status" });
+      function pubStatus() {
+        pubBtn.textContent = published ? "Unpublish" : "Publish";
+        pubNote.textContent = published ? "Published (" + (row.published_as === "final" ? "final" : "provisional") + "). The calendar shows View lifting order instead of View entries. Saving changes updates the public page straight away." : "Not published. The calendar shows View entries.";
+      }
+      function publish() {
+        if (!published && S.dirty) { toast("Save the order first, then publish.", "error"); return; }
+        if (!published && !S.sessions.length) { toast("Sort the entries and save first.", "error"); return; }
+        if (!window.confirm(published ? "Unpublish the lifting order? The calendar goes back to View entries." : "Publish the lifting order? Anyone can see it, without lot numbers, and the calendar swaps View entries for View lifting order.")) return;
+        pubBtn.disabled = true;
+        sb.rpc("lifting_order_publish", { c: c.id, publish: !published }).then(function (r) {
+          if (r.error) throw new Error(/invalid:empty_order/.test(r.error.message || "") ? "There is nothing saved to publish. Save the order first." : /forbidden/.test(r.error.message || "") ? "You do not have permission to publish." : friendly(r.error));
+          published = !published; row.published_as = published ? r.data : null; pubStatus(); toast(published ? "Lifting order published." : "Lifting order unpublished.");
+        }).catch(function (e) { toast(friendly(e), "error"); }).then(function () { pubBtn.disabled = false; });
+      }
+      var pubBtn = btn("Publish", publish, "btn-secondary");
       var sortBtn = btn("Sort the entries", runSort, "btn-primary"), saveBtn = btn("Save", function () { save(saveBtn); }, "btn-secondary"),
         lotBtn = btn("Draw lot numbers", drawLots, "btn-secondary"),
         lotToggle = el("div", { class: "field field-check" }, el("input", { type: "checkbox", id: "lo-show-lots" }), el("div", null, el("label", { for: "lo-show-lots" }, "Show lot numbers")));
@@ -1259,11 +1277,13 @@
       view.replaceChildren(
         el("p", { class: "panel-intro" }, "Sort the entered lifters into sessions and flights, then drag anyone to change it. Best totals come from OpenIPF. Not public yet."),
         form.el,
-        el("div", { class: "actions", style: "margin:var(--space-3) 0" }, sortBtn, lotBtn, saveBtn, statusNode),
-        lotToggle,
-        exportBox,
-        live, area);
-      status(); draw();
+        el("div", { class: "actions", style: "margin:var(--space-3) 0" }, sortBtn, saveBtn, pubBtn, statusNode),
+        pubNote,
+        live, area,
+        el("section", { "aria-labelledby": "lo-lots-h", style: "margin:var(--space-5) 0" }, el("h3", { id: "lo-lots-h" }, "Lot numbers"),
+          el("div", { class: "actions", style: "margin:var(--space-3) 0" }, lotBtn), lotToggle),
+        exportBox);
+      status(); pubStatus(); draw();
     }).catch(function (e) { view.replaceChildren(el("p", { class: "form-error" }, friendly(e))); });
   }
 

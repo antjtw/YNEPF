@@ -273,6 +273,25 @@ for (const [what, payload, msg] of [
 }
 ok(JSON.stringify(await rowsLo()) === before, "and a refused save changes nothing");
 
+// publishing
+const pubLo = (who, flag) => asUser(who, () => call("lifting_order_publish", [LO, flag]));
+const stLo = async () => (await q(`select status, published_as pa from public.lifting_orders where competition_id = '${LO}'`))[0];
+ok((await pubLo(U.editor, true)).error?.includes("forbidden"), "an editor cannot publish");
+ok(!(await pubLo(U.entries, true)).error && (await stLo()).status === "published" && (await stLo()).pa === "provisional", "the entries team can publish: provisional while entry is open");
+await db.exec("reset role");
+ok((await q(`select lifting_published lp from public.competitions_public where id = '${LO}'`))[0]?.lp === true, "the calendar view says it is published");
+await db.exec("set role anon");
+const pubRows = (await db.query(`select * from public.lifting_order_public where competition_id = '${LO}'`)).rows;
+ok(pubRows.length === 2 && !("lot_number" in pubRows[0]) && !("email" in pubRows[0]) && !("date_of_birth" in pubRows[0]) && pubRows[0].flight, "the public can read the published order, with no lot numbers, emails or birth dates");
+await db.exec("reset role");
+ok(!(await pubLo(U.entries, false)).error && (await stLo()).status === "draft", "unpublish returns it to a draft");
+await db.exec("set role anon");
+ok((await db.query(`select * from public.lifting_order_public where competition_id = '${LO}'`)).rows.length === 0, "and the public sees nothing again");
+await db.exec("reset role");
+await db.exec(`update public.competitions set entry_closes = now() - interval '1 day' where id = '${LO}'`);
+await pubLo(U.entries, true); ok((await stLo()).pa === "final", "published after entry closes it is final");
+ok((await asUser(U.entries, () => call("lifting_order_publish", [LO2, true]))).error?.includes("invalid:empty_order"), "an empty order cannot be published");
+
 // who may do what
 await db.exec("set role anon");
 ok(!(await can(`select public.waitlist_join('{}'::jsonb)`)) && !(await can(`select public.waitlist_sweep('${W}')`)) && !(await can(`select public.waitlist_make_offer('${W}'::uuid, 'x')`)), "the public cannot call the waiting list functions (only our server can)");

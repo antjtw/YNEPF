@@ -2,7 +2,7 @@
    lifting-export.js: what leaves the lifting order builder. Pure logic: no page, no database.
      * openLifterCsv  the file OpenLifter imports (columns, order and rules from the federation's spec, section 5a)
      * validateOpenLifter  a port of OpenLifter's import checks, used by the tests and shown to the team before they download
-     * weighInSheet / scoreSheet  printable pages (HTML) for the day, in lot order
+     * weighInSheet / scoreSheet / rackSheet / kitSheet  printable pages (HTML) for the day, in the federation's own layouts
    Tested in docs/entry-system/lifting-export.test.mjs.
    ========================================================================== */
 (function (root, factory) {
@@ -99,49 +99,75 @@
     return errs;
   }
 
-  // ---- printable sheets -----------------------------------------------------------------------------------------------
+  // ---- printable sheets: the federation's own layouts (weigh-in, score sheet, rack heights, kit check) -------------------
+  // Weigh-in is in lot order; the others follow the lifting order. They open in a new tab to print or save as PDF.
   function esc(s) { return String(s === null || s === undefined ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
-  var PAGE_CSS = "body{font:12px/1.35 Arial,Helvetica,sans-serif;color:#000;margin:14mm}h1{font-size:18px;margin:0 0 2px}h2{font-size:14px;margin:0 0 6px}p.sub{margin:0 0 10px;color:#333}" +
-    "table{border-collapse:collapse;width:100%;margin-bottom:6mm}th,td{border:1px solid #000;padding:5px 6px;text-align:left;vertical-align:middle}th{background:#eee;font-size:11px}" +
-    "td.blank{min-width:44px}td.n{width:34px;text-align:center;font-weight:bold}.page{page-break-after:always}.page:last-child{page-break-after:auto}" +
-    "@page{size:A4 landscape;margin:10mm}@media print{.noprint{display:none}body{margin:0}}.noprint{margin-bottom:12px;padding:8px;background:#ffd;border:1px solid #aa0}";
-  function pageShell(title, body) { return "<!doctype html><html lang=\"en-GB\"><head><meta charset=\"utf-8\"><title>" + esc(title) + "</title><style>" + PAGE_CSS + "</style></head><body><p class=\"noprint\">Use your browser's Print (Ctrl or Cmd + P) to print this or save it as a PDF.</p>" + body + "</body></html>"; }
+  var PAGE_CSS = "*{box-sizing:border-box}body{font:11px/1.3 Arial,Helvetica,sans-serif;color:#000;margin:0}section.page{padding:10mm 8mm;page-break-after:always}section.page:last-child{page-break-after:auto}" +
+    "section.port{page:port}section.land{page:land}@page port{size:A4 portrait;margin:0}@page land{size:A4 landscape;margin:0}" +
+    ".head{display:flex;justify-content:space-between;font-weight:bold;margin-bottom:6px}.head span+span{margin-left:16px}" +
+    "table{border-collapse:collapse;width:100%}th,td{border:1.5px solid #000;padding:0 5px;text-align:left;vertical-align:middle;height:7.2mm}th{background:#f2f2f2;font-size:10px;height:auto;padding:4px 5px}" +
+    "tbody tr:nth-child(even) td{background:#f6f6f6}td.c,th.c{text-align:center;padding:0 2px}th.v{writing-mode:vertical-rl;transform:rotate(180deg);text-align:left;height:20mm;padding:4px 2px}" +
+    ".sign{display:flex;gap:30mm;margin-top:8mm;font-weight:bold;page-break-inside:avoid}.sign div{min-width:62mm}.sign p{margin:0 0 5px;display:flex;align-items:flex-end;gap:6px}.sign p i{flex:1;border-bottom:1px solid #000;height:12px}" +
+    ".tick{width:9mm}.land th.c,.land td.c{min-width:9mm}.noprint{margin:8px;padding:8px;background:#ffd;border:1px solid #aa0}@media print{.noprint{display:none}}";
+  function shell(title, body) { return "<!doctype html><html lang=\"en-GB\"><head><meta charset=\"utf-8\"><title>" + esc(title) + "</title><style>" + PAGE_CSS + "</style></head><body><p class=\"noprint\">Use your browser's Print (Ctrl or Cmd + P) to print this or save it as a PDF. Turn off headers and footers, and set margins to none.</p>" + body + "</body></html>"; }
+  var MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  function dayDate(start, day) { var d = new Date(String(start).slice(0, 10) + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + (day || 1) - 1); return d.getUTCDate() + " " + MONTHS[d.getUTCMonth()] + " " + d.getUTCFullYear(); }
+  function head(left, comp, day) { return "<div class=\"head\"><div>" + left + "</div><div><span>" + esc(dayDate(comp.start_date, day)) + "</span><span>" + esc(comp.venue_name || "") + "</span></div></div>"; }
+  function sign(titles) { return "<div class=\"sign\">" + titles.map(function (t) { return "<div><p>" + esc(t) + "</p><p>Name (Print) <i></i></p><p>Signature <i></i></p><p>Category <i></i></p></div>"; }).join("") + "</div>"; }
   function byLot(a, b) { return (a.lot || 1e9) - (b.lot || 1e9); }
-  function sexName(s) { return s === "F" ? "Women" : "Men"; }
+  function cls(e) { return (e.sex === "F" ? "F" : "M") + e.classLabel; }
+  function who(e) { return e.name + (e.guest ? " (Guest)" : ""); }
+  function sessionTitle(s) { return "Session " + s.sessionNo + (s.prime ? " (prime time)" : ""); }
+  // lifters of a session in lifting order (flight by flight, as arranged), each with its flight
+  function inOrder(s, people) { var out = []; s.flights.forEach(function (f) { f.lifters.forEach(function (l) { if (people[l.id]) out.push({ f: f, l: l, e: people[l.id] }); }); }); return out; }
+  function blank(n, c) { var h = ""; for (var i = 0; i < n; i++) h += "<td" + (c ? " class=\"c\"" : "") + "></td>"; return h; }
 
-  // Weigh-in: one page per session, lifters in lot order, women then men. The empty boxes are filled in at the scales.
   function weighInSheet(sessions, people, comp) {
-    var pages = sessions.map(function (s) {
-      var rows = [];
-      s.flights.forEach(function (f) { f.lifters.slice().sort(byLot).forEach(function (l) { if (people[l.id]) rows.push({ f: f, l: l, e: people[l.id] }); }); });
-      var body = rows.map(function (r) {
-        var e = r.e, fp = e.event !== "bench_only";
-        return "<tr><td class=\"n\">" + esc(r.l.lot || "") + "</td><td>" + esc(r.f.letter) + "</td><td>" + esc(e.name) + "</td><td>" + esc((e.sex === "F" ? "F " : "M ") + e.classLabel) + "</td><td>" + esc(e.ageClass || "") + "</td><td>" + (fp ? "Full power" : "Bench only") + "</td><td>" + esc(e.club || "") + "</td><td>" + esc(e.bp || "") + "</td><td class=\"blank\"></td><td class=\"blank\"></td><td class=\"blank\"></td><td class=\"blank\"></td><td class=\"blank\"></td><td class=\"blank\"></td></tr>";
-      }).join("");
-      return "<section class=\"page\"><h1>" + esc(comp.name) + ": weigh-in</h1><p class=\"sub\">Day " + esc(s.day) + ", session " + esc(s.sessionNo) + (s.prime ? " (prime time)" : "") + " &middot; lifters in lot order</p>" +
-        "<table><thead><tr><th>Lot</th><th>Flight</th><th>Name</th><th>Class</th><th>Age class</th><th>Event</th><th>Club</th><th>BP no.</th><th>Body weight</th><th>Squat rack</th><th>Bench rack</th><th>Squat opener</th><th>Bench opener</th><th>Deadlift opener</th></tr></thead><tbody>" + body + "</tbody></table><p>Weighed in by: ______________________ &nbsp; Checked by: ______________________</p></section>";
-    });
-    return pageShell(comp.name + ": weigh-in", pages.join(""));
+    return shell(comp.name + ": weigh-in", sessions.map(function (s) {
+      var rows = inOrder(s, people).sort(function (a, b) { return byLot(a.l, b.l); });
+      return "<section class=\"page port\">" + head("<span>" + esc(comp.name) + "</span><span>" + esc(sessionTitle(s)) + "</span>", comp, s.day) +
+        "<table><thead><tr><th class=\"tick c\">&#10003;</th><th class=\"c\">Lot</th><th>Lifter name</th><th>Class</th><th>Age</th><th>Club / Team</th><th style=\"width:42%\">Comments</th></tr></thead><tbody>" +
+        rows.map(function (r) { return "<tr><td class=\"c\"></td><td class=\"c\">" + esc(r.l.lot || "") + "</td><td>" + esc(who(r.e)) + "</td><td>" + esc(cls(r.e)) + "</td><td class=\"c\">" + esc(r.e.ageCat || "") + "</td><td>" + esc(r.e.club || "") + "</td><td></td></tr>"; }).join("") +
+        "</tbody></table>" + sign(["Weigh in Official 1", "Weigh in Official 2"]) + "</section>";
+    }).join(""));
   }
 
-  // Score sheet: one page per flight, lifters in lot order, three attempts a lift, with a place for the result.
+  // One landscape page per flight, in lifting order, with the referees' signature blocks.
   function scoreSheet(sessions, people, comp) {
     var pages = [];
     sessions.forEach(function (s) {
       s.flights.forEach(function (f) {
-        var rows = f.lifters.slice().sort(byLot).filter(function (l) { return people[l.id]; });
-        var cell = function (n) { var h = ""; for (var i = 0; i < n; i++) h += "<td class=\"blank\"></td>"; return h; };
-        var body = rows.map(function (l) {
-          var e = people[l.id], fp = e.event !== "bench_only";
-          return "<tr><td class=\"n\">" + esc(l.lot || "") + "</td><td>" + esc(e.name) + "</td><td>" + esc((e.sex === "F" ? "F " : "M ") + e.classLabel) + "</td><td class=\"blank\"></td>" + (fp ? cell(3) : "<td colspan=\"3\"></td>") + cell(3) + (fp ? cell(3) : "<td colspan=\"3\"></td>") + "<td class=\"blank\"></td><td class=\"blank\"></td></tr>";
-        }).join("");
-        pages.push("<section class=\"page\"><h1>" + esc(comp.name) + ": score sheet</h1><h2>Flight " + esc(f.letter) + " &middot; " + sexName(f.lifters[0] && people[f.lifters[0].id] ? people[f.lifters[0].id].sex : "") + "</h2><p class=\"sub\">Day " + esc(s.day) + ", session " + esc(s.sessionNo) + (s.prime ? " (prime time)" : "") + "</p>" +
-          "<table><thead><tr><th>Lot</th><th>Name</th><th>Class</th><th>Body weight</th><th colspan=\"3\">Squat</th><th colspan=\"3\">Bench</th><th colspan=\"3\">Deadlift</th><th>Total</th><th>Place</th></tr></thead><tbody>" + body + "</tbody></table></section>");
+        var rows = f.lifters.filter(function (l) { return people[l.id]; });
+        var att = function (t) { return "<th class=\"c\">" + t + "</th><th class=\"c\">2</th><th class=\"c\">3</th>"; };
+        pages.push("<section class=\"page land\">" + head("<span>Flight " + esc(f.letter) + "</span><span>" + esc(comp.name) + "</span><span>" + esc(sessionTitle(s)) + "</span>", comp, s.day) +
+          "<table><thead><tr><th>Lifter name</th><th>Club</th><th class=\"c\">Lot</th><th class=\"c\">Weight class</th><th class=\"c\">Age</th><th class=\"c\">Body weight</th>" + att("Squat<br>1") + att("Bench<br>1") + "<th class=\"c\">Sub total</th>" + att("Deadlift<br>1") + "<th class=\"c\">Total</th><th class=\"c\">GLP</th><th class=\"c\">BWT cl. placing</th></tr></thead><tbody>" +
+          rows.map(function (l) { var e = people[l.id]; return "<tr><td>" + esc(who(e)) + "</td><td>" + esc(e.club || "") + "</td><td class=\"c\">" + esc(l.lot || "") + "</td><td class=\"c\">" + esc(cls(e)) + "</td><td class=\"c\">" + esc(e.ageCat || "") + "</td>" + blank(1) + blank(3) + blank(3) + blank(1) + blank(3) + blank(3) + "</tr>"; }).join("") +
+          "</tbody></table>" + sign(["Centre Referee", "Side Referee", "Side Referee"]) + "</section>");
       });
     });
-    return pageShell(comp.name + ": score sheet", pages.join(""));
+    return shell(comp.name + ": score sheets", pages.join(""));
+  }
+
+  // Rack heights: one page per session.
+  function rackSheet(sessions, people, comp) {
+    return shell(comp.name + ": rack heights", sessions.map(function (s) {
+      return "<section class=\"page port\">" + head("<span>" + esc(comp.name) + "</span><span>" + esc(sessionTitle(s)) + "</span>", comp, s.day) +
+        "<table><thead><tr><th>Name</th><th>Class</th><th>Squat rack</th><th>Squat stands</th><th>Bench rack</th><th>Safeties</th><th>Handout</th><th>Blocks</th><th>Signed</th></tr></thead><tbody>" +
+        inOrder(s, people).map(function (r) { return "<tr><td>" + esc(who(r.e)) + "</td><td class=\"c\">" + esc(cls(r.e)) + "</td>" + blank(7) + "</tr>"; }).join("") + "</tbody></table></section>";
+    }).join(""));
+  }
+
+  // Kit check: one page per session, with the technical controller's block.
+  function kitSheet(sessions, people, comp) {
+    var items = ["Singlet", "T-shirt", "Socks", "Shoes", "Belt(s)", "Wrist wraps", "Knee sleeves"];
+    return shell(comp.name + ": kit check", sessions.map(function (s) {
+      return "<section class=\"page port\">" + head("<span>" + esc(comp.name) + "</span><span>" + esc(sessionTitle(s)) + "</span>", comp, s.day) +
+        "<table><thead><tr><th>Name</th><th>Class</th>" + items.map(function (t) { return "<th class=\"v c\">" + esc(t) + "</th>"; }).join("") + "<th style=\"width:30%\">Comments</th><th>Signed</th></tr></thead><tbody>" +
+        inOrder(s, people).map(function (r) { return "<tr><td>" + esc(who(r.e)) + "</td><td class=\"c\">" + esc(cls(r.e)) + "</td>" + blank(items.length, true) + "<td></td><td></td></tr>"; }).join("") +
+        "</tbody></table>" + sign(["Technical Controller"]) + "</section>";
+    }).join(""));
   }
 
   return { COLUMNS: COLUMNS, DEFAULTS: DEFAULTS, defaultDivisionCode: defaultDivisionCode, divisionFor: divisionFor, ageOn: ageOn, clean: clean,
-    openLifterRows: openLifterRows, openLifterCsv: openLifterCsv, validateOpenLifter: validateOpenLifter, weighInSheet: weighInSheet, scoreSheet: scoreSheet };
+    openLifterRows: openLifterRows, openLifterCsv: openLifterCsv, validateOpenLifter: validateOpenLifter, weighInSheet: weighInSheet, scoreSheet: scoreSheet, rackSheet: rackSheet, kitSheet: kitSheet };
 });

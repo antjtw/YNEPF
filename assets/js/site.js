@@ -327,8 +327,8 @@
         waitlist: state === "full" && c.waitlist_url ? (c.waitlist_url.charAt(0) === "/"
           ? el("a", { href: c.waitlist_url, "aria-label": "Join the waiting list for " + c.name }, "Join the waiting list")
           : el("a", { href: c.waitlist_url, target: "_blank", rel: "noopener", "aria-label": "Join the waiting list for " + c.name + " (opens in a new tab)" }, "Join the waiting list ", Y_EXT())) : null,
-        order: c.lifting_order_url ? el("a", { href: liftingHref(c) }, "View lifting order") : null,
-        entries: c.has_entries && c.slug ? el("a", { href: "/entries?c=" + encodeURIComponent(c.slug) }, "View entries") : null,
+        order: c.lifting_order_url || c.lifting_published ? el("a", { href: liftingHref(c) }, "View lifting order") : null,
+        entries: c.has_entries && c.slug && !c.lifting_published ? el("a", { href: "/entries?c=" + encodeURIComponent(c.slug) }, "View entries") : null,
         results: c.openipf_url ? el("a", { href: c.openipf_url, target: "_blank", rel: "noopener",
           "aria-label": "View results on OpenIPF for " + c.name + " (opens in a new tab)" }, "View results on OpenIPF ", Y_EXT()) : null
       };

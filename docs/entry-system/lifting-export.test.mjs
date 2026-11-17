@@ -56,11 +56,19 @@ const big = X.openLifterCsv(X.openLifterRows(arr, ppl, comp, {}));
 assert.deepStrictEqual(X.validateOpenLifter(big, { days: 2, platforms: 1 }), [], "96 lifters pass the validation");
 assert.strictEqual(big.trim().split("\r\n").length, 97);
 
-// printable sheets
-const weigh = X.weighInSheet(arr, ppl, { name: "TEST <Open>" }), score = X.scoreSheet(arr, ppl, comp);
-assert(weigh.includes("TEST &lt;Open&gt;: weigh-in") && !weigh.includes("<Open>"), "names are escaped");
+// printable sheets, in the federation's layouts
+const cmp = { name: "TEST <Open>", start_date: "2026-11-07", venue_name: "Riccall Regen Centre" };
+const weigh = X.weighInSheet(arr, ppl, cmp), score = X.scoreSheet(arr, ppl, cmp), rack = X.rackSheet(arr, ppl, cmp), kit = X.kitSheet(arr, ppl, cmp);
+assert(weigh.includes("TEST &lt;Open&gt;") && !weigh.includes("<Open>"), "names are escaped");
 assert.strictEqual((weigh.match(/<section/g) || []).length, arr.length, "one weigh-in page per session");
+assert.strictEqual((rack.match(/<section/g) || []).length, arr.length, "one rack heights page per session");
+assert.strictEqual((kit.match(/<section/g) || []).length, arr.length, "one kit check page per session");
 assert.strictEqual((score.match(/<section/g) || []).length, flights.length, "one score sheet per flight");
-const firstFlightLots = [...score.split("</section>")[0].matchAll(/<td class="n">(\d+)<\/td>/g)].map((m) => +m[1]);
-assert.deepStrictEqual(firstFlightLots, [...firstFlightLots].sort((a, b) => a - b), "score sheet lifters are in lot order");
+assert(weigh.includes("7 November 2026") && weigh.includes("Riccall Regen Centre") && weigh.includes("Weigh in Official 2") && weigh.includes("Club / Team"), "weigh-in has the date, venue and two officials");
+assert(score.includes("Centre Referee") && score.includes("BWT cl. placing") && (score.match(/Side Referee/g) || []).length >= 2 * flights.length, "score sheet has the referees' blocks");
+assert(kit.includes("Technical Controller") && kit.includes("Knee sleeves") && rack.includes("Squat stands") && rack.includes("Blocks"), "kit check and rack heights columns");
+const firstLots = [...weigh.split("</section>")[0].matchAll(/<td class="c">(\d+)<\/td><td>/g)].map((m) => +m[1]);
+assert.deepStrictEqual(firstLots, [...firstLots].sort((a, b) => a - b), "weigh-in is in lot order");
+const guestPage = X.weighInSheet(arr, { L0: { ...ppl.L0, guest: true } }, cmp);
+assert(X.weighInSheet([{ day: 1, sessionNo: 1, flights: [{ letter: "A", lifters: [{ id: "g", lot: 1 }] }] }], { g: { name: "Guest Gus", sex: "M", classLabel: "74", ageCat: "J", guest: true } }, cmp).includes("Guest Gus (Guest)") && guestPage, "guests are marked");
 console.log("lifting export tests passed");
