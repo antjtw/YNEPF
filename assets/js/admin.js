@@ -1291,7 +1291,7 @@
         }).catch(function (e) { toast(friendly(e), "error"); }).then(function () { pubBtn.disabled = false; });
       }
       var pubBtn = btn("Publish", publish, "btn-secondary");
-      function previewUrl() { return "../" + (c.slug ? "lifting-order/" + encodeURIComponent(c.slug) : "lifting/?c=" + encodeURIComponent(c.id)) + (c.slug ? "?preview=1" : "&preview=1"); }
+      function previewUrl() { return "../lifting/?c=" + encodeURIComponent(c.slug || c.id) + "&preview=1"; }        // the plain address: it does not depend on the /lifting-order rewrite
       var previewLink = el("a", { class: "btn btn-sm btn-secondary", href: previewUrl(), target: "_blank", rel: "noopener" }, "Preview ", el("span", { class: "visually-hidden" }, "(opens in a new tab)"));
       var sortBtn = btn("Sort the entries", runSort, "btn-primary"), saveBtn = btn("Save", function () { save(saveBtn); }, "btn-secondary"),
         lotBtn = btn("Draw lot numbers", drawLots, "btn-secondary"),
