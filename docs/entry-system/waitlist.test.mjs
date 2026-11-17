@@ -181,6 +181,67 @@ ok((await pstart({ email: pend[0].email, invite: "new-token-abcdef" })).entry_id
 await call("priority_unissue", [pend[1].id]);
 rowsP = await inv(); ok(rowsP.find((r) => r.email === pend[1].email).pending, "an email that failed to send goes back to waiting, to be tried again");
 
+// ---- OpenIPF lookup: pending list, saving results, qualification ----
+await db.exec("reset role");
+const OI = "66666666-6666-6666-6666-666666666666";
+await db.exec(`insert into public.competitions (id,name,start_date,capacity,published,slug,entry_method) values ('${OI}','Qualifier Open','2027-06-12',20,true,'qualifier-open','yne')`);
+const wc83 = (await q(`select id from public.weight_classes where sex='M' and label='83'`))[0].id;
+const setQual = (o, who = U.entries) => asUser(who, () => call("save_entry_settings", [OI, JSON.stringify({ entry_method: "yne", events: ["full_power"], equipment: ["classic"], prices: { full_power: 6000 }, ...o })]));
+const mkOi = async (n, o = {}) => {
+  const eid = `00000000-0000-0000-0000-0000000009${String(n).padStart(2, "0")}`;
+  const e = { status: "paid", url: "https://www.openipf.org/u/lifter" + n, ...o };
+  await db.exec(`insert into public.entries (id, competition_id, email, full_name, date_of_birth, sex, status, event, equipment, weight_class_id, openipf_url, paid_at) values ('${eid}','${OI}','oi${n}@x.com','Lifter ${n}','1990-01-01','M','${e.status}','full_power','classic','${wc83}','${e.url}', now())`);
+  return eid;
+};
+const saveOi = (eid, o) => call("openipf_save", [eid, JSON.stringify(o)]);
+const oi = async (eid) => (await q(`select openipf_status s, openipf_name nm, best_total_kg::float t, best_glp::float g, qualification ql, openipf_tries tr, openipf_slug sl from public.entries where id = '${eid}'`))[0];
+const eA = await mkOi(1), eB = await mkOi(2, { url: "" }), eC = await mkOi(3, { status: "held" });
+let pendingOi = (await q(`select public.openipf_pending(10) r`))[0].r;
+ok(pendingOi.length === 1 && pendingOi[0].id === eA && pendingOi[0].url.includes("lifter1") && pendingOi[0].comp_start === "2027-06-12" && pendingOi[0].event === "full_power", "only paid entries with a link are waiting to be looked up: " + JSON.stringify(pendingOi));
+ok((await oi(eB)).s === "skipped" && (await oi(eC)).s === "pending", "a paid entry with no link is skipped; one still being paid for waits");
+// a qualifying standard of GL points
+ok((await setQual({ qualification: "glp", qualification_glp: 100 }, U.editor)).error?.includes("forbidden"), "only the entries team sets the standard");
+ok((await setQual({ qualification: "glp" })).error?.includes("invalid:qualification_glp") && (await setQual({ qualification: "nonsense" })).error?.includes("invalid:qualification"), "a GL standard needs a sensible number; unknown kinds are refused");
+const setGlp = await setQual({ qualification: "glp", qualification_glp: 100 }); ok(!setGlp?.error, "set a minimum of 100 GL points: " + JSON.stringify(setGlp));
+ok((await q(`select qualification_mode m, qualification_glp::float g, openipf_mode o from public.entry_settings where competition_id = '${OI}'`))[0].m === "glp", "the standard is saved, and the link becomes required");
+await saveOi(eA, { status: "found", slug: "lifter1", name: "Agata Sitko", best_total_kg: 612.5, best_glp: 133.37, note: "" });
+let ra = await oi(eA); ok(ra.s === "found" && ra.t === 612.5 && ra.g === 133.37 && ra.nm === "Agata Sitko" && ra.ql === "met", "found: best total, GL points and name stored, and 133.37 meets 100: " + JSON.stringify(ra));
+const eD = await mkOi(4); await saveOi(eD, { status: "found", slug: "lifter4", name: "Low Lifter", best_total_kg: 400, best_glp: 80 });
+ok((await oi(eD)).ql === "not_met", "80 GL points does not meet 100");
+const eE = await mkOi(5); await saveOi(eE, { status: "found", slug: "lifter5", name: "New Lifter", best_total_kg: null, best_glp: null, note: "No results for this event and kit in the last 12 months" });
+ok((await oi(eE)).ql === "not_met", "a profile with no recent result for this event is not qualified");
+const eF = await mkOi(6); await saveOi(eF, { status: "not_found", note: "No OpenIPF profile at that address" });
+ok((await oi(eF)).s === "not_found" && (await oi(eF)).ql === "unknown", "no profile: qualification cannot be worked out (unknown)");
+// errors are retried later, a few times
+const eG = await mkOi(7); await saveOi(eG, { status: "error", note: "OpenIPF did not answer" });
+ok((await oi(eG)).s === "error" && (await oi(eG)).tr === 1, "an error is recorded, with a count");
+ok(!(await q(`select public.openipf_pending(10) r`))[0].r.some((x) => x.id === eG), "and not retried straight away");
+await db.exec(`update public.entries set openipf_checked_at = now() - interval '1 hour' where id = '${eG}'`);
+ok((await q(`select public.openipf_pending(10) r`))[0].r.some((x) => x.id === eG), "an hour later it is tried again");
+await db.exec(`update public.entries set openipf_tries = 5 where id = '${eG}'`);
+ok(!(await q(`select public.openipf_pending(10) r`))[0].r.some((x) => x.id === eG), "after five failures it stops trying (the entries team can press check again)");
+// changing the standard re-works every entry
+await setQual({ qualification: "glp", qualification_glp: 70 });
+ok((await oi(eD)).ql === "met", "lowering the standard to 70 makes the 80 pointer qualify straight away");
+// qualifying totals by weight class
+ok((await setQual({ qualification: "totals", qualifying_totals: [{ sex: "M", label: "999", total_kg: 400 }] })).error?.includes("invalid:qualifying_class"), "a weight class that does not exist is refused");
+await setQual({ qualification: "totals", qualifying_totals: [{ sex: "M", label: "83", total_kg: 450 }] });
+ok((await oi(eA)).ql === "met" && (await oi(eD)).ql === "not_met", "totals: 612.5 beats 450, 400 does not");
+await setQual({ qualification: "totals", qualifying_totals: [{ sex: "F", label: "63", total_kg: 300 }] });
+ok((await oi(eA)).ql === "unknown", "no standard set for the lifter's class: unknown");
+await setQual({ qualification: "none" });
+ok((await oi(eA)).ql === "unknown", "no standard: nothing to qualify against");
+// changing the link starts again
+await db.exec(`update public.entries set openipf_url = 'https://www.openipf.org/u/other' where id = '${eA}'`);
+ra = await oi(eA); ok(ra.s === "pending" && ra.t === null && ra.nm === "" && ra.tr === 0, "a new link clears the old result and queues a fresh lookup");
+await db.exec(`update public.entries set openipf_url = '' where id = '${eA}'`);
+ok((await oi(eA)).s === "skipped", "removing the link skips the lookup");
+// the entries team can ask again
+await db.exec(`update public.entries set openipf_url = 'https://www.openipf.org/u/lifter1', openipf_status = 'found' where id = '${eA}'`);
+ok((await asUser(U.editor, () => call("openipf_recheck", [eA]))).error?.includes("forbidden"), "an editor cannot ask for a recheck");
+await asUser(U.entries, () => call("openipf_recheck", [eA]));
+ok((await oi(eA)).s === "pending", "the entries team can: it goes back to pending");
+
 // who may do what
 await db.exec("set role anon");
 ok(!(await can(`select public.waitlist_join('{}'::jsonb)`)) && !(await can(`select public.waitlist_sweep('${W}')`)) && !(await can(`select public.waitlist_make_offer('${W}'::uuid, 'x')`)), "the public cannot call the waiting list functions (only our server can)");

@@ -36,7 +36,7 @@ Nothing in here has been built yet. The database design has been **tested** in a
 | Names | Full names on the public entries and waiting lists, as we have always done, with a clear line on the form saying so. |
 | Roles | Admin, Entries team, Editor, Contributor (see section 6). The entries team can refund. |
 | Places left | A short poll (the page asks "how many places left?" every few seconds). Not live connections. |
-| OpenIPF | The form only checks the link looks right. After payment, a background job fetches the lifter's results and stores their best total and GL points. |
+| OpenIPF | The form only checks the link looks right. After payment, a background job (the waitlist function's timer) reads the lifter's results from openipf.org (`/api/liftercsv/<name>`) and stores their best total and GL points over the 12 months before the competition, for the same event and kit, with the name on the profile (so a wrong profile is noticed). A competition can set a qualifying standard: none, link required, a minimum GL score, or a qualifying total per weight class. Entries below it are tagged for the entries team to decide; nothing is refused automatically. |
 | Stripe fees | **The federation absorbs them.** They come out of the federation's share, never the host's or the photographer's. |
 | Prime time | One session with two flights (women, men), up to **14 lifters in each**. If bench only lifters are in prime time (unlikely) the same rule as elsewhere applies: up to 20 in a flight. |
 | Guardian details | Only asked for, stored and shown when the lifter is **under 18 on the competition day**. |

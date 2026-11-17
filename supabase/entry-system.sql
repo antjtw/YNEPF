@@ -478,6 +478,11 @@ alter table public.invites add column if not exists sent_at timestamptz;
 alter table public.invites alter column token_hash drop not null;
 update public.invites set sent_at = now() where sent_at is null and token_hash is not null;     -- links made by hand earlier count as sent
 
+-- OpenIPF lookup: what the background lookup found (see section "OpenIPF" below).
+alter table public.entries add column if not exists openipf_name text not null default '';       -- the name on the OpenIPF profile, to check it is the right person
+alter table public.entries add column if not exists openipf_note text not null default '';
+alter table public.entries add column if not exists openipf_tries integer not null default 0;
+
 alter table public.entries add column if not exists waiting_id uuid references public.waiting_list (id) on delete set null;
 
 -- A place offered to someone on the waiting list is theirs for the offer window, so it counts as taken.
@@ -1272,6 +1277,94 @@ do $$ begin
   end if;
 end $$;
 
+-- ---------------------------------------------------------------------------
+-- OpenIPF: after an entry is paid, a background job reads the lifter's results from openipf.org and stores their best total and GL
+-- points over the 12 months before the competition (for the same event and kit). The entry is then checked against the competition's
+-- qualifying standard. The job is in the waitlist Edge Function (it runs on the same timer). Functions here are for the service role,
+-- except openipf_recheck (entries team).
+-- ---------------------------------------------------------------------------
+-- Changing the link starts the lookup again.
+create or replace function public.entries_openipf_reset() returns trigger
+language plpgsql as $$
+begin
+  if new.openipf_url is distinct from old.openipf_url then
+    new.openipf_status := case when btrim(new.openipf_url) = '' then 'skipped' else 'pending' end;
+    new.openipf_slug := ''; new.openipf_name := ''; new.openipf_note := ''; new.openipf_tries := 0;
+    new.best_total_kg := null; new.best_glp := null; new.openipf_checked_at := null; new.qualification := 'unknown';
+  end if;
+  return new;
+end $$;
+drop trigger if exists entries_openipf_reset on public.entries;
+create trigger entries_openipf_reset before update of openipf_url on public.entries for each row execute function public.entries_openipf_reset();
+
+-- Does this entry meet the competition's qualifying standard? 'unknown' when there is no standard or nothing found yet.
+create or replace function public.qualification_of(eid uuid) returns text
+language plpgsql stable security definer set search_path = public
+as $$
+declare e public.entries%rowtype; s public.entry_settings%rowtype; need numeric;
+begin
+  select * into e from public.entries where id = eid;
+  if not found then return 'unknown'; end if;
+  select * into s from public.entry_settings where competition_id = e.competition_id;
+  if not found or s.qualification_mode = 'none' or e.openipf_status <> 'found' then return 'unknown'; end if;
+  if s.qualification_mode = 'glp' then
+    if s.qualification_glp is null then return 'unknown'; end if;
+    return case when e.best_glp is not null and e.best_glp >= s.qualification_glp then 'met' else 'not_met' end;
+  end if;
+  select q.total_kg into need from public.qualifying_totals q where q.competition_id = e.competition_id and q.weight_class_id = e.weight_class_id;
+  if need is null then return 'unknown'; end if;
+  return case when e.best_total_kg is not null and e.best_total_kg >= need then 'met' else 'not_met' end;
+end $$;
+
+create or replace function public.recompute_qualification(c uuid) returns void
+language sql security definer set search_path = public
+as $$ update public.entries e set qualification = public.qualification_of(e.id) where e.competition_id = c $$;
+
+-- Entries waiting for a lookup (paid or free, with a link). Entries with no link are marked skipped.
+create or replace function public.openipf_pending(max_rows integer default 10) returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+begin
+  update public.entries set openipf_status = 'skipped'
+    where openipf_status = 'pending' and btrim(openipf_url) = '' and status in ('paid', 'comped');
+  return coalesce((select jsonb_agg(x) from (
+    select e.id, e.openipf_url as url, e.full_name as name, e.event, e.equipment, e.sex, k.start_date as comp_start
+      from public.entries e join public.competitions k on k.id = e.competition_id
+     where e.status in ('paid', 'comped') and btrim(e.openipf_url) <> ''
+       and (e.openipf_status = 'pending' or (e.openipf_status = 'error' and e.openipf_tries < 5 and e.openipf_checked_at < now() - interval '30 minutes'))
+     order by e.paid_at nulls last limit greatest(max_rows, 1)) x), '[]'::jsonb);
+end $$;
+
+-- Stores what the lookup found. p = {status: 'found' | 'not_found' | 'error', slug, name, best_total_kg, best_glp, note}
+create or replace function public.openipf_save(eid uuid, p jsonb) returns void
+language plpgsql security definer set search_path = public
+as $$
+declare st text := p->>'status';
+begin
+  if st not in ('found', 'not_found', 'error') then raise exception 'invalid:status'; end if;
+  update public.entries set openipf_status = st, openipf_slug = left(coalesce(p->>'slug', ''), 120), openipf_name = left(coalesce(p->>'name', ''), 160),
+      best_total_kg = nullif(p->>'best_total_kg', '')::numeric, best_glp = nullif(p->>'best_glp', '')::numeric, openipf_note = left(coalesce(p->>'note', ''), 300),
+      openipf_tries = case when st = 'error' then openipf_tries + 1 else 0 end, openipf_checked_at = now()
+    where id = eid;
+  update public.entries set qualification = public.qualification_of(eid) where id = eid;
+end $$;
+
+-- The entries team can ask for a fresh lookup of one entry.
+create or replace function public.openipf_recheck(eid uuid) returns void
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if not public.is_entries() then raise exception 'forbidden'; end if;
+  update public.entries set openipf_status = case when btrim(openipf_url) = '' then 'skipped' else 'pending' end, openipf_tries = 0, openipf_note = '' where id = eid;
+end $$;
+revoke all on function public.recompute_qualification(uuid), public.openipf_pending(integer), public.openipf_save(uuid, jsonb), public.qualification_of(uuid), public.openipf_recheck(uuid) from public, anon, authenticated;
+grant execute on function public.openipf_recheck(uuid) to authenticated;
+do $$ begin
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    grant execute on function public.recompute_qualification(uuid), public.openipf_pending(integer), public.openipf_save(uuid, jsonb), public.qualification_of(uuid) to service_role;
+  end if;
+end $$;
+
 -- Marks an entry paid once Stripe confirms the payment. Stripe's checkout lasts longer than our hold,
 -- so a payment can arrive after the hold ran out: it is accepted if a place is still free, otherwise
 -- the caller refunds it ('no_place'). Safe to call twice.
@@ -1332,8 +1425,14 @@ declare
   v_guest_days integer := coalesce((p->>'guest_delay_days')::int, 14);
   v_offer_hours integer := coalesce((p->>'offer_window_hours')::int, 48);
   v_priority_hours integer := coalesce((p->>'priority_hours')::int, 24);
-  v_ipf text := case when coalesce((p->>'openipf_required')::boolean, false) then 'required' else 'optional' end;
+  -- Qualification: none | link (the OpenIPF link is required, nothing is checked) | glp (a minimum GL score) | totals (a qualifying total per weight class).
+  v_qual text := coalesce(nullif(p->>'qualification', ''), case when coalesce((p->>'openipf_required')::boolean, false) then 'link' else 'none' end);
+  v_ipf text;
+  v_glp numeric := nullif(p->>'qualification_glp', '')::numeric;
+  v_q jsonb; v_wc uuid;
 begin
+  if v_qual not in ('none', 'link', 'glp', 'totals') then raise exception 'invalid:qualification'; end if;
+  v_ipf := case when v_qual = 'none' then 'optional' else 'required' end;
   if not public.is_entries() then raise exception 'forbidden'; end if;
   if not exists (select 1 from public.competitions where id = c) then raise exception 'not_found'; end if;
   if v_method not in ('yne', 'external') then raise exception 'invalid:entry_method'; end if;
@@ -1351,19 +1450,33 @@ begin
     if 'bench_only' = any (v_events) and (v_bench is null or v_bench < 1) then raise exception 'invalid:price_bench_only'; end if;
     if v_sj is not null and v_sj < 1 then raise exception 'invalid:price_sub_junior'; end if;
     if coalesce((select capacity from public.competitions where id = c), 0) < 1 then raise exception 'invalid:capacity'; end if;
+    if v_qual = 'glp' and (v_glp is null or v_glp <= 0 or v_glp > 300) then raise exception 'invalid:qualification_glp'; end if;
   end if;
 
   update public.competitions set entry_method = v_method,
     entries_closed_manually = coalesce((p->>'entries_closed_manually')::boolean, false),
     is_franchise = coalesce((p->>'is_franchise')::boolean, is_franchise)
     where id = c;
-  insert into public.entry_settings (competition_id, events, equipment, hold_minutes, openipf_mode, guest_delay_days, offer_window_hours, priority_hours, updated_at)
+  insert into public.entry_settings (competition_id, events, equipment, hold_minutes, openipf_mode, qualification_mode, qualification_glp, guest_delay_days, offer_window_hours, priority_hours, updated_at)
     values (c, case when cardinality(v_events) = 0 then array['full_power', 'bench_only'] else v_events end,
             case when cardinality(v_equip) = 0 then array['classic', 'equipped'] else v_equip end,
-            v_hold, v_ipf, v_guest_days, least(greatest(v_offer_hours, 1), 168), least(greatest(v_priority_hours, 1), 336), now())
+            v_hold, v_ipf, case when v_qual in ('glp', 'totals') then v_qual else 'none' end, case when v_qual = 'glp' then v_glp end, v_guest_days, least(greatest(v_offer_hours, 1), 168), least(greatest(v_priority_hours, 1), 336), now())
     on conflict (competition_id) do update set events = excluded.events, equipment = excluded.equipment,
-      hold_minutes = excluded.hold_minutes, openipf_mode = excluded.openipf_mode, guest_delay_days = excluded.guest_delay_days,
+      hold_minutes = excluded.hold_minutes, openipf_mode = excluded.openipf_mode, qualification_mode = excluded.qualification_mode, qualification_glp = excluded.qualification_glp, guest_delay_days = excluded.guest_delay_days,
       offer_window_hours = excluded.offer_window_hours, priority_hours = excluded.priority_hours, updated_at = now();
+
+  -- Qualifying totals by weight class (only when that is the chosen standard). p->'qualifying_totals' = [{"sex": "M", "label": "83", "total_kg": 450}]
+  if v_qual = 'totals' and jsonb_typeof(p->'qualifying_totals') = 'array' then
+    delete from public.qualifying_totals where competition_id = c;
+    for v_q in select * from jsonb_array_elements(p->'qualifying_totals') loop
+      select w.id into v_wc from public.weight_classes w where w.sex = v_q->>'sex' and w.label = v_q->>'label' and w.active;
+      if v_wc is null then raise exception 'invalid:qualifying_class'; end if;
+      if coalesce((v_q->>'total_kg')::numeric, 0) <= 0 or (v_q->>'total_kg')::numeric > 1500 then raise exception 'invalid:qualifying_total'; end if;
+      insert into public.qualifying_totals (competition_id, weight_class_id, total_kg) values (c, v_wc, (v_q->>'total_kg')::numeric)
+        on conflict (competition_id, weight_class_id) do update set total_kg = excluded.total_kg;
+    end loop;
+  end if;
+  perform public.recompute_qualification(c);
 
   if v_method = 'yne' then
     delete from public.price_rules where competition_id = c;

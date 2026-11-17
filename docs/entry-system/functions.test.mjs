@@ -84,4 +84,35 @@ assert(es.validEntry("123e4567-e89b-12d3-a456-426614174000") && !es.validEntry("
   assert.strictEqual(wl.errorCode("ERROR: not_full\nCONTEXT"), "not_full"); assert.strictEqual(wl.errorCode("boom"), "unknown");
   let n = 0; for (let i = 0; i < 10; i++) if (wl.allowTry("k", 1000)) n++; assert.strictEqual(n, 6, "joining is rate limited");
 }
+
+{ // OpenIPF lookup, tested on a real results file (docs/entry-system/fixtures/openipf-agatasitko.csv, public OpenIPF data)
+  const fs = await import("node:fs");
+  const wl = await import("../../supabase/functions/waitlist/index.ts");
+  const csv = fs.readFileSync(new URL("./fixtures/openipf-agatasitko.csv", import.meta.url), "utf8");
+  assert.strictEqual(wl.openipfSlug("https://www.openipf.org/u/AgataSitko"), "agatasitko", "profile address -> name");
+  assert.strictEqual(wl.openipfSlug(" http://openipf.org/u/agata.sitko-1/?x=1 "), "agata.sitko-1");
+  assert.strictEqual(wl.openipfSlug("https://www.openpowerlifting.org/u/agatasitko"), null, "a different site is not accepted");
+  assert.strictEqual(wl.openipfSlug("https://www.openipf.org/meet/ipf/2503"), null, "a meet page is not a lifter");
+  const rows = wl.parseCsv(csv);
+  assert(rows.length === 44 && rows[0].Name === "Agata Sitko" && rows[0].TotalKg === "612.5" && rows[0].Goodlift === "133.37", "the CSV is read: " + rows.length);
+  assert.deepStrictEqual(wl.parseCsv('a,b\n"x, y","say ""hi"""\n'), [{ a: "x, y", b: 'say "hi"' }], "quoted fields, commas and doubled quotes");
+  const full = wl.summariseResults(rows, { event: "full_power", equipment: "classic", compStart: "2025-09-01" });
+  assert(full.bestTotal === 635 && full.bestGlp === 133.37 && full.count === 6, "best of the last 12 months before 1 Sept 2025: " + JSON.stringify(full));
+  const before = wl.summariseResults(rows, { event: "full_power", equipment: "classic", compStart: "2025-02-21" });
+  assert.strictEqual(before.bestTotal, 628, "a result after the competition date (635 on 22 Feb) does not count: " + JSON.stringify(before));
+  assert.strictEqual(wl.summariseResults(rows, { event: "bench_only", equipment: "classic", compStart: "2025-01-01" }).bestTotal, 135, "bench only looks at bench results");
+  assert.strictEqual(wl.summariseResults(rows, { event: "full_power", equipment: "equipped", compStart: "2025-09-01" }).count, 0, "equipped looks at equipped results only");
+  assert.strictEqual(wl.summariseResults(rows, { event: "full_power", equipment: "classic", compStart: "2030-01-01" }).count, 0, "results more than 12 months old do not count");
+  assert(wl.namesMatch("Agata Sitko", "Agata Sitko") && wl.namesMatch("Agata Sitko", "Agata Sitko #1") && wl.namesMatch("Agata Maria Sitko", "Agata Sitko") && wl.namesMatch("Agáta Sitko", "agata sitko"), "same person, allowing middle names, accents and #1");
+  assert(!wl.namesMatch("A Sitko", "Agata Sitko") && !wl.namesMatch("Jane Smith", "Agata Sitko") && !wl.namesMatch("", "Agata Sitko"), "different people do not match");
+  const ok200 = async () => new Response(csv, { status: 200 });
+  const opt = { event: "full_power", equipment: "classic", compStart: "2025-09-01", entryName: "Agata Sitko" };
+  let r = await wl.lookupLifter("agatasitko", opt, ok200);
+  assert(r.status === "found" && r.best_total_kg === 635 && r.best_glp === 133.37 && r.name === "Agata Sitko" && r.note === "", "found: " + JSON.stringify(r));
+  r = await wl.lookupLifter("agatasitko", { ...opt, entryName: "Someone Else" }, ok200); assert(r.status === "found" && /does not look like the entry name/.test(r.note), "a different name is flagged: " + r.note);
+  r = await wl.lookupLifter("agatasitko", { ...opt, equipment: "equipped" }, ok200); assert(r.status === "found" && r.best_total_kg === null && /No full power equipped results/.test(r.note), "no recent results of that kind is said plainly: " + r.note);
+  r = await wl.lookupLifter("nobody", opt, async () => new Response("404", { status: 404 })); assert.strictEqual(r.status, "not_found", "404 = no such profile");
+  r = await wl.lookupLifter("x", opt, async () => new Response("oops", { status: 503 })); assert.strictEqual(r.status, "error", "a server error is retried later");
+  r = await wl.lookupLifter("x", opt, async () => { throw new Error("offline"); }); assert.strictEqual(r.status, "error", "no connection is retried later");
+}
 console.log("function helper tests passed");

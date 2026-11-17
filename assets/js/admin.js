@@ -302,7 +302,7 @@
   var STATE_LABEL = { archived: "Past", open: "Entry open", closed: "Entry closed", full: "Entries full", soon: "Entry not open yet", none: "No entry set" };
   var ENTRY_ERRORS = {
     "invalid:events": "Choose at least one event.", "invalid:equipment": "Choose at least one kind of equipment.",
-    "invalid:hold_minutes": "The hold must be between 5 and 30 minutes.", "invalid:offer_window_hours": "A waiting list offer must last between 1 and 168 hours.", "invalid:priority_hours": "Priority entry must start between 1 and 336 hours before general entry.", "invalid:guest_delay_days": "Guest entry delay must be between 0 and 90 days.",
+    "invalid:hold_minutes": "The hold must be between 5 and 30 minutes.", "invalid:offer_window_hours": "A waiting list offer must last between 1 and 168 hours.", "invalid:qualification_glp": "Enter the minimum GL points, a number above 0.", "invalid:qualifying_class": "One of the qualifying total lines uses a weight class we do not have. Check the classes, like M 83 or F 63.", "invalid:qualifying_total": "Each qualifying total must be a number of kg above 0.", "invalid:priority_hours": "Priority entry must start between 1 and 336 hours before general entry.", "invalid:guest_delay_days": "Guest entry delay must be between 0 and 90 days.",
     "invalid:price_full_power": "Set a full power price of more than £0.", "invalid:price_bench_only": "Set a bench only price of more than £0.",
     "invalid:price_sub_junior": "The sub-junior price must be more than £0, or left empty.", "invalid:capacity": "Set the number of spaces first.",
     forbidden: "You do not have permission to change entry settings."
@@ -537,12 +537,29 @@
     };
   }
 
+  // Qualifying totals are typed one per line ("M 83: 450") and kept per weight class.
+  function parseTotals(text) {
+    var list = [], bad = null;
+    String(text || "").split(/\r?\n/).forEach(function (line) {
+      line = line.trim(); if (!line || bad) return;
+      var m = line.match(/^([MFmf])\s*([0-9]+\+?)\s*[:=,\s]\s*([0-9]+(?:\.[0-9]+)?)\s*(?:kg)?$/);
+      if (!m) { bad = line; return; }
+      list.push({ sex: m[1].toUpperCase(), label: m[2], total_kg: Number(m[3]) });
+    });
+    return { list: list, bad: bad };
+  }
+  function totalsText(rows) {
+    return (rows || []).map(function (r) { var w = r.weight_classes || {}; return { sex: w.sex || "", label: w.label || "", order: w.sort_order || 0, kg: Number(r.total_kg) }; })
+      .sort(function (p, q) { return p.sex < q.sex ? 1 : p.sex > q.sex ? -1 : p.order - q.order; })      // men first, light to heavy
+      .map(function (r) { return r.sex + " " + r.label + ": " + r.kg; }).join("\n");
+  }
+
   function renderCompetitionForm(view, c, isNew) {
     var onlyEntry = !canComp() && canEntry();
     var usualOpen = c.start_date && Y.toLondonInput(c.entry_opens) === Y.addDays(c.start_date, -56) + "T09:00";
     var usualClose = c.start_date && Y.toLondonInput(c.entry_closes) === Y.addDays(c.start_date, -21) + "T12:00";
     var rules = [];
-    var settings = {}, prices = [];
+    var settings = {}, prices = [], qtotals = [];
     function fields() {
       var E = function (o) { return Object.assign({ owner: "entry" }, o); }, C = function (o) { return Object.assign({ owner: "comp" }, o); };
       var isOnline = function (v) { return v.method === "online"; };
@@ -583,7 +600,13 @@
         E({ name: "p_bench", label: "Bench only price (£)", type: "number", min: "0", half: true, show: isOnline }),
         E({ name: "p_sj", label: "Sub-junior price, any event (£, optional)", type: "number", min: "0", show: isOnline, help: "If set, sub-juniors pay this whatever they lift." }),
         E({ name: "is_franchise", label: "This is a franchise competition (run by a host)", type: "checkbox", show: isOnline, help: "Tick it when a host runs the competition: they receive the entry fee less the federation's fixed amount for each entry. Leave it unticked for a competition the federation runs itself: the federation keeps the whole entry fee." }),
-        E({ name: "openipf_required", label: "Entry needs a qualifying total (the OpenIPF link becomes mandatory)", type: "checkbox", show: isOnline }),
+        E({ name: "qualification", label: "Qualifying standard", type: "select", show: isOnline, options: [
+          { value: "none", label: "None: the OpenIPF link is optional" }, { value: "link", label: "OpenIPF link required, nothing checked" },
+          { value: "glp", label: "A minimum GL score" }, { value: "totals", label: "A qualifying total for each weight class" }],
+          help: "Lifters give their OpenIPF link when they enter. Once they have paid, the site reads their results from OpenIPF (their best total and GL points in the 12 months before the competition, for the same event and kit) and checks them against this. You see the result on each entry." }),
+        E({ name: "qualification_glp", label: "Minimum GL points", type: "number", min: "1", show: function (v) { return isOnline(v) && v.qualification === "glp"; } }),
+        E({ name: "qualifying_totals_text", label: "Qualifying totals", type: "textarea", rows: 8, show: function (v) { return isOnline(v) && v.qualification === "totals"; },
+          help: "One per line: M or F, the weight class, then the total in kg. For example M 83: 450 or F 63: 300. Classes you leave out are not checked." }),
         E({ name: "hold_minutes", label: "Minutes a place is held while paying", type: "number", min: "5", show: isOnline, help: "Between 5 and 30. A short hold stops places being parked." }),
         E({ name: "priority_hours", label: "Priority entry starts this many hours before general entry", type: "number", min: "1", show: isOnline, help: "People on the Codes and links priority list are emailed their personal link when this window opens, and can enter from then until general entry opens. 24 is one day." }),
         E({ name: "offer_window_hours", label: "Hours an offered place is held for the waiting list", type: "number", min: "1", show: isOnline, help: "When the competition is full, the waiting list opens by itself. When a place frees up, the person who has waited longest is emailed a personal link and has this long to use it (up to 168 hours). Then it passes to the next person." }),
@@ -602,8 +625,9 @@
       if (isNew) return Promise.resolve();
       return Promise.all([
         sb.from("entry_settings").select("*").eq("competition_id", c.id).maybeSingle().then(function (r) { return r.error ? null : r.data; }, function () { return null; }),
-        sb.from("price_rules").select("*").eq("competition_id", c.id).then(function (r) { return r.error ? [] : r.data || []; }, function () { return []; })
-      ]).then(function (r) { settings = r[0] || {}; prices = r[1] || []; });
+        sb.from("price_rules").select("*").eq("competition_id", c.id).then(function (r) { return r.error ? [] : r.data || []; }, function () { return []; }),
+        sb.from("qualifying_totals").select("total_kg, weight_classes(sex,label,sort_order)").eq("competition_id", c.id).then(function (r) { return r.error ? [] : r.data || []; }, function () { return []; })
+      ]).then(function (r) { settings = r[0] || {}; prices = r[1] || []; qtotals = r[2] || []; });
     }
     view.replaceChildren(el("p", null, "Loading…"));
     load().then(function () {
@@ -618,7 +642,7 @@
         eq_classic: equip.indexOf("classic") >= 0, eq_equipped: equip.indexOf("equipped") >= 0,
         p_full: price(function (r) { return r.event === "full_power" && !r.age_category; }), p_bench: price(function (r) { return r.event === "bench_only" && !r.age_category; }),
         p_sj: price(function (r) { return r.age_category === "SJ"; }),
-        openipf_required: settings.openipf_mode === "required", hold_minutes: settings.hold_minutes || 5, offer_window_hours: settings.offer_window_hours || 48, priority_hours: settings.priority_hours || 24, guest_delay_days: settings.guest_delay_days === undefined || settings.guest_delay_days === null ? 14 : settings.guest_delay_days,
+        qualification: settings.qualification_mode === "glp" || settings.qualification_mode === "totals" ? settings.qualification_mode : settings.openipf_mode === "required" ? "link" : "none", qualification_glp: settings.qualification_glp === undefined || settings.qualification_glp === null ? "" : Number(settings.qualification_glp), qualifying_totals_text: totalsText(qtotals), hold_minutes: settings.hold_minutes || 5, offer_window_hours: settings.offer_window_hours || 48, priority_hours: settings.priority_hours || 24, guest_delay_days: settings.guest_delay_days === undefined || settings.guest_delay_days === null ? 14 : settings.guest_delay_days,
         entries_closed_manually: !!c.entries_closed_manually, is_franchise: isNew ? true : c.is_franchise !== false
       });
       var F = fields();
@@ -661,6 +685,8 @@
           else if (!v.name) problem = "Name is required.";
           else if (!v.start_date) problem = "The first day is required.";
         }
+        var totals = v.qualification === "totals" ? parseTotals(v.qualifying_totals_text) : { list: [] };
+        if (!problem && canEntry() && totals.bad) problem = "Qualifying totals: this line does not look right: “" + totals.bad + "”. Write M or F, the weight class and the total, like M 83: 450.";
         if (problem) return bar.fail(problem);
         bar.busy(true);
         var row = {
@@ -679,7 +705,7 @@
           if (!canEntry()) return id;
           var p = {
             entry_method: v.method === "online" ? "yne" : "external", hold_minutes: v.hold_minutes || 5, guest_delay_days: v.guest_delay_days === null ? 14 : v.guest_delay_days, offer_window_hours: v.offer_window_hours || 48, priority_hours: v.priority_hours || 24, entries_closed_manually: !!v.entries_closed_manually, is_franchise: !!v.is_franchise,
-            openipf_required: !!v.openipf_required,
+            qualification: v.qualification || "none", qualification_glp: v.qualification === "glp" && v.qualification_glp !== null && v.qualification_glp !== "" ? Number(v.qualification_glp) : null, qualifying_totals: v.qualification === "totals" ? totals.list : undefined,
             events: [v.ev_full && "full_power", v.ev_bench && "bench_only"].filter(Boolean), equipment: [v.eq_classic && "classic", v.eq_equipped && "equipped"].filter(Boolean),
             prices: { full_power: pence(v.p_full), bench_only: pence(v.p_bench), sub_junior: pence(v.p_sj) }
           };
@@ -783,6 +809,7 @@
       var S = { q: "", status: "entered", guests: false, dupes: false, sort: "newest" };
       var live = rows.filter(function (e) { return e.status === "paid" || e.status === "comped"; });
       var total = live.reduce(function (n, e) { return n + e.price_pence; }, 0);
+      var belowStd = rows.filter(function (e) { return e.qualification === "not_met" && isLive(e, now); }).length;
       var toCheck = rows.filter(function (e) { return e.is_guest && !e.membership_checked && isLive(e, now); }).length;
       var list = el("div", { class: "entry-list" }), count = el("p", { class: "help", role: "status" });
 
@@ -818,13 +845,38 @@
           el("span", { class: "entry-lift" }, [(e.sex === "M" ? "Men's " : "Women's ") + (wc ? wc.label + " kg" : ""), cat, e.event === "bench_only" ? "Bench only" : "Full power", e.equipment === "equipped" ? "Equipped" : "Classic"].filter(Boolean).join(" · ")),
           el("span", { class: "entry-flags" }, el("span", { class: STATUS_TAG[e.status] || "tag" }, ENTRY_STATUS[e.status] || e.status),
             e.is_guest && !e.membership_checked ? [" ", el("span", { class: "tag tag-position" }, "Guest: check")] : null,
-            dup[e.id] ? [" ", el("span", { class: "tag tag-full" }, "Possible duplicate")] : null),
+            dup[e.id] ? [" ", el("span", { class: "tag tag-full" }, "Possible duplicate")] : null,
+            e.qualification === "not_met" && (e.status === "paid" || e.status === "comped") ? [" ", el("span", { class: "tag tag-full" }, "Below qualifying standard")] : null),
           el("span", { class: "entry-money" }, entryMoney(e.price_pence)));
         var body = el("div", { class: "entry-body" });
         var d = el("details", { class: "entry-row" }, summary, body);
         var filled = false;
         d.addEventListener("toggle", function () { if (d.open && !filled) { filled = true; fillBody(body, e, d); } });
         return d;
+      }
+
+      // What the OpenIPF lookup found for an entry (see the waitlist function).
+      function openipfPairs(e) {
+        var link = e.openipf_url ? el("a", { href: e.openipf_url, target: "_blank", rel: "noopener" }, e.openipf_url) : "";
+        var pairs = [["OpenIPF profile", link]];
+        if (!e.openipf_url) return pairs;
+        var st = e.openipf_status, text;
+        if (st === "found") text = (e.openipf_name ? "Profile: " + e.openipf_name + ". " : "") + (e.best_total_kg !== null && e.best_total_kg !== undefined ? "Best total in the 12 months before the competition: " + Number(e.best_total_kg) + " kg, best GL points " + Number(e.best_glp) + "." : "No result found for this event and kit in the last 12 months.");
+        else if (st === "pending") text = "Waiting to be checked (it happens within a few minutes of the entry being confirmed).";
+        else if (st === "not_found") text = "No OpenIPF profile found at that address.";
+        else if (st === "error") text = "Could not be checked yet; it is tried again automatically.";
+        else text = "Not checked.";
+        pairs.push(["OpenIPF check", text + (e.openipf_note ? " " + e.openipf_note : "")]);
+        if (e.qualification === "met") pairs.push(["Qualifying standard", "Meets the standard"]);
+        if (e.qualification === "not_met") pairs.push(["Qualifying standard", el("strong", null, "Below the standard")]);
+        return pairs;
+      }
+      function recheckOpenipf(e) {
+        sb.rpc("openipf_recheck", { eid: e.id }).then(function (r) { if (r.error) throw r.error; return sb.auth.getSession(); }).then(function (s) {
+          var token = s.data && s.data.session && s.data.session.access_token;
+          return fetch((window.YNEPF_CONFIG.supabaseUrl || "").replace(/\/$/, "") + "/functions/v1/waitlist", { method: "POST", headers: { "Content-Type": "application/json", apikey: window.YNEPF_CONFIG.supabaseAnonKey || "", Authorization: "Bearer " + token }, body: JSON.stringify({ action: "openipf_run" }) });
+        }).then(function (r) { if (!r.ok) throw new Error("It is queued, and the timer will check it within a few minutes."); toast("Checked."); reload(); })
+          .catch(function (er) { toast(friendly(er), er && /queued/.test(er.message || "") ? undefined : "error"); reload(); });
       }
 
       function dlRows(pairs) {
@@ -840,8 +892,8 @@
             ["Date of birth", e.date_of_birth + " (age " + age + " on the day)"], ["Age category", CAT_LABEL[catFor(e.date_of_birth, c.start_date)]],
             ["Instagram", e.instagram ? "@" + e.instagram : ""], ["Photos", photoWord(e)]]),
           el("h3", null, "Lifting"),
-          dlRows([["Category", e.sex === "M" ? "Men's" : "Women's"], ["Weight class", wc ? wc.label + " kg" : ""], ["Event", e.event === "bench_only" ? "Bench only" : "Full power"], ["Equipment", e.equipment === "equipped" ? "Equipped" : "Classic"],
-            ["OpenIPF", e.openipf_url ? el("a", { href: e.openipf_url, target: "_blank", rel: "noopener" }, e.openipf_url) : ""], ["Can break records", e.can_break_records ? "Yes" : "No"]]),
+          dlRows([["Category", e.sex === "M" ? "Men's" : "Women's"], ["Weight class", wc ? wc.label + " kg" : ""], ["Event", e.event === "bench_only" ? "Bench only" : "Full power"], ["Equipment", e.equipment === "equipped" ? "Equipped" : "Classic"]
+            ].concat(openipfPairs(e), [["Can break records", e.can_break_records ? "Yes" : "No"]])),
           el("h3", null, "Federation and membership"),
           dlRows([["Federation or division", dv ? dv.name + (dv.is_home ? "" : " (guest)") : ""], ["Club", e.club], ["Membership number", e.bp_number],
             e.is_guest ? ["Membership checked", e.membership_checked ? "Yes" : "Not yet"] : null]),
@@ -856,6 +908,7 @@
           e.entry_note ? el("div", null, el("h3", null, "Private note"), el("p", null, e.entry_note)) : null,
           el("div", { class: "actions", style: "margin-top:var(--space-4)" },
             btn("Edit", function () { editEntry(e, c, refs, reload); }, "btn-secondary"),
+            e.openipf_url && (e.status === "paid" || e.status === "comped") ? btn("Check OpenIPF again", function () { recheckOpenipf(e); }) : null,
             e.is_guest ? btn(e.membership_checked ? "Mark membership unchecked" : "Mark membership checked", function () {
               sb.from("entries").update({ membership_checked: !e.membership_checked }).eq("id", e.id).then(ok).then(function () { toast("Updated."); reload(); }).catch(function (er) { toast(friendly(er), "error"); });
             }) : null,
@@ -878,7 +931,7 @@
           c.slug ? el("a", { class: "btn btn-sm btn-secondary", href: "../entries?c=" + encodeURIComponent(c.slug), target: "_blank", rel: "noopener" }, "Public list") : null,
           btn("Download CSV", function () { downloadEntries(c); }, "btn-ghost")),
         el("p", { class: "panel-intro" }, live.length + " entered of " + (c.capacity || "?") + " places. Entry money taken: " + entryMoney(total) + "." +
-          (toCheck ? " " + toCheck + (toCheck === 1 ? " guest" : " guests") + " to check." : "") + (Object.keys(dup).length ? " " + Object.keys(dup).length + " entries share an email or membership number with another." : "")),
+          (toCheck ? " " + toCheck + (toCheck === 1 ? " guest" : " guests") + " to check." : "") + (belowStd ? " " + belowStd + " below the qualifying standard." : "") + (Object.keys(dup).length ? " " + Object.keys(dup).length + " entries share an email or membership number with another." : "")),
         el("div", { class: "control-row" }, q, st, so), el("div", { class: "control-row checks" }, g, dp), count, list);
       draw();
     }).catch(function (e) { view.replaceChildren(el("p", { class: "form-error" }, friendly(e))); });

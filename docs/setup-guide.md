@@ -169,6 +169,20 @@ A link only works with the email address it was sent to, and only once. People o
 
 This needs the newest all-in-one SQL, and the updated `waitlist` function pasted over the old one in Supabase (it now sends the priority emails too). The timer from Part 5f is the same one: nothing new to set up.
 
+## Part 5h: The OpenIPF lookup
+
+When someone enters a competition and gives their OpenIPF link, the site checks it for you. Within a few minutes of the entry being confirmed, it reads that lifter's results from openipf.org and stores their best total and best GL points over the 12 months before the competition, for the same event (full power or bench only) and kit (classic or equipped). You see it on the entry, on the Entries tab: open the entry and look under **Lifting**. It also shows the name on the OpenIPF profile, and tells you if it doesn't look like the same person.
+
+On a competition's **Details** tab, **Qualifying standard** sets what is checked:
+- **None:** the OpenIPF link is optional, and nothing is checked.
+- **OpenIPF link required, nothing checked:** the link is mandatory, and you check the results yourself.
+- **A minimum GL score:** enter the points, for example 100.
+- **A qualifying total for each weight class:** one line each, such as `M 83: 450` and `F 63: 300`. A class you leave out is not checked.
+
+Entries below the standard get a **Below qualifying standard** tag and are counted at the top of the Entries tab. The site never refuses an entry for this, because a lifter can have results on OpenIPF under another profile, so you decide. Changing the standard re-checks every entry straight away. **Check OpenIPF again** on an entry asks for a fresh lookup, which is useful after a lifter corrects their link.
+
+It uses the same function and timer as the waiting list, so there is nothing new to set up: paste the updated `waitlist` function over the old one in Supabase, and run the newest all-in-one SQL.
+
 ## Part 5b: The club list
 
 Lifters in English divisions can choose their club (it is optional) from the English Powerlifting Association's list of approved clubs, copied from the EPA website. Only club **names** are copied, never contact details. Lifters from other nations have no club question, and clubs from other bodies are not included.

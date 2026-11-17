@@ -4,8 +4,10 @@
 //   offer  The entry page asks "does this offer link work?" and, if so, gets the name and email to fill in.
 //   run    Looks after every waiting list: ends offers that ran out (and emails), sends the one reminder, and offers
 //          free places to the people who have waited longest (and emails them a personal link). It also emails priority
-//          entry links to everyone on a competition's priority list once the priority window opens. It is run on a timer
+//          entry links to everyone on a competition's priority list once the priority window opens, and looks up the OpenIPF
+//          results of lifters who have just entered (best total and GL points over the last 12 months, then the qualifying check). It is run on a timer
 //          (see docs/entry-system/schedule-waitlist.sql) and by the entries team's "Check now" button.
+//   openipf_run  The entries team asks for the OpenIPF lookups that are waiting to be done now (the timer also does them).
 //   priority_send  The entries team sends priority links now (to one person or everyone still waiting), or sends a fresh link to someone.
 //
 // ONE self-contained file: paste it in as index.ts. Deploy with "Verify JWT" switched OFF (the checks are inside).
@@ -88,6 +90,71 @@ export function priorityEmail(o: Who & { link: string; windowStart: string; open
   ]);
 }
 
+// ---- OpenIPF -------------------------------------------------------------------------------------------------------------
+// A lifter's profile address looks like https://www.openipf.org/u/agatasitko. Their results are a CSV at /api/liftercsv/<name>.
+export function openipfSlug(url: string): string | null {
+  const m = String(url ?? "").trim().match(/^https?:\/\/(?:www\.)?openipf\.org\/u\/([A-Za-z0-9._-]+)\/?(?:[?#].*)?$/i);
+  return m ? m[1].toLowerCase() : null;
+}
+
+// A small, careful CSV reader (handles quoted fields, commas and doubled quotes inside them).
+export function parseCsv(text: string): Record<string, string>[] {
+  const rows: string[][] = []; let row: string[] = [], cur = "", q = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (q) { if (ch === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += ch; }
+    else if (ch === '"') q = true;
+    else if (ch === ",") { row.push(cur); cur = ""; }
+    else if (ch === "\n" || ch === "\r") { if (ch === "\r" && text[i + 1] === "\n") i++; row.push(cur); cur = ""; if (row.length > 1 || row[0] !== "") rows.push(row); row = []; }
+    else cur += ch;
+  }
+  if (cur !== "" || row.length) { row.push(cur); rows.push(row); }
+  const head = rows.shift() ?? [];
+  return rows.map((r) => Object.fromEntries(head.map((h, i) => [h, r[i] ?? ""])));
+}
+
+const norm = (s: string) => String(s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/#\d+/g, " ").replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+// Do the entrant's name and the name on the profile look like the same person? Every word of the shorter name must be in the longer one.
+export function namesMatch(a: string, b: string): boolean {
+  const x = norm(a).split(" ").filter(Boolean), y = norm(b).split(" ").filter(Boolean);
+  if (!x.length || !y.length) return false;
+  const [short, long] = x.length <= y.length ? [x, y] : [y, x];
+  return short.every((w) => long.includes(w));
+}
+
+// Best total and best GL points over the 12 months up to the competition, for the same event and kit as the entry.
+export function summariseResults(rows: Record<string, string>[], o: { event: string; equipment: string; compStart: string }) {
+  const end = new Date(o.compStart + "T00:00:00Z"), start = new Date(end); start.setUTCFullYear(start.getUTCFullYear() - 1);
+  const wantEvent = o.event === "bench_only" ? "B" : "SBD";
+  const kitOk = (k: string) => o.equipment === "equipped" ? !/^(raw|wraps)$/i.test(k) : /^(raw|wraps)$/i.test(k);
+  const name = rows.length ? rows[0].Name ?? "" : "";
+  let bestTotal: number | null = null, bestGlp: number | null = null, count = 0;
+  for (const r of rows) {
+    const d = new Date((r.Date ?? "") + "T00:00:00Z"), total = parseFloat(r.TotalKg ?? "");
+    if (isNaN(d.getTime()) || d < start || d > end || r.Event !== wantEvent || !kitOk(r.Equipment ?? "") || !(total > 0)) continue;
+    count++;
+    if (bestTotal === null || total > bestTotal) bestTotal = total;
+    const g = parseFloat(r.Goodlift ?? ""); if (!isNaN(g) && (bestGlp === null || g > bestGlp)) bestGlp = g;
+  }
+  return { name, bestTotal, bestGlp, count };
+}
+
+// Looks one lifter up. status: found | not_found | error. (fetchImpl is replaceable so this can be tested.)
+export async function lookupLifter(slug: string, o: { event: string; equipment: string; compStart: string; entryName: string }, fetchImpl: typeof fetch = fetch) {
+  let res: Response;
+  try { res = await fetchImpl(`https://www.openipf.org/api/liftercsv/${encodeURIComponent(slug)}`, { headers: { "user-agent": "YNEPF entry system (ynepf.co.uk)" } }); }
+  catch { return { status: "error", note: "OpenIPF did not answer. It will be tried again." } as const; }
+  if (res.status === 404) return { status: "not_found", note: "There is no OpenIPF profile at that address." } as const;
+  if (!res.ok) return { status: "error", note: `OpenIPF answered with an error (${res.status}). It will be tried again.` } as const;
+  const rows = parseCsv(await res.text());
+  if (!rows.length) return { status: "not_found", note: "That OpenIPF profile has no results yet." } as const;
+  const s = summariseResults(rows, o);
+  const notes: string[] = [];
+  if (!namesMatch(o.entryName, s.name)) notes.push(`The profile is for "${s.name}", which does not look like the entry name. Check it is the right person.`);
+  if (s.count === 0) notes.push(`No ${o.event === "bench_only" ? "bench" : "full power"} ${o.equipment === "equipped" ? "equipped" : "classic"} results in the 12 months before the competition.`);
+  return { status: "found", name: s.name, best_total_kg: s.bestTotal, best_glp: s.bestGlp, note: notes.join(" ") } as const;
+}
+
 // Joining is limited so the list cannot be flooded: a handful of tries per address, per few minutes.
 const tries: Record<string, number[]> = {};
 export function allowTry(key: string, now = Date.now(), max = 6, windowMs = 10 * 60 * 1000): boolean {
@@ -145,6 +212,22 @@ if (typeof Deno !== "undefined") {
       return { sent, failed };
     };
 
+    // Looks up the lifters waiting for an OpenIPF check, politely (one at a time, a second apart), and stores what is found.
+    const processOpenipf = async (max = 10) => {
+      const list: { id: string; url: string; name: string; event: string; equipment: string; comp_start: string }[] = await (await rpc("openipf_pending", { max_rows: max })).json().catch(() => []);
+      let done = 0;
+      for (const e of Array.isArray(list) ? list : []) {
+        const slug = openipfSlug(e.url);
+        const result = slug
+          ? await lookupLifter(slug, { event: e.event, equipment: e.equipment, compStart: e.comp_start, entryName: e.name })
+          : { status: "not_found", note: "That is not an OpenIPF profile address. It should look like https://www.openipf.org/u/name." } as const;
+        await rpc("openipf_save", { eid: e.id, p: { ...result, slug: slug ?? "" } });
+        done++;
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+      return done;
+    };
+
     // ---- someone joins ----------------------------------------------------------------------------------------
     if (action === "join") {
       if (!allowTry(ip + "|" + String(body.email ?? "").toLowerCase())) return reply(429, { error: "slow_down", message: "Too many tries. Please wait a few minutes and try again." });
@@ -194,7 +277,7 @@ if (typeof Deno !== "undefined") {
       const listRes = await rpc("waitlist_competitions", {});
       let ids: string[] = await listRes.json().catch(() => []);
       if (body.competition_id) ids = ids.filter((i) => i === body.competition_id);
-      const done = { offers: 0, reminders: 0, expired: 0, failed: 0, priority: 0 };
+      const done = { offers: 0, reminders: 0, expired: 0, failed: 0, priority: 0, openipf: 0 };
       for (const id of ids) {
         const c = await comp(id);
         if (!c) continue;
@@ -227,7 +310,20 @@ if (typeof Deno !== "undefined") {
           done.priority += r.sent; done.failed += r.failed;
         }
       }
+      if (!body.competition_id) done.openipf = await processOpenipf(10);
       return reply(200, { ok: true, ...done });
+    }
+
+    // ---- the entries team asks for the OpenIPF lookups now -----------------------------------------------------------
+    if (action === "openipf_run") {
+      const token = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
+      let allowed = false;
+      if (token && token !== anon) {
+        const who = await fetch(`${url}/rest/v1/rpc/is_entries`, { method: "POST", headers: { apikey: anon!, authorization: `Bearer ${token}`, "content-type": "application/json" }, body: "{}" });
+        allowed = who.ok && (await who.json()) === true;
+      }
+      if (!allowed) return reply(401, { error: "not_allowed" });
+      return reply(200, { ok: true, openipf: await processOpenipf(5) });
     }
 
     // ---- the entries team sends priority links now ------------------------------------------------------------------
