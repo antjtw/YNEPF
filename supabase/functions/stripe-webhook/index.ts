@@ -58,6 +58,22 @@ export function entryNotification(e: { name: string; email: string; competition:
   return lines.join("\n");
 }
 
+// An internal note to the competitions inbox whenever an entry is refunded or cancelled, however it happened.
+export function refundNotification(o: { by: string; name: string; email: string; competition: string; refundedPence: number; cancelled: boolean; reason?: string; taken?: number; capacity?: number | null; deskUrl?: string }) {
+  const money = (p: number) => "£" + (p / 100).toFixed(2);
+  const lines = [
+    o.refundedPence > 0 ? `${o.by} refunded ${money(o.refundedPence)} to ${o.name} for their entry in ${o.competition}.` : `${o.by} cancelled ${o.name}'s entry in ${o.competition}. No money was refunded.`,
+    "",
+    ...(o.reason ? [`Reason: ${o.reason}`] : []),
+    `The entry is now ${o.cancelled ? "cancelled, and the place is free" : "still entered (a partial refund)"}.`,
+    ...(o.refundedPence > 0 ? ["Stripe keeps its processing fee on a refund."] : []),
+    `Email: ${o.email}`,
+    ...(o.taken !== undefined ? ["", `That leaves ${o.taken}${o.capacity ? ` of ${o.capacity}` : ""} places taken.`] : []),
+    ...(o.deskUrl ? ["", `Open the entries desk: ${o.deskUrl}`] : []),
+  ];
+  return lines.join("\n");
+}
+
 export function confirmationEmail(e: { name: string; competition: string; date: string; event: string; equipment: string; pence: number; under18: boolean; entriesEmail: string; refundsUntil?: string; category?: string; division?: string; club?: string; discountPence?: number; extras?: { name: string; option?: string; pence: number }[] }) {
   const lines = [
     `Hi ${e.name},`, "",
@@ -159,7 +175,9 @@ if (typeof Deno !== "undefined") {
             await db("refunds", { method: "POST", headers: { prefer: "return=minimal" }, body: JSON.stringify({ payment_id: pay.id, stripe_refund_id: refund.id, amount_pence: row.price_pence, reason: "Paid after the place was released and the competition filled", created_by: "system" }) });
             await db(`entries?id=eq.${entryId}`, { method: "PATCH", headers: { prefer: "return=minimal" }, body: JSON.stringify({ status: "refunded", cancel_reason: "Paid after hold expired; competition full" }) });
           }
-          await send([row.email, copy], `Your payment for ${row.competitions.name} has been refunded`,
+          await send([copy], `Automatic refund: ${row.full_name}, ${row.competitions.name}`, refundNotification({ by: "The system", name: row.full_name, email: row.email, competition: row.competitions.name, refundedPence: row.price_pence, cancelled: true,
+            reason: "Paid after the place was released, and the competition filled in the meantime", deskUrl: (Deno.env.get("SITE_URL") ?? "") && row.competition_id ? `${(Deno.env.get("SITE_URL") ?? "").replace(/\/$/, "")}/admin/#competitions/${row.competition_id}/entries` : undefined }));
+          await send([row.email], `Your payment for ${row.competitions.name} has been refunded`,
             `Hi ${row.full_name},\n\nSorry: your payment arrived after your place was released and the competition has since filled, so we have refunded you in full (${pounds(row.price_pence)}). It can take a few days to reach your account.\n\nYou can join the waiting list on the competition page.\n\nYNEPF`);
         }
       } else if (event.type === "charge.refunded") {
@@ -169,13 +187,32 @@ if (typeof Deno !== "undefined") {
           const [pay] = await (await db(`payments?stripe_payment_intent=eq.${encodeURIComponent(pi)}&select=id,amount_pence,entry_id`)).json();
           if (pay) {
             const list = await stripe(`refunds?payment_intent=${encodeURIComponent(pi)}&limit=100`);
+            let newlyRecorded = 0;
             for (const r of (list.data ?? [])) {
               if (r.status === "failed" || r.status === "canceled") continue;
               // Ours are recorded first with the reason and who did it; this only adds ones we have not seen.
-              await db("refunds?on_conflict=stripe_refund_id", { method: "POST", headers: { prefer: "resolution=ignore-duplicates,return=minimal" }, body: JSON.stringify({ payment_id: pay.id, stripe_refund_id: r.id, amount_pence: r.amount, reason: "Refunded in Stripe", created_by: "stripe" }) });
+              const ins = await db("refunds?on_conflict=stripe_refund_id", { method: "POST", headers: { prefer: "resolution=ignore-duplicates,return=representation" }, body: JSON.stringify({ payment_id: pay.id, stripe_refund_id: r.id, amount_pence: r.amount, reason: "Refunded in Stripe", created_by: "stripe" }) });
+              const fresh = await ins.json().catch(() => []);
+              if (Array.isArray(fresh) && fresh.length) newlyRecorded += r.amount;       // one we had not seen: made in Stripe's own dashboard
             }
             const total = (list.data ?? []).filter((r: { status: string }) => r.status !== "failed" && r.status !== "canceled").reduce((n: number, r: { amount: number }) => n + r.amount, 0);
             if (total >= pay.amount_pence) await db(`entries?id=eq.${pay.entry_id}&status=eq.paid`, { method: "PATCH", headers: { prefer: "return=minimal" }, body: JSON.stringify({ status: "refunded", cancelled_at: new Date().toISOString(), cancel_reason: "Refunded in Stripe" }) });
+            // A refund made in Stripe's own dashboard: tell the lifter and the competitions inbox (refunds from our desk already did).
+            if (newlyRecorded > 0) {
+              const [en] = await (await db(`entries?id=eq.${pay.entry_id}&select=full_name,email,competition_id,competitions(name,capacity)`)).json().catch(() => []);
+              if (en) {
+                const from = Deno.env.get("MAIL_FROM") ?? "YNEPF <onboarding@resend.dev>", copy = Deno.env.get("NOTIFY_TO") ?? "competitions@ynepf.co.uk";
+                const mail = (to: string[], subject: string, text: string) => fetch("https://api.resend.com/emails", { method: "POST", headers: { authorization: `Bearer ${Deno.env.get("RESEND_API_KEY")}`, "content-type": "application/json" }, body: JSON.stringify({ from, to, subject, text, reply_to: copy }) }).catch(() => {});
+                const whole = total >= pay.amount_pence;
+                const takenRows = await (await db(`entries?competition_id=eq.${en.competition_id}&status=in.(paid,comped)&select=id`)).json().catch(() => []);
+                const siteUrl = (Deno.env.get("SITE_URL") ?? "").replace(/\/$/, "");
+                const compName = en.competitions?.name ?? "the competition";
+                await mail([en.email], whole ? `Your entry has been refunded: ${compName}` : `A refund for your entry: ${compName}`,
+                  `Hi ${en.full_name},\n\nWe have refunded ${pounds(newlyRecorded)} to the card you paid with${whole ? ", and your entry in " + compName + " has been cancelled" : " for " + compName + ". You are still entered"}. It can take 5 to 10 working days to show on your statement.\n\nIf you have any questions, reply to this email or write to ${copy}.\n\nYNEPF`);
+                await mail([copy], `Refund: ${pounds(newlyRecorded)}, ${en.full_name}, ${compName}`, refundNotification({ by: "Someone in the Stripe dashboard", name: en.full_name, email: en.email, competition: compName, refundedPence: newlyRecorded, cancelled: whole, reason: "Refunded in Stripe",
+                  taken: Array.isArray(takenRows) ? takenRows.length : undefined, capacity: en.competitions?.capacity, deskUrl: siteUrl && en.competition_id ? `${siteUrl}/admin/#competitions/${en.competition_id}/entries` : undefined }));
+              }
+            }
           }
         }
       } else if (event.type === "checkout.session.expired") {

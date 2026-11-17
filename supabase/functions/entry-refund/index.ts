@@ -28,6 +28,22 @@ export function refundPlan(o: { entryStatus: string; paidPence: number; refunded
   return { refundPence: o.refundPence, cancel, finalStatus: !cancel ? o.entryStatus : (fully ? "refunded" : "cancelled") };
 }
 
+// An internal note to the competitions inbox whenever an entry is refunded or cancelled, however it happened.
+export function refundNotification(o: { by: string; name: string; email: string; competition: string; refundedPence: number; cancelled: boolean; reason?: string; taken?: number; capacity?: number | null; deskUrl?: string }) {
+  const money = (p: number) => "£" + (p / 100).toFixed(2);
+  const lines = [
+    o.refundedPence > 0 ? `${o.by} refunded ${money(o.refundedPence)} to ${o.name} for their entry in ${o.competition}.` : `${o.by} cancelled ${o.name}'s entry in ${o.competition}. No money was refunded.`,
+    "",
+    ...(o.reason ? [`Reason: ${o.reason}`] : []),
+    `The entry is now ${o.cancelled ? "cancelled, and the place is free" : "still entered (a partial refund)"}.`,
+    ...(o.refundedPence > 0 ? ["Stripe keeps its processing fee on a refund."] : []),
+    `Email: ${o.email}`,
+    ...(o.taken !== undefined ? ["", `That leaves ${o.taken}${o.capacity ? ` of ${o.capacity}` : ""} places taken.`] : []),
+    ...(o.deskUrl ? ["", `Open the entries desk: ${o.deskUrl}`] : []),
+  ];
+  return lines.join("\n");
+}
+
 export function pounds(pence: number): string { return "£" + (pence / 100).toFixed(2); }
 
 export function refundEmail(o: { name: string; competition: string; refundedPence: number; cancelled: boolean; reason?: string; entriesEmail: string }) {
@@ -69,7 +85,7 @@ if (typeof Deno !== "undefined") {
 
     const H = { apikey: svc, authorization: `Bearer ${svc}`, "content-type": "application/json" };
     const db = (path: string, init: RequestInit = {}) => fetch(`${url}/rest/v1/${path}`, { ...init, headers: { ...H, ...(init.headers ?? {}) } });
-    const [entry] = await (await db(`entries?id=eq.${body.entry_id}&select=id,status,full_name,email,competitions(name),payments(id,status,amount_pence,stripe_payment_intent,refunds(amount_pence))`)).json();
+    const [entry] = await (await db(`entries?id=eq.${body.entry_id}&select=id,status,full_name,email,competition_id,competitions(name,capacity),payments(id,status,amount_pence,stripe_payment_intent,refunds(amount_pence))`)).json();
     if (!entry) return reply(404, { error: "not_found", message: "That entry was not found." });
     const pay = (entry.payments ?? []).find((p: { status: string }) => p.status === "succeeded");
     const paid = pay?.amount_pence ?? 0;
@@ -93,15 +109,22 @@ if (typeof Deno !== "undefined") {
       const upd = await db(`entries?id=eq.${entry.id}`, { method: "PATCH", headers: { prefer: "return=minimal" }, body: JSON.stringify({ status: plan.finalStatus, cancelled_at: new Date().toISOString(), cancel_reason: reason, hold_expires_at: null }) });
       if (!upd.ok) { console.error("entry not updated", await upd.text()); return reply(500, { error: "not_recorded", message: "The money moved, but the entry could not be updated. Please tell the website administrator." }); }
     }
+    const from = Deno.env.get("MAIL_FROM") ?? "YNEPF <onboarding@resend.dev>", copy = Deno.env.get("NOTIFY_TO") ?? "competitions@ynepf.co.uk";
+    const mail = (to: string[], subject: string, text: string) => fetch("https://api.resend.com/emails", {
+      method: "POST", headers: { authorization: `Bearer ${Deno.env.get("RESEND_API_KEY")}`, "content-type": "application/json" },
+      body: JSON.stringify({ from, to, reply_to: copy, subject, text }),
+    }).then((r) => { if (!r.ok) console.error("Resend failed", r.status); }).catch((e) => console.error("Resend failed", e));
+    // The lifter hears about it (unless the entries team chose not to tell them)...
     if (body.notify !== false) {
-      const from = Deno.env.get("MAIL_FROM") ?? "YNEPF <onboarding@resend.dev>", copy = Deno.env.get("NOTIFY_TO") ?? "competitions@ynepf.co.uk";
-      const sent = await fetch("https://api.resend.com/emails", {
-        method: "POST", headers: { authorization: `Bearer ${Deno.env.get("RESEND_API_KEY")}`, "content-type": "application/json" },
-        body: JSON.stringify({ from, to: [entry.email, copy], reply_to: copy, subject: plan.cancel ? `Your entry has been cancelled: ${entry.competitions?.name ?? ""}` : `A refund for your entry: ${entry.competitions?.name ?? ""}`,
-          text: refundEmail({ name: entry.full_name, competition: entry.competitions?.name ?? "the competition", refundedPence: plan.refundPence, cancelled: plan.cancel, reason, entriesEmail: copy }) }),
-      });
-      if (!sent.ok) console.error("Resend failed", sent.status);
+      await mail([entry.email], plan.cancel ? `Your entry has been cancelled: ${entry.competitions?.name ?? ""}` : `A refund for your entry: ${entry.competitions?.name ?? ""}`,
+        refundEmail({ name: entry.full_name, competition: entry.competitions?.name ?? "the competition", refundedPence: plan.refundPence, cancelled: plan.cancel, reason, entriesEmail: copy }));
     }
+    // ...and the competitions inbox always gets a note, so the team can see every refund and cancellation.
+    const takenRows = await (await db(`entries?competition_id=eq.${entry.competition_id}&status=in.(paid,comped)&select=id`)).json().catch(() => []);
+    const siteUrl = (Deno.env.get("SITE_URL") ?? "").replace(/\/$/, "");
+    await mail([copy], plan.refundPence > 0 ? `Refund: ${pounds(plan.refundPence)}, ${entry.full_name}, ${entry.competitions?.name ?? ""}` : `Cancelled: ${entry.full_name}, ${entry.competitions?.name ?? ""}`,
+      refundNotification({ by: actor, name: entry.full_name, email: entry.email, competition: entry.competitions?.name ?? "the competition", refundedPence: plan.refundPence, cancelled: plan.cancel, reason,
+        taken: Array.isArray(takenRows) ? takenRows.length : undefined, capacity: entry.competitions?.capacity, deskUrl: siteUrl && entry.competition_id ? `${siteUrl}/admin/#competitions/${entry.competition_id}/entries` : undefined }));
     return reply(200, { ok: true, status: plan.finalStatus, refunded_pence: plan.refundPence, stripe_refund: stripeRefundId });
   });
 }

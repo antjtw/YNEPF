@@ -125,4 +125,16 @@ assert(es.validEntry("123e4567-e89b-12d3-a456-426614174000") && !es.validEntry("
     assert(mod.entryNotification({ ...base, pence: 0, discountPence: 4000, extras: [], isGuest: false, division: undefined, under18: true }).includes("Free entry: nothing to pay") && mod.entryNotification({ ...base, under18: true }).includes("Under 18 on the day"), "free and under-18 entries are described");
   }
 }
+
+{ // the note to the competitions inbox when an entry is refunded or cancelled
+  const rf = await import("../../supabase/functions/entry-refund/index.ts");
+  for (const mod of [wh, rf]) {
+    const full = mod.refundNotification({ by: "ed@ynepf.co.uk", name: "Sam Smith", email: "sam@x.co", competition: "Spring Open", refundedPence: 4000, cancelled: true, reason: "Injured", taken: 6, capacity: 40, deskUrl: "https://site/admin/#competitions/abc/entries" });
+    assert(full.startsWith("ed@ynepf.co.uk refunded £40.00 to Sam Smith for their entry in Spring Open.") && full.includes("Reason: Injured") && full.includes("cancelled, and the place is free") && full.includes("Stripe keeps its processing fee") && full.includes("6 of 40 places taken") && full.includes("Open the entries desk: https://site/admin"), "full refund note: " + full);
+    const part = mod.refundNotification({ by: "Someone in the Stripe dashboard", name: "Sam Smith", email: "sam@x.co", competition: "Spring Open", refundedPence: 500, cancelled: false });
+    assert(part.includes("refunded £5.00") && part.includes("still entered (a partial refund)") && !part.includes("places taken"), "partial: " + part);
+    const none = mod.refundNotification({ by: "ed@ynepf.co.uk", name: "Sam Smith", email: "sam@x.co", competition: "Spring Open", refundedPence: 0, cancelled: true, reason: "Withdrew" });
+    assert(none.includes("cancelled Sam Smith's entry in Spring Open. No money was refunded.") && !none.includes("processing fee"), "cancel with no refund: " + none);
+  }
+}
 console.log("function helper tests passed");

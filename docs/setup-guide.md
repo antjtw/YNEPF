@@ -187,7 +187,7 @@ It uses the same function and timer as the waiting list, so there is nothing new
 
 To switch from Stripe's test mode to real money, and test it with a £1 entry and refunds, follow [stripe-live-guide.md](stripe-live-guide.md).
 
-Each time someone's entry is confirmed, `competitions@ynepf.co.uk` (the `NOTIFY_TO` address) gets a short "New entry" note: who, which event and weight class, what they paid, extras, any guest or under-18 flag, how many places are taken, and a link to the entries desk. The lifter gets only their own confirmation. This needs the updated `stripe-webhook` and `entry-checkout` functions pasted into Supabase.
+Each time someone's entry is confirmed, `competitions@ynepf.co.uk` (the `NOTIFY_TO` address) gets a short "New entry" note: who, which event and weight class, what they paid, extras, any guest or under-18 flag, how many places are taken, and a link to the entries desk. The lifter gets only their own confirmation. Refunds work the same way: the lifter gets their refund or cancellation email, and `competitions@` gets a separate note saying who did it, how much, why, and how many places are now taken. That covers refunds from the entries desk, refunds made in Stripe's own dashboard, and the automatic refund when someone pays after their place was released. This needs the updated `stripe-webhook`, `entry-checkout` and `entry-refund` functions pasted into Supabase.
 
 ## Part 5b: The club list
 
