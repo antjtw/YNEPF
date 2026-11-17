@@ -186,7 +186,7 @@
       }
       return el("th", { scope: "row", class: "c-name" }, top);
     }
-    return el("td", { class: "c-" + col }, col === "glp" ? fmtGlp(l.glp) : l[col]);
+    return el("td", { class: "c-" + col, "data-label": { club: "Club", ageClass: "Age", cls: "Class", glp: "GLP", total: "Total" }[col] || "" }, col === "glp" ? fmtGlp(l.glp) : l[col]);
   }
   function renderLiftingOrder(host, c, lifters) {
     var cols = LO_TABLE.filter(function (col) {

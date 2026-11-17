@@ -717,3 +717,19 @@ table.lifters thead th { overflow-wrap: normal; }
 .control-row input.control[type="search"] { flex: 1 1 20rem; min-width: 14rem; width: auto; }
 .control-row select.control { width: auto; min-width: 12rem; }
 .control-row.checks { gap: var(--space-5); }
+
+/* Lifting order on a phone: each lifter becomes a small card, name first, then club, age class, class, GLP and total wrapping beneath it
+   (so nothing scrolls sideways). The header row is kept for screen readers but not shown. */
+@media (max-width: 40rem) {
+  table.lifters { min-width: 0; table-layout: auto; }
+  table.lifters thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  table.lifters, table.lifters tbody, table.lifters tr { display: block; width: 100%; }
+  table.lifters tr { padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border); }
+  table.lifters tbody tr:last-child { border-bottom: 0; }
+  table.lifters th.c-name, table.lifters td[class] { display: inline-block; width: auto; padding: 0 var(--space-4) 0 0; vertical-align: baseline; }
+  table.lifters th.c-name { display: block; padding: 0 0 var(--space-1); }
+  table.lifters td[class] { font-size: var(--fs-16); }
+  table.lifters td::before { content: attr(data-label) " "; color: var(--text-muted); font-size: 0.8125rem; }
+  table.lifters td:empty { display: none; }
+  table.lifters th:first-child, table.lifters td:first-child { padding-left: 0; }
+}
