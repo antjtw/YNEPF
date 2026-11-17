@@ -108,4 +108,27 @@ console.log("PASS " + runs + " different competitions all obey the rules");
   assert(LS.build(lifters(6, 2), O).sessions.length >= 1 && LS.build([], O).sessions.length === 0, "tiny and empty competitions work");
   console.log("PASS layout: classes run up, days and women-first settings are used, tiny and empty cases work");
 }
+// ---- 7. lot numbers: blocks per flight in flight order, women then men, random inside a flight, never across flights
+{
+  const res = LS.build(lifters(90, 11), { ...O, primeTime: { enabled: true } });
+  const flights = res.sessions.flatMap((s) => s.flights);
+  const lots = LS.assignLots(flights, (n) => Math.floor(rng(5)() * n));
+  const lifters90 = flights.flatMap((f) => f.lifters);
+  assert.deepStrictEqual(Object.values(lots).sort((a, b) => a - b), lifters90.map((_, i) => i + 1), "every lifter gets one lot number, 1 to N, no gaps or repeats");
+  let next = 1;
+  flights.forEach((f) => {
+    const mine = f.lifters.map((l) => lots[l.id]);
+    assert(Math.min(...mine) === next && Math.max(...mine) === next + f.lifters.length - 1, "flight " + f.letter + " has one block of consecutive numbers, in flight order");
+    next += f.lifters.length;
+  });
+  // women before men inside a flight (flights are single sex, but a hand-made mixed flight is still handled)
+  const mixed = LS.assignLots([{ lifters: [{ id: "a", sex: "M" }, { id: "b", sex: "F" }, { id: "c", sex: "M" }, { id: "d", sex: "F" }] }]);
+  assert(Math.max(mixed.b, mixed.d) < Math.min(mixed.a, mixed.c), "women's lot numbers come before the men's inside a flight");
+  // real randomness: different draws give different orders; every position is reachable (a loose check, 200 draws of 4 lifters)
+  const seen = new Set(), firsts = new Set();
+  for (let i = 0; i < 200; i++) { const l = LS.assignLots([{ lifters: ["a", "b", "c", "d"].map((id) => ({ id, sex: "M" })) }]); seen.add(JSON.stringify(l)); firsts.add(Object.keys(l).find((k) => l[k] === 1)); }
+  assert(seen.size > 12 && firsts.size === 4, "the draw is random (" + seen.size + " of 24 orders in 200 draws)");
+  assert.deepStrictEqual(LS.assignLots([]), {}, "no flights, no lots");
+  console.log("PASS lot numbers: consecutive block per flight, women then men, random inside the flight");
+}
 console.log("\nlifting sort tests passed");

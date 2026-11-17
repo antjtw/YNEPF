@@ -185,5 +185,30 @@
     };
   }
 
-  return { build: build, classKey: classKey, letter: letter, flightOrder: flightOrder, DEFAULTS: DEFAULTS };
+  // ---- lot numbers --------------------------------------------------------------------------------------------------
+  // A random whole number from 0 to n-1 with no bias: crypto when there is any, Math.random only as a last resort (old test runners).
+  function randomBelow(n) {
+    var c = (typeof globalThis !== "undefined" && globalThis.crypto) || null;
+    if (!c || !c.getRandomValues) return Math.floor(Math.random() * n);
+    var limit = Math.floor(4294967296 / n) * n, buf = new Uint32Array(1);
+    do { c.getRandomValues(buf); } while (buf[0] >= limit);
+    return buf[0] % n;
+  }
+  function shuffle(a, below) { for (var i = a.length - 1; i > 0; i--) { var j = below(i + 1), t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+
+  // Lot numbers, as the federation's spec has it: each flight takes one block of consecutive numbers, in flight order (flight A gets 1 to 14,
+  // flight B the next ones, and so on). Inside a flight the women's lifters come first and then the men's, and each of those two groups is
+  // shuffled on its own, so nobody's lot number is ever outside their own flight. `flights` = [{ lifters: [{ id, sex }] }] in flight order.
+  // Returns { id: lot }. `below` (optional) is the random source: below(n) gives 0 to n-1. Tests pass a seeded one.
+  function assignLots(flights, below) {
+    var pick = below || randomBelow, out = {}, next = 1;
+    flights.forEach(function (f) {
+      var w = [], m = [];
+      f.lifters.forEach(function (l) { (l.sex === "F" ? w : m).push(l.id); });
+      shuffle(w, pick).concat(shuffle(m, pick)).forEach(function (id) { out[id] = next++; });
+    });
+    return out;
+  }
+
+  return { build: build, classKey: classKey, letter: letter, flightOrder: flightOrder, assignLots: assignLots, DEFAULTS: DEFAULTS };
 });

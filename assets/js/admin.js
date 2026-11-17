@@ -991,7 +991,7 @@
       });
       var row = (res[1] && !res[1].error && res[1].data) || {};
       var settings = { days: row.days || "", sessions: row.sessions || "",         prime_time: !!row.prime_time_enabled, prime_women: row.prime_time_women || 14, prime_men: row.prime_time_men || 14, women_first: row.women_first !== false };
-      var S = { sessions: [], dirty: false, warnings: [], dropped: 0 };
+      var S = { sessions: [], dirty: false, warnings: [], dropped: 0, showLots: false };
       // the saved arrangement (lifters who have cancelled since are dropped)
       ((res[2] && !res[2].error && res[2].data) || []).forEach(function (s) {
         var flights = (s.lo_flights || []).slice().sort(function (p, q) { return p.letter.length - q.letter.length || (p.letter < q.letter ? -1 : 1); }).map(function (f) {
@@ -1025,10 +1025,31 @@
       function placed() { var m = {}; flightsList().forEach(function (x) { x.f.lifters.forEach(function (l) { m[l.id] = true; }); }); return m; }
       function sexOf(f) { var a = {}; f.lifters.forEach(function (l) { a[(ent[l.id] || {}).sex === "F" ? "F" : "M"] = 1; }); var k = Object.keys(a); return k.length > 1 ? "mixed" : k[0] === "F" ? "women" : k[0] === "M" ? "men" : ""; }
 
+      // Lot numbers are a draw: one block of consecutive numbers per flight, women then men, shuffled inside. They are not public.
+      function lotsState() {
+        var any = false, ok = true, next = 1, missing = 0;
+        flightsList().forEach(function (x) {
+          var lots = x.f.lifters.map(function (l) { return l.lot; });
+          if (lots.some(function (n) { return n; })) any = true;
+          if (lots.some(function (n) { return !n; })) missing++;
+          var sorted = lots.filter(Boolean).sort(function (a, b) { return a - b; });
+          if (x.f.lifters.length && (sorted.length !== lots.length || sorted[0] !== next || sorted[sorted.length - 1] !== next + lots.length - 1)) ok = false;
+          next += lots.length;
+        });
+        return { any: any, ok: ok };
+      }
+      function drawLots() {
+        var ls = lotsState();
+        if (!flightsList().length) return;
+        if (ls.any && !window.confirm("Lot numbers have already been drawn. Drawing again gives everyone a new number. Only do this if the old ones have not been used or sent out. Carry on?")) return;
+        var lots = LSo.assignLots(flightsList().map(function (x) { return { lifters: x.f.lifters.map(function (l) { return { id: l.id, sex: ent[l.id].sex }; }) }; }));
+        flightsList().forEach(function (x) { x.f.lifters.forEach(function (l) { l.lot = lots[l.id]; }); });
+        S.showLots = true; lotToggle.querySelector("input").checked = true; S.dirty = true; status(); say("Lot numbers drawn. Save to keep them."); draw();
+      }
       function runSort() {
         if (flightsList().length && !window.confirm("Sorting again replaces the order below, including anything you moved by hand. Carry on?")) return;
         var out = LSo.build(list, settingsNow());
-        S.sessions = out.sessions.map(function (s) { return { day: s.day, sessionNo: s.sessionNo, prime: s.prime, name: s.name, flights: s.flights.map(function (f) { return { letter: f.letter, locked: false, lifters: f.lifters.map(function (l) { return { id: l.id, reason: l.reason, locked: false, lot: null }; }) }; }) }; });
+        S.showLots = false; lotToggle.querySelector("input").checked = false; S.sessions = out.sessions.map(function (s) { return { day: s.day, sessionNo: s.sessionNo, prime: s.prime, name: s.name, flights: s.flights.map(function (f) { return { letter: f.letter, locked: false, lifters: f.lifters.map(function (l) { return { id: l.id, reason: l.reason, locked: false, lot: null }; }) }; }) }; });
         S.warnings = out.warnings; S.dirty = true; S.dropped = 0; status(); draw();
       }
       function remove(id) { flightsList().forEach(function (x) { x.f.lifters = x.f.lifters.filter(function (l) { return l.id !== id; }); }); }
@@ -1120,7 +1141,8 @@
       function lifterRow(l, f, i) {
         var e = ent[l.id];
         return el("tr", { "data-id": l.id, class: l.id === justMoved ? "just-moved" : null }, el("td", { class: "grip-cell" }, grip(l.id)), el("td", null, String(i + 1)), el("th", { scope: "row" }, e.name), el("td", null, (e.sex === "F" ? "W " : "M ") + e.classLabel), el("td", null, e.ageClass), el("td", null, e.event === "bench_only" ? "Bench only" : "Full power"),
-          el("td", null, e.total === null ? "none yet" : e.total + " kg"), el("td", null, e.glp === null ? "–" : String(e.glp)));
+          el("td", null, e.total === null ? "none yet" : e.total + " kg"), el("td", null, e.glp === null ? "–" : String(e.glp)),
+          S.showLots ? el("td", { class: "lot-cell" }, l.lot ? String(l.lot) : "–") : null);
       }
       var justMoved = null;
       function draw(focusKey, moved) {
@@ -1130,6 +1152,7 @@
         kids.push(el("p", { class: "panel-intro" }, list.length + (list.length === 1 ? " lifter" : " lifters") + " entered (" + women + " women, " + (list.length - women) + " men)" + (flights.length ? ". " + S.sessions.length + (S.sessions.length === 1 ? " session, " : " sessions, ") + flights.length + (flights.length === 1 ? " flight, " : " flights, ") + (list.length - unplaced.length) + " placed." : ". Not sorted yet.")));
         var noTotal = list.filter(function (e) { return e.total === null; }).length;
         var notes = S.warnings.slice(); if (S.dropped) notes.push(S.dropped + (S.dropped === 1 ? " lifter" : " lifters") + " on the saved order has cancelled since, and has been taken out. Save to keep that.");
+        var ls = lotsState(); if (ls.any && !ls.ok) notes.push("Lifters have moved since the lot numbers were drawn, so some flights no longer have their own block of numbers. Draw the lot numbers again once the order is settled.");
         if (!flights.length && noTotal) notes.push(noTotal + (noTotal === 1 ? " lifter has" : " lifters have") + " no best total yet (it comes from the OpenIPF check on the entry). They go first in their flight.");
         if (notes.length) kids.push(el("div", { class: "callout" }, el("ul", { style: "margin:0;padding-left:1.2em" }, notes.map(function (w) { return el("li", null, w); }))));
         kids.push(el("p", { class: "visually-hidden", id: "lo-grip-help" }, "Press space to pick this lifter up, then the up and down arrow keys to move them through the order, space to drop them, delete to take them out, or escape to cancel."));
@@ -1149,7 +1172,7 @@
               el("h4", null, "Flight " + f.letter + " ", el("span", { class: "sex-tag" + (sx === "women" ? " f" : "") }, sx === "women" ? "Women" : sx === "men" ? "Men" : sx === "mixed" ? "Mixed" : "Empty"), " · " + f.lifters.length + " lifters"),
               problems.length ? el("p", { class: "form-error" }, "Check this flight: " + problems.join(", ") + ".") : null,
               f.lifters.length ? el("div", { class: "table-scroll" }, el("table", { class: "admin-table lab-table" }, el("caption", { class: "visually-hidden" }, "Flight " + f.letter),
-                el("thead", null, el("tr", null, [el("th", { scope: "col" }, el("span", { class: "visually-hidden" }, "Move")), "#", "Lifter", "Class", "Age class", "Event", "Best total", "GL"].map(function (h) { return h.nodeType ? h : el("th", { scope: "col" }, h); }))),
+                el("thead", null, el("tr", null, [el("th", { scope: "col" }, el("span", { class: "visually-hidden" }, "Move")), "#", "Lifter", "Class", "Age class", "Event", "Best total", "GL"].concat(S.showLots ? ["Lot"] : []).map(function (h) { return h.nodeType ? h : el("th", { scope: "col" }, h); }))),
                 el("tbody", null, f.lifters.map(function (l, i) { return lifterRow(l, f, i); })))) : el("p", { class: "empty" }, "Nobody in this flight. Drag someone here.")));
           });
           kids.push(box);
@@ -1170,11 +1193,15 @@
           S.dirty = false; S.dropped = 0; status(); toast("Lifting order saved."); draw();
         }).catch(function (e) { toast(friendly(e), "error"); }).then(function () { btnNode.disabled = false; });
       }
-      var sortBtn = btn("Sort the entries", runSort, "btn-primary"), saveBtn = btn("Save", function () { save(saveBtn); }, "btn-secondary");
+      var sortBtn = btn("Sort the entries", runSort, "btn-primary"), saveBtn = btn("Save", function () { save(saveBtn); }, "btn-secondary"),
+        lotBtn = btn("Draw lot numbers", drawLots, "btn-secondary"),
+        lotToggle = el("div", { class: "field field-check" }, el("input", { type: "checkbox", id: "lo-show-lots" }), el("div", null, el("label", { for: "lo-show-lots" }, "Show lot numbers")));
+      lotToggle.querySelector("input").addEventListener("change", function (e) { S.showLots = e.target.checked; draw(); });
       view.replaceChildren(
         el("p", { class: "panel-intro" }, "Sort the entered lifters into sessions and flights, then drag anyone to change it. Best totals come from OpenIPF. Not public yet."),
         form.el,
-        el("div", { class: "actions", style: "margin:var(--space-3) 0" }, sortBtn, saveBtn, statusNode),
+        el("div", { class: "actions", style: "margin:var(--space-3) 0" }, sortBtn, lotBtn, saveBtn, statusNode),
+        lotToggle,
         live, area);
       status(); draw();
     }).catch(function (e) { view.replaceChildren(el("p", { class: "form-error" }, friendly(e))); });
