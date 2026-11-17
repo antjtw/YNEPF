@@ -101,17 +101,27 @@
   // ---- printable sheets: the federation's own layouts (weigh-in, score sheet, rack heights, kit check) -------------------
   // Weigh-in is in lot order; the others follow the lifting order. They open in a new tab to print or save as PDF.
   function esc(s) { return String(s === null || s === undefined ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
-  var PAGE_CSS = "*{box-sizing:border-box}body{font:11px/1.3 Arial,Helvetica,sans-serif;color:#000;margin:0}section.page{padding:10mm 8mm;page-break-after:always}section.page:last-child{page-break-after:auto}" +
-    "section.port{page:port}section.land{page:land}@page port{size:A4 portrait;margin:0}@page land{size:A4 landscape;margin:0}" +
-    ".head{display:flex;justify-content:space-between;font-weight:bold;margin-bottom:6px}.head span+span{margin-left:16px}" +
-    "table{border-collapse:collapse;width:100%}th,td{border:1.5px solid #000;padding:0 5px;text-align:left;vertical-align:middle;height:7.2mm}th{background:#f2f2f2;font-size:10px;height:auto;padding:4px 5px}" +
-    "tbody tr:nth-child(even) td{background:#f6f6f6}td.c,th.c{text-align:center;padding:0 2px}th.v{writing-mode:vertical-rl;transform:rotate(180deg);text-align:left;height:20mm;padding:4px 2px}" +
-    ".sign{display:flex;gap:30mm;margin-top:8mm;font-weight:bold;page-break-inside:avoid}.sign div{min-width:62mm}.sign p{margin:0 0 5px;display:flex;align-items:flex-end;gap:6px}.sign p i{flex:1;border-bottom:1px solid #000;height:12px}" +
-    ".tick{width:9mm}.land th.c,.land td.c{min-width:9mm}.noprint{margin:8px;padding:8px;background:#ffd;border:1px solid #aa0}@media print{.noprint{display:none}}";
-  function shell(title, body) { return "<!doctype html><html lang=\"en-GB\"><head><meta charset=\"utf-8\"><title>" + esc(title) + "</title><style>" + PAGE_CSS + "</style></head><body><p class=\"noprint\">Use your browser's Print (Ctrl or Cmd + P) to print this or save it as a PDF. Turn off headers and footers, and set margins to none.</p>" + body + "</body></html>"; }
+  // YNEPF look: IBM Plex Sans for the text and Cutmark for the title, navy and iron from the site's palette. Fonts come from the site itself.
+  function fontCss() {
+    var base = typeof location !== "undefined" && location.origin && location.origin !== "null" ? location.origin : "";
+    return "@font-face{font-family:'IBM Plex Sans';src:url('" + base + "/assets/fonts/ibm-plex-sans-latin-wght-normal.woff2') format('woff2');font-weight:100 700}" +
+      "@font-face{font-family:'Cutmark';src:url('" + base + "/assets/fonts/CutmarkVariableGX.ttf') format('truetype');font-weight:100 1000;font-stretch:40% 100%}";
+  }
+  var PAGE_CSS = ":root{--navy:#152C41;--navy-tint:#E8EDF2;--navy-faint:#F6F8FA;--iron:#AA482C}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}" +
+    "html{background:#fff}body{font:11px/1.3 'IBM Plex Sans','Helvetica Neue',Arial,sans-serif;color:#07121A;margin:0}" +
+    "section.page{padding:10mm 8mm;page-break-after:always}section.page:last-child{page-break-after:auto}section.port{page:port}section.land{page:land}@page port{size:A4 portrait;margin:0}@page land{size:A4 landscape;margin:0}" +
+    ".org{font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--iron);font-weight:600;margin:0 0 2px}" +
+    ".head{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:7px;padding-bottom:5px;border-bottom:2.5px solid var(--iron);font-weight:600;color:var(--navy)}" +
+    ".head .t{font-family:'Cutmark','IBM Plex Sans',Arial,sans-serif;font-size:17px;font-weight:700;letter-spacing:.01em}.head .t span+span{margin-left:14px;font-weight:600}.head .r span+span{margin-left:14px}" +
+    "table{border-collapse:collapse;width:100%}th,td{border:1px solid var(--navy);padding:0 5px;text-align:left;vertical-align:middle;height:7.2mm}" +
+    "th{background:var(--navy);color:#fff;font-size:9.5px;font-weight:600;height:auto;padding:4px 5px;border-color:var(--navy)}td{border-color:#4b5b6b}" +
+    "tbody tr:nth-child(even) td{background:var(--navy-faint)}td.c,th.c{text-align:center;padding:0 2px}th.v{writing-mode:vertical-rl;transform:rotate(180deg);text-align:left;height:20mm;padding:4px 2px}" +
+    ".sign{display:flex;gap:22mm;margin-top:8mm;font-weight:600;color:var(--navy);page-break-inside:avoid}.sign div{min-width:60mm}.sign p{margin:0 0 5px;display:flex;align-items:flex-end;gap:6px}.sign p:first-child{color:var(--iron)}.sign p i{flex:1;border-bottom:1px solid var(--navy);height:12px}" +
+    ".tick{width:9mm}.land th.c,.land td.c{min-width:9mm}.noprint{margin:8px;padding:8px;background:#ffd;border:1px solid #aa0;font-family:Arial,sans-serif}@media print{.noprint{display:none}}";
+  function shell(title, body) { return "<!doctype html><html lang=\"en-GB\"><head><meta charset=\"utf-8\"><title>" + esc(title) + "</title><style>" + fontCss() + PAGE_CSS + "</style></head><body><p class=\"noprint\">Use your browser's Print (Ctrl or Cmd + P): A4, margins none, headers and footers off. You can also save it as a PDF.</p>" + body + "</body></html>"; }
   var MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
   function dayDate(start, day) { var d = new Date(String(start).slice(0, 10) + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + (day || 1) - 1); return d.getUTCDate() + " " + MONTHS[d.getUTCMonth()] + " " + d.getUTCFullYear(); }
-  function head(left, comp, day) { return "<div class=\"head\"><div>" + left + "</div><div><span>" + esc(dayDate(comp.start_date, day)) + "</span><span>" + esc(comp.venue_name || "") + "</span></div></div>"; }
+  function head(left, comp, day) { return "<p class=\"org\">Yorkshire &amp; North East Powerlifting Federation</p><div class=\"head\"><div class=\"t\">" + left + "</div><div class=\"r\"><span>" + esc(dayDate(comp.start_date, day)) + "</span><span>" + esc(comp.venue_name || "") + "</span></div></div>"; }
   function sign(titles) { return "<div class=\"sign\">" + titles.map(function (t) { return "<div><p>" + esc(t) + "</p><p>Name (Print) <i></i></p><p>Signature <i></i></p><p>Category <i></i></p></div>"; }).join("") + "</div>"; }
   function byLot(a, b) { return (a.lot || 1e9) - (b.lot || 1e9); }
   function cls(e) { return (e.sex === "F" ? "F" : "M") + e.classLabel; }
