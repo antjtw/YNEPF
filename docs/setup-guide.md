@@ -193,11 +193,11 @@ Each time someone's entry is confirmed, `competitions@ynepf.co.uk` (the `NOTIFY_
 
 Every online-entry competition has a **Lifting order** tab (entries team and admins). It takes the competition's real entered lifters (paid or free) and:
 - **Sort the entries** runs the auto sort: days, sessions and flights, with women and men apart, at most 14 full power / 20 in all per flight, optional prime time, classes running up, and lifters with no best total first. Set the days, sessions, flight limits and prime time above the button first, if you want to.
-- Move anyone by hand with the **Move to…** menu on their row (or take them out of the order), and use the up and down buttons to change their place in a flight. A flight that breaks a rule (women and men mixed, or over the limits) is flagged.
-- Lifters who enter after you've sorted are listed under **Not in the lifting order yet**, with a menu to place them. Lifters who have cancelled are taken out for you.
+- **Drag a lifter by the handle** (the six dots on the left of their row) to move them: up or down in their flight, into another flight or session, or into the **Not in the lifting order** box to take them out. A line shows where they will land. On a touch screen, drag with a finger. Without a mouse: tab to the handle, press space to pick the lifter up, use the up and down arrow keys to move them through the order (the screen reader announces each move), then press space to drop them. Delete takes them out and Escape puts them back. A flight that breaks a rule (women and men mixed, or over the limits) is flagged.
+- Lifters who enter after you've sorted appear in the **Not in the lifting order** box: drag them into a flight. Lifters who have cancelled are taken out for you.
 - **Save** keeps the arrangement (nothing is lost if you leave and come back). Sorting again replaces everything, and asks first.
 
-Best totals come from the OpenIPF check on each entry. Nothing here is public yet: publishing, locks, drag and drop, timings, lot numbers and the OpenLifter export come next. It needs the newest all-in-one SQL.
+Best totals come from the OpenIPF check on each entry. Nothing here is public yet: publishing, locks, timings, lot numbers and the OpenLifter export come next. It needs the newest all-in-one SQL.
 
 ## Part 5j: The lifting order lab
 

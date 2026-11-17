@@ -1035,37 +1035,99 @@
         S.warnings = out.warnings; S.dirty = true; S.dropped = 0; status(); draw();
       }
       function remove(id) { flightsList().forEach(function (x) { x.f.lifters = x.f.lifters.filter(function (l) { return l.id !== id; }); }); }
-      function moveTo(id, key) {
-        var existing = null; flightsList().forEach(function (x) { x.f.lifters.forEach(function (l) { if (l.id === id) existing = l; }); });
-        var item = existing || { id: id, reason: "Placed by hand", locked: false, lot: null };
+      function find(id) { var out = null; flightsList().forEach(function (x, fi) { x.f.lifters.forEach(function (l, i) { if (l.id === id) out = { f: fi, i: i, flight: x.f, item: l }; }); }); return out; }
+      // Put a lifter in a flight at a place (or take them out with letter "out"). beside = the lifter they were dropped next to.
+      function placeAt(id, letter, besideId, before) {
+        if (besideId === id) return false;
+        var was = find(id), item = was ? was.item : { id: id, reason: "", locked: false, lot: null }, fromLetter = was ? was.flight.letter : "out";
         remove(id);
-        if (key === "out") { S.dirty = true; status(); return; }
-        var target = flightsList().filter(function (x) { return x.f.letter === key; })[0]; if (!target) return;
-        item.reason = "Moved here by hand";
-        var at = target.f.lifters.length;
-        for (var i = 0; i < target.f.lifters.length; i++) { if (LSo.flightOrder(ent[id], ent[target.f.lifters[i].id]) < 0) { at = i; break; } }
-        target.f.lifters.splice(at, 0, item); S.dirty = true; status();
+        if (letter === "out") { S.dirty = true; status(); return fromLetter !== "out"; }
+        var target = flightsList().filter(function (x) { return x.f.letter === letter; })[0]; if (!target) return false;
+        var at = besideId ? target.f.lifters.findIndex(function (l) { return l.id === besideId; }) + (before ? 0 : 1) : target.f.lifters.length;
+        if (besideId && at < (before ? 0 : 1)) at = target.f.lifters.length;
+        item.reason = "Moved here by hand"; target.f.lifters.splice(at, 0, item); S.dirty = true; status(); return true;
       }
-      function nudge(id, dir) {
-        flightsList().forEach(function (x) { var i = x.f.lifters.findIndex(function (l) { return l.id === id; }); var j = i + dir; if (i < 0 || j < 0 || j >= x.f.lifters.length) return; var t = x.f.lifters[i]; x.f.lifters[i] = x.f.lifters[j]; x.f.lifters[j] = t; S.dirty = true; status(); });
+      // Keyboard: one step through the whole order. Down goes later in the flight, then into the next flight; up the other way, and out of the first flight takes them out.
+      function stepBy(id, dir) {
+        var cur = find(id), fl = flightsList(); if (!fl.length) return "";
+        if (!cur) { if (dir > 0) { var t = fl[0].f; t.lifters.unshift({ id: id, reason: "Moved here by hand", locked: false, lot: null }); S.dirty = true; status(); return "Flight " + t.letter + ", place 1 of " + t.lifters.length; } return "Not in the lifting order"; }
+        var ls = cur.flight.lifters, j = cur.i + dir;
+        if (j >= 0 && j < ls.length) { var tmp = ls[cur.i]; ls[cur.i] = ls[j]; ls[j] = tmp; S.dirty = true; status(); return "Flight " + cur.flight.letter + ", place " + (j + 1) + " of " + ls.length; }
+        var nf = cur.f + dir;
+        if (nf < 0) { remove(id); S.dirty = true; status(); return "Taken out of the lifting order"; }
+        if (nf >= fl.length) return "Flight " + cur.flight.letter + ", place " + (cur.i + 1) + " of " + ls.length + ", the last place";
+        remove(id); var dest = fl[nf].f, it = cur.item; it.reason = "Moved here by hand";
+        if (dir > 0) dest.lifters.unshift(it); else dest.lifters.push(it);
+        S.dirty = true; status(); return "Flight " + dest.letter + ", place " + (dir > 0 ? 1 : dest.lifters.length) + " of " + dest.lifters.length;
       }
-      function moveSelect(id) {
-        var sel = el("select", { class: "control", "data-fk": "mv:" + id, "aria-label": "Move " + ent[id].name + " to" }, el("option", { value: "" }, "Move to…"));
-        flightsList().forEach(function (x) { sel.appendChild(el("option", { value: x.f.letter }, "Flight " + x.f.letter + " (day " + x.s.day + ", session " + x.s.sessionNo + (x.s.prime ? ", prime time" : "") + ", " + (sexOf(x.f) || "empty") + ")")); });
-        sel.appendChild(el("option", { value: "out" }, "Take out of the lifting order"));
-        sel.addEventListener("change", function () { if (!sel.value) return; moveTo(id, sel.value); draw("mv:" + id); });
-        return sel;
+
+      var kb = null;                       // keyboard: the lifter picked up, and the order as it was
+      var live = el("div", { class: "visually-hidden", role: "status", "aria-live": "polite", id: "lo-live" });
+      function say(t) { live.textContent = ""; window.setTimeout(function () { live.textContent = t; }, 30); }
+
+      // ---- dragging with a mouse or a finger (pointer events)
+      function startDrag(e, id) {
+        if (e.pointerType === "mouse" && e.button !== 0) return;
+        e.preventDefault();
+        var handle = e.currentTarget, rowEl = handle.closest("tr"), ghost = el("div", { class: "drag-ghost", "aria-hidden": "true" }, ent[id].name + "  ·  " + (ent[id].sex === "F" ? "W " : "M ") + ent[id].classLabel);
+        document.body.appendChild(ghost); document.body.classList.add("dragging-lifter"); rowEl.classList.add("is-dragging");
+        try { handle.setPointerCapture(e.pointerId); } catch (x) { /* fine without */ }
+        var drop = null, scroller = null, lastY = e.clientY;
+        function clear() { Array.prototype.forEach.call(area.querySelectorAll(".drop-before,.drop-after,.drop-here"), function (n) { n.classList.remove("drop-before", "drop-after", "drop-here"); }); }
+        function position(ev) { ghost.style.left = ev.clientX + 14 + "px"; ghost.style.top = ev.clientY + 8 + "px"; }
+        function target(ev) {
+          var under = document.elementFromPoint(ev.clientX, ev.clientY); if (!under) return null;
+          var row = under.closest("tr[data-id]");
+          if (row && row.dataset.id !== id) { var r = row.getBoundingClientRect(), fl = row.closest("[data-flight]"); return { letter: fl ? fl.dataset.flight : "out", beside: row.dataset.id, before: ev.clientY < r.top + r.height / 2, row: row }; }
+          if (row) return null;
+          var f = under.closest("[data-flight]"); if (f) return { letter: f.dataset.flight, box: f };
+          var z = under.closest("#lo-unplaced-zone"); if (z) return { letter: "out", box: z };
+          return null;
+        }
+        function move(ev) {
+          position(ev); lastY = ev.clientY; clear(); drop = target(ev);
+          if (drop) { if (drop.row) drop.row.classList.add(drop.before ? "drop-before" : "drop-after"); else if (drop.box) drop.box.classList.add("drop-here"); if (drop.row && drop.letter === "out") drop.row.closest("#lo-unplaced-zone") && drop.row.closest("#lo-unplaced-zone").classList.add("drop-here"); }
+        }
+        function scroll() { if (lastY < 90) window.scrollBy(0, -14); else if (lastY > window.innerHeight - 90) window.scrollBy(0, 14); scroller = window.requestAnimationFrame(scroll); }
+        function finish(commit) {
+          handle.removeEventListener("pointermove", move); handle.removeEventListener("pointerup", up); handle.removeEventListener("pointercancel", cancel); document.removeEventListener("keydown", esc);
+          window.cancelAnimationFrame(scroller); ghost.remove(); document.body.classList.remove("dragging-lifter"); rowEl.classList.remove("is-dragging"); clear();
+          var moved = commit && drop ? placeAt(id, drop.letter, drop.beside, drop.before) : false;
+          if (moved) { say(drop.letter === "out" ? ent[id].name + " taken out of the lifting order." : ent[id].name + " moved to flight " + drop.letter + "."); draw("grip:" + id, id); }
+        }
+        function up() { finish(true); } function cancel() { finish(false); } function esc(ev) { if (ev.key === "Escape") finish(false); }
+        handle.addEventListener("pointermove", move); handle.addEventListener("pointerup", up); handle.addEventListener("pointercancel", cancel); document.addEventListener("keydown", esc);
+        position(e); scroller = window.requestAnimationFrame(scroll);
+      }
+      function gripKey(ev, id) {
+        var k = ev.key;
+        if (k === " " || k === "Enter") {
+          ev.preventDefault();
+          if (!kb) { kb = { id: id, snap: JSON.stringify(S.sessions) }; var c = find(id); say("Picked up " + ent[id].name + (c ? ", flight " + c.flight.letter + ", place " + (c.i + 1) + " of " + c.flight.lifters.length : ", not in the order") + ". Use the up and down arrow keys to move, space to drop, delete to take out, escape to cancel."); }
+          else { var d = find(id); kb = null; say("Dropped " + ent[id].name + (d ? " in flight " + d.flight.letter + ", place " + (d.i + 1) + "." : ", not in the order.")); }
+          draw("grip:" + id); return;
+        }
+        if (!kb || kb.id !== id) return;
+        if (k === "Escape") { ev.preventDefault(); S.sessions = JSON.parse(kb.snap); kb = null; say("Cancelled. " + ent[id].name + " is back where they were."); draw("grip:" + id); }
+        else if (k === "ArrowDown" || k === "ArrowUp") { ev.preventDefault(); say(ent[id].name + ": " + stepBy(id, k === "ArrowDown" ? 1 : -1)); draw("grip:" + id); }
+        else if (k === "Delete" || k === "Backspace") { ev.preventDefault(); remove(id); S.dirty = true; status(); say(ent[id].name + " taken out of the lifting order."); draw("grip:" + id); }
+      }
+      var gripSvg = function () { var s = document.createElementNS("http://www.w3.org/2000/svg", "svg"); s.setAttribute("viewBox", "0 0 12 18"); s.setAttribute("width", "12"); s.setAttribute("height", "18"); s.setAttribute("aria-hidden", "true"); s.setAttribute("focusable", "false");
+        [[3, 3], [9, 3], [3, 9], [9, 9], [3, 15], [9, 15]].forEach(function (p) { var c = document.createElementNS("http://www.w3.org/2000/svg", "circle"); c.setAttribute("cx", p[0]); c.setAttribute("cy", p[1]); c.setAttribute("r", "1.7"); c.setAttribute("fill", "currentColor"); s.appendChild(c); }); return s; };
+      function grip(id) {
+        var b = el("button", { class: "grip", type: "button", "data-fk": "grip:" + id, "aria-pressed": kb && kb.id === id ? "true" : "false", "aria-describedby": "lo-grip-help", "aria-label": "Move " + ent[id].name }, gripSvg());
+        b.addEventListener("pointerdown", function (e) { startDrag(e, id); }); b.addEventListener("mousedown", function (e) { e.preventDefault(); });      // no text gets selected while dragging
+        b.addEventListener("keydown", function (e) { gripKey(e, id); });
+        return b;
       }
       function lifterRow(l, f, i) {
         var e = ent[l.id];
-        return el("tr", null, el("td", null, String(i + 1)), el("th", { scope: "row" }, e.name), el("td", null, (e.sex === "F" ? "W " : "M ") + e.classLabel), el("td", null, e.event === "bench_only" ? "Bench only" : "Full power"),
-          el("td", null, e.total === null ? "none yet" : e.total + " kg"), el("td", null, e.glp === null ? "–" : String(e.glp)),
-          el("td", null, el("span", { class: "actions" },
-            el("button", { class: "btn btn-ghost btn-sm", type: "button", "data-fk": "up:" + l.id, "aria-label": "Move " + e.name + " up in flight " + f.letter, disabled: i === 0 ? "disabled" : null, onclick: function () { nudge(l.id, -1); draw("up:" + l.id); } }, "↑"),
-            el("button", { class: "btn btn-ghost btn-sm", type: "button", "data-fk": "down:" + l.id, "aria-label": "Move " + e.name + " down in flight " + f.letter, disabled: i === f.lifters.length - 1 ? "disabled" : null, onclick: function () { nudge(l.id, 1); draw("down:" + l.id); } }, "↓"),
-            moveSelect(l.id))));
+        return el("tr", { "data-id": l.id, class: l.id === justMoved ? "just-moved" : null }, el("td", { class: "grip-cell" }, grip(l.id)), el("td", null, String(i + 1)), el("th", { scope: "row" }, e.name), el("td", null, (e.sex === "F" ? "W " : "M ") + e.classLabel), el("td", null, e.event === "bench_only" ? "Bench only" : "Full power"),
+          el("td", null, e.total === null ? "none yet" : e.total + " kg"), el("td", null, e.glp === null ? "–" : String(e.glp)));
       }
-      function draw(focusKey) {
+      var justMoved = null;
+      function draw(focusKey, moved) {
+        justMoved = moved || null;
         var kids = [], pl = placed(), unplaced = list.filter(function (e) { return !pl[e.id]; }), flights = flightsList();
         var women = list.filter(function (e) { return e.sex === "F"; }).length;
         kids.push(el("p", { class: "panel-intro" }, list.length + (list.length === 1 ? " lifter" : " lifters") + " entered (" + women + " women, " + (list.length - women) + " men)" + (flights.length ? ". " + S.sessions.length + (S.sessions.length === 1 ? " session, " : " sessions, ") + flights.length + (flights.length === 1 ? " flight, " : " flights, ") + (list.length - unplaced.length) + " placed." : ". Not sorted yet.")));
@@ -1073,29 +1135,33 @@
         var notes = S.warnings.slice(); if (S.dropped) notes.push(S.dropped + (S.dropped === 1 ? " lifter" : " lifters") + " on the saved order has cancelled since, and has been taken out. Save to keep that.");
         if (!flights.length && noTotal) notes.push(noTotal + (noTotal === 1 ? " lifter has" : " lifters have") + " no best total yet (it comes from the OpenIPF check on the entry). They go first in their flight.");
         if (notes.length) kids.push(el("div", { class: "callout" }, el("ul", { style: "margin:0;padding-left:1.2em" }, notes.map(function (w) { return el("li", null, w); }))));
-        if (unplaced.length && flights.length) {
-          kids.push(el("section", { "aria-labelledby": "lo-unplaced" }, el("h3", { id: "lo-unplaced" }, "Not in the lifting order yet (" + unplaced.length + ")"),
-            el("p", { class: "help" }, "Entered since you sorted, or taken out. Choose a flight for each, or sort again."),
-            el("div", { class: "table-scroll" }, el("table", { class: "admin-table" }, el("thead", null, el("tr", null, ["Lifter", "Class", "Best total", "Place in a flight"].map(function (h) { return el("th", { scope: "col" }, h); }))),
-              el("tbody", null, unplaced.map(function (e) { return el("tr", null, el("th", { scope: "row" }, e.name), el("td", null, (e.sex === "F" ? "W " : "M ") + e.classLabel), el("td", null, e.total === null ? "none yet" : e.total + " kg"), el("td", null, moveSelect(e.id))); }))))));
+        if (flights.length) kids.push(el("p", { class: "help" }, "Drag a lifter by the handle (the dots on the left) to move them, into another flight too. Without a mouse: focus the handle, press space to pick them up, use the up and down arrow keys, then space to drop."));
+        kids.push(el("p", { class: "visually-hidden", id: "lo-grip-help" }, "Press space to pick this lifter up, then the up and down arrow keys to move them through the order, space to drop them, delete to take them out, or escape to cancel."));
+        if (flights.length) {
+          kids.push(el("section", { id: "lo-unplaced-zone", class: "lab-unplaced", "aria-labelledby": "lo-unplaced" }, el("h3", { id: "lo-unplaced" }, "Not in the lifting order" + (unplaced.length ? " (" + unplaced.length + ")" : "")),
+            unplaced.length ? el("div", { class: "table-scroll" }, el("table", { class: "admin-table lab-table" }, el("caption", { class: "visually-hidden" }, "Lifters not yet in the lifting order"),
+              el("thead", null, el("tr", null, [el("th", { scope: "col" }, el("span", { class: "visually-hidden" }, "Move")), "Lifter", "Class", "Best total"].map(function (h) { return h.nodeType ? h : el("th", { scope: "col" }, h); }))),
+              el("tbody", null, unplaced.map(function (e) { return el("tr", { "data-id": e.id }, el("td", { class: "grip-cell" }, grip(e.id)), el("th", { scope: "row" }, e.name), el("td", null, (e.sex === "F" ? "W " : "M ") + e.classLabel), el("td", null, e.total === null ? "none yet" : e.total + " kg")); }))))
+              : el("p", { class: "help" }, "Everyone is in. Drag a lifter here to take them out of the lifting order.")));
         }
         S.sessions.forEach(function (s) {
           var box = el("section", { class: "lab-session", "aria-label": "Day " + s.day + ", session " + s.sessionNo }, el("h3", null, "Day " + s.day + ", session " + s.sessionNo + (s.prime ? ": prime time" : "")));
           s.flights.forEach(function (f) {
             var fp = f.lifters.filter(function (l) { return ent[l.id].event !== "bench_only"; }).length, sx = sexOf(f), st = settingsNow();
             var problems = []; if (sx === "mixed") problems.push("women and men in the same flight"); if (f.lifters.length > st.maxPerFlight) problems.push("over the " + st.maxPerFlight + " lifters limit"); if (fp > st.maxFullPower) problems.push("over the " + st.maxFullPower + " full power limit");
-            box.appendChild(el("section", { class: "lab-flight" },
+            box.appendChild(el("section", { class: "lab-flight", "data-flight": f.letter },
               el("h4", null, "Flight " + f.letter + " ", el("span", { class: "sex-tag" + (sx === "women" ? " f" : "") }, sx === "women" ? "Women" : sx === "men" ? "Men" : sx === "mixed" ? "Mixed" : "Empty"), " · " + f.lifters.length + " lifters"),
               problems.length ? el("p", { class: "form-error" }, "Check this flight: " + problems.join(", ") + ".") : null,
               f.lifters.length ? el("div", { class: "table-scroll" }, el("table", { class: "admin-table lab-table" }, el("caption", { class: "visually-hidden" }, "Flight " + f.letter),
-                el("thead", null, el("tr", null, ["#", "Lifter", "Class", "Event", "Best total", "GL", "Move"].map(function (h) { return el("th", { scope: "col" }, h); }))),
-                el("tbody", null, f.lifters.map(function (l, i) { return lifterRow(l, f, i); })))) : el("p", { class: "empty" }, "Nobody in this flight.")));
+                el("thead", null, el("tr", null, [el("th", { scope: "col" }, el("span", { class: "visually-hidden" }, "Move")), "#", "Lifter", "Class", "Event", "Best total", "GL"].map(function (h) { return h.nodeType ? h : el("th", { scope: "col" }, h); }))),
+                el("tbody", null, f.lifters.map(function (l, i) { return lifterRow(l, f, i); })))) : el("p", { class: "empty" }, "Nobody in this flight. Drag someone here.")));
           });
           kids.push(box);
         });
         if (!list.length) kids.push(el("p", { class: "empty" }, "Nobody has entered yet, so there is nothing to sort."));
         area.replaceChildren.apply(area, kids);
-        if (focusKey) { var t = area.querySelector('[data-fk="' + focusKey + '"]'); if (t && !t.disabled) t.focus(); else { var alt = area.querySelector('[data-fk="' + focusKey.replace(/^(up|down):/, "mv:") + '"]'); if (alt) alt.focus(); } }
+        if (focusKey) { var t = area.querySelector('[data-fk="' + focusKey + '"]'); if (t && !t.disabled) t.focus(); }
+        if (moved) window.setTimeout(function () { var r = area.querySelector('tr[data-id="' + moved + '"]'); if (r) r.classList.remove("just-moved"); }, 1400);
       }
       function save(btnNode) {
         var st = settingsNow();
@@ -1113,7 +1179,7 @@
         el("p", { class: "panel-intro" }, "Sort this competition's entered lifters into days, sessions and flights, then move people by hand where you want something different. Best totals come from the OpenIPF check on each entry. Nothing here is public yet."),
         form.el,
         el("div", { class: "actions", style: "margin:var(--space-3) 0" }, sortBtn, saveBtn, statusNode),
-        area);
+        live, area);
       status(); draw();
     }).catch(function (e) { view.replaceChildren(el("p", { class: "form-error" }, friendly(e))); });
   }

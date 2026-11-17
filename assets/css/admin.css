@@ -144,3 +144,19 @@ input:disabled, select:disabled, textarea:disabled { background: var(--navy-10, 
 .lab-table th[scope=row] { white-space: nowrap; }
 .lab-table .reason { color: var(--text-muted); font-size: .9375rem; }
 .lab-warn { background: var(--surface-muted); border-radius: var(--radius); padding: var(--space-3) var(--space-4); }
+
+/* Lifting order: the drag handle, the drop markers and the floating name. */
+.grip { display: inline-grid; place-items: center; width: 2.75rem; height: 2.75rem; border: 0; background: transparent; color: var(--text-muted); cursor: grab; border-radius: var(--radius); touch-action: none; }
+.grip:hover { background: var(--navy-100); color: var(--text-heading); }
+.grip[aria-pressed="true"] { background: var(--accent); color: #fff; }
+.grip-cell { width: 3rem; padding-left: 0 !important; padding-right: 0 !important; }
+body.dragging-lifter { user-select: none; cursor: grabbing; }
+.lab-table tr.is-dragging { opacity: .4; }
+.lab-table tr.drop-before > * { box-shadow: inset 0 3px 0 var(--accent); }
+.lab-table tr.drop-after > * { box-shadow: inset 0 -3px 0 var(--accent); }
+.lab-flight.drop-here, .lab-unplaced.drop-here { outline: 3px dashed var(--accent); outline-offset: 4px; border-radius: var(--radius); }
+.lab-unplaced { margin-top: var(--space-4); padding: var(--space-2) 0; }
+.drag-ghost { position: fixed; z-index: 1000; pointer-events: none; background: var(--navy-950); color: #fff; padding: .4rem .8rem; border-radius: var(--radius); box-shadow: var(--shadow-md, 0 4px 12px rgba(0,0,0,.25)); font-weight: 600; white-space: nowrap; }
+@keyframes lo-moved { from { background: color-mix(in srgb, var(--accent) 22%, transparent); } to { background: transparent; } }
+.lab-table tr.just-moved > * { animation: lo-moved 1.4s ease-out; }
+@media (prefers-reduced-motion: reduce) { .lab-table tr.just-moved > * { animation: none; background: color-mix(in srgb, var(--accent) 12%, transparent); } }
