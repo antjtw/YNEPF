@@ -1132,7 +1132,6 @@
         var notes = S.warnings.slice(); if (S.dropped) notes.push(S.dropped + (S.dropped === 1 ? " lifter" : " lifters") + " on the saved order has cancelled since, and has been taken out. Save to keep that.");
         if (!flights.length && noTotal) notes.push(noTotal + (noTotal === 1 ? " lifter has" : " lifters have") + " no best total yet (it comes from the OpenIPF check on the entry). They go first in their flight.");
         if (notes.length) kids.push(el("div", { class: "callout" }, el("ul", { style: "margin:0;padding-left:1.2em" }, notes.map(function (w) { return el("li", null, w); }))));
-        if (flights.length) kids.push(el("p", { class: "help" }, "Drag a lifter by the handle (the dots on the left) to move them, into another flight too. Without a mouse: focus the handle, press space to pick them up, use the up and down arrow keys, then space to drop."));
         kids.push(el("p", { class: "visually-hidden", id: "lo-grip-help" }, "Press space to pick this lifter up, then the up and down arrow keys to move them through the order, space to drop them, delete to take them out, or escape to cancel."));
         if (flights.length) {
           kids.push(el("section", { id: "lo-unplaced-zone", class: "lab-unplaced", "aria-labelledby": "lo-unplaced" }, el("h3", { id: "lo-unplaced" }, "Not in the lifting order" + (unplaced.length ? " (" + unplaced.length + ")" : "")),
@@ -1173,7 +1172,7 @@
       }
       var sortBtn = btn("Sort the entries", runSort, "btn-primary"), saveBtn = btn("Save", function () { save(saveBtn); }, "btn-secondary");
       view.replaceChildren(
-        el("p", { class: "panel-intro" }, "Sort this competition's entered lifters into days, sessions and flights, then move people by hand where you want something different. Best totals come from the OpenIPF check on each entry. Nothing here is public yet."),
+        el("p", { class: "panel-intro" }, "Sort the entered lifters into sessions and flights, then drag anyone to change it. Best totals come from OpenIPF. Not public yet."),
         form.el,
         el("div", { class: "actions", style: "margin:var(--space-3) 0" }, sortBtn, saveBtn, statusNode),
         live, area);
