@@ -335,6 +335,64 @@ const stime = (await db.query("select public.server_time() t")).rows[0].t;
 ok(stime && Math.abs(new Date(stime) - Date.now()) < 60000, "anyone can read the server time: " + stime);
 await db.exec("reset role");
 
+// ---- volunteers: sign-up form and rota ----
+await db.exec("reset role");
+const VC = "99999999-9999-9999-9999-999999999999";
+await db.exec(`insert into public.competitions (id,name,start_date,capacity,published,slug,entry_method) values ('${VC}','Vol Open','2027-07-10',20,true,'vol-open','yne')`);
+const roleId = async (n) => (await q(`select id from public.vol_roles where name = $1`, [n]))[0].id;
+const [rTable, rMc, rCrew, rSetupCrew, rChief] = [await roleId("Table"), await roleId("MC"), await roleId("Platform crew"), await roleId("Set up crew"), await roleId("Chief referee")];
+ok((await q(`select count(*)::int n from public.vol_roles`))[0].n >= 15, "the role catalogue is loaded");
+const form = async (slug = "vol-open") => (await q(`select public.volunteer_form($1) f`, [slug]))[0].f;
+await db.exec("set role anon");
+ok((await form()).open === false, "no rota yet: the form is closed");
+await db.exec("reset role");
+await db.exec(`insert into public.vol_rota (competition_id, signup_open) values ('${VC}', false)`);
+const [s1] = await q(`insert into public.vol_sessions (competition_id, area, label, when_text, sort_order) values ('${VC}','session','Session 1; Saturday AM','Weigh-in 08:00',10) returning id`);
+const [s2] = await q(`insert into public.vol_sessions (competition_id, area, label, sort_order) values ('${VC}','setup','Set up; Friday PM',20) returning id`);
+for (const [sid, rid, n] of [[s1.id, rTable, 2], [s1.id, rMc, 1], [s1.id, rCrew, 4], [s1.id, rChief, 1], [s2.id, rSetupCrew, 6]]) for (let i = 1; i <= n; i++) await db.exec(`insert into public.vol_places (vol_session_id, role_id, position) values ('${sid}','${rid}',${i})`);
+await db.exec("set role anon");
+ok((await form()).open === false, "sign-up not switched on: closed");
+await db.exec("reset role"); await db.exec(`update public.vol_rota set signup_open = true where competition_id = '${VC}'`); await db.exec("set role anon");
+const fm = await form();
+ok(fm.open && fm.sessions.length === 2 && JSON.stringify(fm.sessions[0].roles.map((r) => r.name)) === '["Table","MC","Platform crew"]' && fm.sessions[1].roles[0].name === "Set up crew", "the form lists sessions and only the roles volunteers can choose (no referees): " + JSON.stringify(fm.sessions.map((x) => x.roles.map((r) => r.name))));
+const signup = async (o) => { try { await db.query(`select public.volunteer_signup($1::jsonb)`, [JSON.stringify({ slug: "vol-open", name: "Vic Volunteer", email: "Vic@X.com", mobile: "07700 900123", tshirt: "L", over18: true, choices: [{ session_id: s1.id, role_id: rMc }], ...o })]); return null; } catch (e) { return e.message; } };
+ok(!(await signup({})), "a valid sign-up works");
+for (const [what, o, msg] of [["under 18 / not ticked", { over18: false }, "invalid:over18"], ["a bad email", { email: "nope" }, "invalid:email"], ["no T-shirt size", { tshirt: "" }, "invalid:tshirt"], ["a made-up size", { tshirt: "HUGE" }, "invalid:tshirt"],
+  ["no roles chosen", { choices: [] }, "invalid:choices"], ["a role that is not on the form (chief referee)", { choices: [{ session_id: s1.id, role_id: rChief }] }, "invalid:choices"], ["a bad mobile", { mobile: "abc" }, "invalid:mobile"], ["a short name", { name: "V" }, "invalid:name"], ["the wrong competition", { slug: "nope" }, "closed"]]) {
+  const e = await signup(o); ok(e && e.includes(msg), "refused: " + what + " (" + (e || "accepted").slice(0, 50) + ")");
+}
+await db.exec("reset role");
+let su = await q(`select s.email, s.full_name, s.mobile, s.tshirt, (select count(*)::int from public.vol_signup_roles r where r.signup_id = s.id) n from public.vol_signups s where competition_id = '${VC}'`);
+ok(su.length === 1 && su[0].email === "vic@x.com" && su[0].n === 1 && su[0].tshirt === "L", "stored with a lower case email: " + JSON.stringify(su));
+await db.exec("set role anon");
+ok(!(await signup({ name: "Vic V Changed", choices: [{ session_id: s1.id, role_id: rTable }, { session_id: s2.id, role_id: rSetupCrew }] })), "signing up again with the same email replaces the earlier answers");
+await db.exec("reset role");
+su = await q(`select s.full_name, (select count(*)::int from public.vol_signup_roles r where r.signup_id = s.id) n from public.vol_signups s where competition_id = '${VC}'`);
+ok(su.length === 1 && su[0].full_name === "Vic V Changed" && su[0].n === 2, "still one person, now with two choices");
+ok((await q(`select count(*)::int n from public.vol_people where email = 'vic@x.com'`))[0].n === 1, "and in the people list");
+// the public cannot read people's details
+await db.exec("set role anon");
+ok(!(await can(`select * from public.vol_signups`)) && !(await can(`select * from public.vol_people`)) && !(await can(`select * from public.vol_places`)), "the public cannot read sign-ups, people or places");
+// the rota: nothing public until published, then names only
+await db.exec("reset role");
+const [pl] = await q(`select id from public.vol_places where vol_session_id = '${s1.id}' and role_id = '${rMc}' limit 1`);
+await db.exec(`update public.vol_places set person_name = 'Mia MC', email = 'mia@x.com' where id = '${pl.id}'`);
+await db.exec("set role anon");
+ok((await db.query(`select * from public.rota_public where competition_id = '${VC}'`)).rows.length === 0, "an unpublished rota shows nothing");
+await db.exec("reset role"); await db.exec(`update public.vol_rota set status = 'published' where competition_id = '${VC}'`); await db.exec("set role anon");
+const pub = (await db.query(`select * from public.rota_public where competition_id = '${VC}'`)).rows;
+ok(pub.length === 1 && pub[0].name === "Mia MC" && pub[0].role === "MC" && !("email" in pub[0]) && !("mobile" in pub[0]), "the published rota shows names and roles, with no emails or mobile numbers");
+await db.exec("reset role");
+const prevRows = async (who) => asUser(who, async () => { try { return (await db.query(`select * from public.rota_preview('${VC}')`)).rows; } catch (e) { return { error: e.message }; } });
+await db.exec(`update public.vol_rota set status = 'draft' where competition_id = '${VC}'`);
+ok((await prevRows(U.entries)).length === 1 && (await prevRows(U.editor)).error?.includes("forbidden"), "the entries team can preview a draft rota; an editor cannot");
+// the entries team manages everything; an editor cannot
+await db.exec("reset role"); await db.query(`select set_config('request.uid','${U.entries}',false)`); await db.exec("set role authenticated");
+ok(await can(`update public.vol_places set person_name = 'Someone' where id = '${pl.id}'`) && (await q(`select count(*)::int n from public.vol_signups`))[0].n >= 1, "the entries team can read sign-ups and edit places");
+await db.exec("reset role"); await db.query(`select set_config('request.uid','${U.editor}',false)`); await db.exec("set role authenticated");
+ok((await q(`select count(*)::int n from public.vol_signups`))[0].n === 0, "an editor sees no sign-ups");
+await db.exec("reset role");
+
 // who may do what
 await db.exec("set role anon");
 ok(!(await can(`select public.waitlist_join('{}'::jsonb)`)) && !(await can(`select public.waitlist_sweep('${W}')`)) && !(await can(`select public.waitlist_make_offer('${W}'::uuid, 'x')`)), "the public cannot call the waiting list functions (only our server can)");

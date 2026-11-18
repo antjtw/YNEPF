@@ -896,37 +896,105 @@ grant execute on function public.competition_settlement(uuid) to authenticated; 
 -- ---------------------------------------------------------------------------
 -- 12. Volunteers, points and priority entry (phase 3)
 -- ---------------------------------------------------------------------------
-create table if not exists public.volunteer_roles (
+-- The first, unused placeholder tables are replaced by the vol_* tables below (nothing was ever stored in them).
+drop table if exists public.rota_signups cascade;
+drop table if exists public.rota_slots cascade;
+drop table if exists public.volunteer_roles cascade;
+
+-- People who volunteer or help: one row per email address (sign-ups, referees, anyone the coordinator adds).
+create table if not exists public.vol_people (
+  email text primary key check (email = lower(email)),
+  full_name text not null,
+  mobile text not null default '',
+  tshirt text not null default '' check (tshirt in ('', 'XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+-- The roles. on_form: volunteers can say they are happy to do it. The others (referees, technical controller, session manager,
+-- platform manager, jury, co-ordinators) are filled in by the coordinator, who picks from the pool.
+create table if not exists public.vol_roles (
   id uuid primary key default gen_random_uuid(),
-  name text not null unique,                              -- "Loader", "Referee", "Set up and take down" ...
-  points integer not null default 0,
+  name text not null unique,
+  area text not null default 'session' check (area in ('session', 'setup', 'teardown')),
+  on_form boolean not null default false,
+  default_places integer not null default 1,
+  points integer not null default 1,
   sort_order integer not null default 0
 );
-create table if not exists public.rota_slots (
+insert into public.vol_roles (name, area, on_form, default_places, points, sort_order) values
+  ('Chief referee', 'session', false, 1, 1, 10),
+  ('Side referee', 'session', false, 2, 1, 20),
+  ('Technical controller', 'session', false, 1, 1, 30),
+  ('Jury', 'session', false, 0, 1, 35),
+  ('Session manager', 'session', false, 1, 1, 40),
+  ('Table', 'session', true, 2, 1, 50),
+  ('MC', 'session', true, 1, 1, 60),
+  ('Platform manager', 'session', false, 1, 1, 70),
+  ('Platform crew', 'session', true, 4, 1, 80),
+  ('Warm-up / runner', 'session', true, 1, 1, 90),
+  ('Ad-hoc', 'session', false, 2, 1, 100),
+  ('Set up co-ordinator', 'setup', false, 1, 1, 110),
+  ('Set up crew', 'setup', true, 6, 1, 120),
+  ('Tear down co-ordinator', 'teardown', false, 1, 1, 130),
+  ('Tear down crew', 'teardown', true, 6, 1, 140)
+on conflict (name) do nothing;
+-- One per competition: is sign-up open, and is the rota published.
+create table if not exists public.vol_rota (
+  competition_id uuid primary key references public.competitions (id) on delete cascade,
+  signup_open boolean not null default false,
+  offer_tshirts boolean not null default true,
+  intro text not null default '',
+  status text not null default 'draft' check (status in ('draft', 'published')),
+  published_at timestamptz
+);
+-- The sessions to staff (a lifting session, set up, tear down) and the places in each.
+create table if not exists public.vol_sessions (
   id uuid primary key default gen_random_uuid(),
   competition_id uuid not null references public.competitions (id) on delete cascade,
-  role_id uuid not null references public.volunteer_roles (id),
-  day integer not null default 1,
-  starts_at timestamptz,
-  ends_at timestamptz,
-  places integer not null default 1
+  area text not null default 'session' check (area in ('session', 'setup', 'teardown')),
+  label text not null,
+  when_text text not null default '',
+  jury boolean not null default false,
+  sort_order integer not null default 0
 );
-create table if not exists public.rota_signups (
+create index if not exists vol_sessions_comp on public.vol_sessions (competition_id, sort_order);
+create table if not exists public.vol_places (
   id uuid primary key default gen_random_uuid(),
-  slot_id uuid not null references public.rota_slots (id) on delete cascade,
+  vol_session_id uuid not null references public.vol_sessions (id) on delete cascade,
+  role_id uuid not null references public.vol_roles (id),
+  position integer not null default 1,
+  email text check (email is null or email = lower(email)),
+  person_name text not null default '',
+  status text not null default 'planned' check (status in ('planned', 'arrived', 'no_show', 'cancelled')),
+  updated_at timestamptz not null default now()
+);
+create index if not exists vol_places_session on public.vol_places (vol_session_id);
+-- What people said on the form: who, and which roles in which sessions they are happy to do.
+create table if not exists public.vol_signups (
+  id uuid primary key default gen_random_uuid(),
+  competition_id uuid not null references public.competitions (id) on delete cascade,
   email text not null check (email = lower(email)),
   full_name text not null,
-  status text not null default 'signed_up' check (status in ('signed_up', 'done', 'no_show', 'cancelled')),
+  mobile text not null default '',
+  tshirt text not null default '',
+  note text not null default '',
   created_at timestamptz not null default now(),
-  unique (slot_id, email)
+  unique (competition_id, email)
 );
+create table if not exists public.vol_signup_roles (
+  signup_id uuid not null references public.vol_signups (id) on delete cascade,
+  vol_session_id uuid not null references public.vol_sessions (id) on delete cascade,
+  role_id uuid not null references public.vol_roles (id),
+  primary key (signup_id, vol_session_id, role_id)
+);
+
 -- Append only. A balance is the sum of unexpired rows; spending uses the oldest first.
 create table if not exists public.points_ledger (
   id bigint generated always as identity primary key,
   email text not null check (email = lower(email)),
   delta integer not null,                                  -- positive earned, negative spent
   reason text not null,
-  signup_id uuid references public.rota_signups (id),
+  signup_id uuid,
   entry_id uuid references public.entries (id),
   earned_at timestamptz not null default now(),
   expires_at timestamptz                                   -- 24 months after earning, for earned rows
@@ -1007,7 +1075,7 @@ declare t text;
 begin
   -- Settings that the public competition page needs to read: public read, admins and the entries team write.
   foreach t in array array['entry_settings', 'entry_stages', 'price_rules', 'addons', 'addon_options', 'addon_images',
-                           'qualifying_totals', 'weight_classes', 'divisions', 'clubs', 'volunteer_roles'] loop
+                           'qualifying_totals', 'weight_classes', 'divisions', 'clubs'] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('drop policy if exists "public read" on public.%I', t);
     execute format('create policy "public read" on public.%I for select to anon, authenticated using (true)', t);
@@ -1018,7 +1086,7 @@ begin
   -- payees and hosts are here because they hold contact emails and our commercial split.
   foreach t in array array['federation_fees', 'discount_codes', 'payees', 'hosts', 'entries', 'entry_private', 'entry_addons', 'payments', 'refunds', 'stripe_events', 'waiting_list', 'offers',
                            'invites', 'email_log', 'payout_rules', 'payouts', 'lifting_orders', 'lo_sessions', 'lo_flights',
-                           'lo_assignments', 'competition_redirects', 'rota_slots', 'rota_signups', 'points_ledger'] loop
+                           'lo_assignments', 'competition_redirects', 'points_ledger', 'vol_people', 'vol_roles', 'vol_rota', 'vol_sessions', 'vol_places', 'vol_signups', 'vol_signup_roles'] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('drop policy if exists "entries team" on public.%I', t);
     execute format('create policy "entries team" on public.%I for all to authenticated using (public.is_entries()) with check (public.is_entries())', t);
@@ -1030,9 +1098,8 @@ create policy "public read published" on public.lifting_orders for select to ano
 drop policy if exists "public read published" on public.lo_sessions;
 create policy "public read published" on public.lo_sessions for select to anon, authenticated
   using (exists (select 1 from public.lifting_orders l where l.competition_id = lo_sessions.competition_id and l.status = 'published'));
--- The rota is public so people can sign up; sign-ups themselves go through a function, not directly.
-drop policy if exists "public read" on public.rota_slots;
-create policy "public read" on public.rota_slots for select to anon, authenticated using (true);
+-- The volunteer tables are for the entries team only. The public sign-up form and the published rota go through
+-- functions and a view (section 17), so no emails or mobile numbers are ever readable.
 -- Email wording: the entries team writes it; nobody else needs to read it.
 alter table public.email_templates enable row level security;
 drop policy if exists "entries team" on public.email_templates;
@@ -1047,15 +1114,15 @@ create policy "entries read" on public.audit_log for select to authenticated usi
 -- ---------------------------------------------------------------------------
 grant select on public.clubs, public.entry_settings, public.entry_stages, public.price_rules, public.addons, public.addon_options,
                 public.addon_images, public.qualifying_totals, public.weight_classes, public.divisions, public.payees,
-                public.hosts, public.volunteer_roles, public.rota_slots, public.lifting_orders, public.lo_sessions to anon;
+                public.hosts, public.lifting_orders, public.lo_sessions to anon;
 grant select on public.entries_public, public.waiting_list_public, public.competition_entry_state to anon, authenticated;
 grant select, insert, update, delete on
   public.entry_settings, public.entry_stages, public.price_rules, public.addons, public.addon_options, public.addon_images,
-  public.qualifying_totals, public.weight_classes, public.divisions, public.payees, public.hosts, public.volunteer_roles,
+  public.qualifying_totals, public.weight_classes, public.divisions, public.payees, public.hosts,
   public.federation_fees, public.discount_codes, public.entries, public.entry_private, public.entry_addons, public.payments, public.refunds, public.stripe_events,
   public.waiting_list, public.offers, public.invites, public.email_templates, public.email_log, public.payout_rules,
   public.payouts, public.lifting_orders, public.lo_sessions, public.lo_flights, public.lo_assignments,
-  public.competition_redirects, public.rota_slots, public.rota_signups, public.points_ledger
+  public.competition_redirects, public.points_ledger, public.vol_people, public.vol_roles, public.vol_rota, public.vol_sessions, public.vol_places, public.vol_signups, public.vol_signup_roles
   to authenticated;
 grant select on public.audit_log to authenticated;
 -- The audit log and points ledger are append only: nobody gets update or delete on them.
@@ -2002,3 +2069,95 @@ select g.id, 'Privacy policy', 'privacy', 10
 -- The entry page asks the database for the time, so a phone with the wrong clock is not told entry is closed when it is not.
 create or replace function public.server_time() returns timestamptz language sql stable as $$ select now() $$;
 grant execute on function public.server_time() to anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 17. Volunteers: the sign-up form and the published rota (stage 1)
+-- ---------------------------------------------------------------------------
+-- What the public sign-up form needs: the competition, and each session with only the roles volunteers can choose from.
+-- Nothing personal is returned. A signed-in entries team member can also open the form for an unpublished (test) competition.
+create or replace function public.volunteer_form(slug text) returns jsonb
+language plpgsql stable security definer set search_path = public
+as $$
+declare c public.competitions%rowtype; v public.vol_rota%rowtype;
+begin
+  select * into c from public.competitions where competitions.slug = volunteer_form.slug;
+  if not found or not (c.published or public.is_entries()) then return jsonb_build_object('open', false); end if;
+  select * into v from public.vol_rota where competition_id = c.id;
+  if not found or not v.signup_open then return jsonb_build_object('open', false, 'name', c.name); end if;
+  return jsonb_build_object('open', true, 'name', c.name, 'slug', c.slug, 'start_date', c.start_date, 'offer_tshirts', v.offer_tshirts, 'intro', v.intro,
+    'sessions', coalesce((
+      select jsonb_agg(jsonb_build_object('id', s.id, 'area', s.area, 'label', s.label, 'when_text', s.when_text,
+        'roles', (select jsonb_agg(jsonb_build_object('id', r.id, 'name', r.name) order by r.sort_order)
+                    from public.vol_roles r where r.on_form and exists (select 1 from public.vol_places p where p.vol_session_id = s.id and p.role_id = r.id)))
+        order by s.sort_order)
+      from public.vol_sessions s
+      where s.competition_id = c.id and exists (select 1 from public.vol_places p join public.vol_roles r on r.id = p.role_id where p.vol_session_id = s.id and r.on_form)), '[]'::jsonb));
+end $$;
+revoke all on function public.volunteer_form(text) from public;
+grant execute on function public.volunteer_form(text) to anon, authenticated;
+
+-- A volunteer signs up (or changes their answers: the same email replaces the earlier ones).
+--   p = { slug, name, email, mobile, tshirt, over18, note, choices: [ { session_id, role_id } ] }
+create or replace function public.volunteer_signup(p jsonb) returns void
+language plpgsql security definer set search_path = public
+as $$
+declare c public.competitions%rowtype; v public.vol_rota%rowtype; v_name text; v_email text; v_mobile text; v_shirt text; v_note text; v_id uuid; ch jsonb; n integer := 0;
+begin
+  select * into c from public.competitions where slug = p->>'slug';
+  if not found or not (c.published or public.is_entries()) then raise exception 'closed'; end if;
+  select * into v from public.vol_rota where competition_id = c.id;
+  if not found or not v.signup_open then raise exception 'closed'; end if;
+  v_name := btrim(coalesce(p->>'name', '')); v_email := lower(btrim(coalesce(p->>'email', '')));
+  v_mobile := btrim(coalesce(p->>'mobile', '')); v_shirt := btrim(coalesce(p->>'tshirt', '')); v_note := left(btrim(coalesce(p->>'note', '')), 500);
+  if length(v_name) < 2 or length(v_name) > 120 then raise exception 'invalid:name'; end if;
+  if v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' or length(v_email) > 200 then raise exception 'invalid:email'; end if;
+  if not coalesce((p->>'over18')::boolean, false) then raise exception 'invalid:over18'; end if;
+  if v_mobile <> '' and (v_mobile !~ '^[0-9 +()-]{7,20}$') then raise exception 'invalid:mobile'; end if;
+  if v.offer_tshirts and v_shirt not in ('XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL') then raise exception 'invalid:tshirt'; end if;
+  if not v.offer_tshirts then v_shirt := ''; end if;
+  if jsonb_typeof(coalesce(p->'choices', '[]'::jsonb)) <> 'array' or jsonb_array_length(coalesce(p->'choices', '[]'::jsonb)) = 0 then raise exception 'invalid:choices'; end if;
+  for ch in select * from jsonb_array_elements(p->'choices') loop
+    if not exists (select 1 from public.vol_sessions s join public.vol_places pl on pl.vol_session_id = s.id join public.vol_roles r on r.id = pl.role_id
+                    where s.id = (ch->>'session_id')::uuid and s.competition_id = c.id and r.id = (ch->>'role_id')::uuid and r.on_form) then raise exception 'invalid:choices'; end if;
+  end loop;
+  insert into public.vol_signups (competition_id, email, full_name, mobile, tshirt, note) values (c.id, v_email, v_name, v_mobile, v_shirt, v_note)
+    on conflict (competition_id, email) do update set full_name = excluded.full_name, mobile = excluded.mobile, tshirt = excluded.tshirt, note = excluded.note
+    returning id into v_id;
+  delete from public.vol_signup_roles where signup_id = v_id;
+  for ch in select * from jsonb_array_elements(p->'choices') loop
+    insert into public.vol_signup_roles (signup_id, vol_session_id, role_id) values (v_id, (ch->>'session_id')::uuid, (ch->>'role_id')::uuid) on conflict do nothing;
+  end loop;
+  insert into public.vol_people (email, full_name, mobile, tshirt) values (v_email, v_name, v_mobile, v_shirt)
+    on conflict (email) do update set full_name = excluded.full_name, mobile = case when excluded.mobile <> '' then excluded.mobile else public.vol_people.mobile end,
+      tshirt = case when excluded.tshirt <> '' then excluded.tshirt else public.vol_people.tshirt end, updated_at = now();
+end $$;
+revoke all on function public.volunteer_signup(jsonb) from public;
+grant execute on function public.volunteer_signup(jsonb) to anon, authenticated;
+
+-- The published rota: names and roles only (never emails or mobile numbers).
+create or replace view public.rota_public as
+select s.competition_id, s.id as vol_session_id, s.area, s.label, s.when_text, s.sort_order as session_order,
+       r.name as role, r.sort_order as role_order, p.position, p.person_name as name
+from public.vol_rota v
+join public.competitions c on c.id = v.competition_id and c.published
+join public.vol_sessions s on s.competition_id = v.competition_id
+join public.vol_places p on p.vol_session_id = s.id and p.person_name <> '' and p.status <> 'cancelled'
+join public.vol_roles r on r.id = p.role_id
+where v.status = 'published';
+grant select on public.rota_public to anon, authenticated;
+
+-- The same for the entries team before it is published (the rota's Preview link), published or not.
+create or replace function public.rota_preview(c uuid) returns setof public.rota_public
+language plpgsql stable security definer set search_path = public
+as $$
+begin
+  if not public.is_entries() then raise exception 'forbidden'; end if;
+  return query
+  select s.competition_id, s.id, s.area, s.label, s.when_text, s.sort_order, r.name, r.sort_order, p.position, p.person_name
+    from public.vol_sessions s
+    join public.vol_places p on p.vol_session_id = s.id and p.person_name <> '' and p.status <> 'cancelled'
+    join public.vol_roles r on r.id = p.role_id
+   where s.competition_id = c;
+end $$;
+revoke all on function public.rota_preview(uuid) from public, anon;
+grant execute on function public.rota_preview(uuid) to authenticated;
