@@ -1625,12 +1625,12 @@
       if (role.uses_referees) {
         REF_LEVELS.forEach(function (lv) {
           var rs = V.referees.filter(function (r) { return r.level === lv.value; });
-          if (rs.length) sel.appendChild(el("optgroup", { label: lv.label }, rs.map(function (r) { return el("option", { value: "ref:" + r.id }, r.name); })));
+          if (rs.length) sel.appendChild(el("optgroup", { label: lv.label }, rs.map(function (r) { var d = placedElsewhere(place, r.email || null, r.name); return el("option", d ? { value: "ref:" + r.id, disabled: "disabled" } : { value: "ref:" + r.id }, r.name + (d ? " (already " + roleBy(d.role_id).name + ")" : "")); })));
         });
         sel.appendChild(el("option", { value: "__newref" }, "Add a referee…"));
       } else {
         var yes = V.signups.filter(function (su) { return role.on_form ? ticked(session, role, su.email) : true; });
-        if (yes.length) sel.appendChild(el("optgroup", { label: role.on_form ? "Said they could do this (" + yes.length + ")" : "People who signed up (" + yes.length + ")" }, yes.map(function (su) { return el("option", { value: su.email }, su.full_name); })));
+        if (yes.length) sel.appendChild(el("optgroup", { label: role.on_form ? "Said they could do this (" + yes.length + ")" : "People who signed up (" + yes.length + ")" }, yes.map(function (su) { var d = placedElsewhere(place, su.email, su.full_name); return el("option", d ? { value: su.email, disabled: "disabled" } : { value: su.email }, su.full_name + (d ? " (already " + roleBy(d.role_id).name + ")" : "")); })));
         sel.appendChild(el("option", { value: "__new" }, "Someone else…"));
       }
       // the person already in the place, even if they are not in the lists above (a typed name, or someone who has changed their answers)
@@ -1652,7 +1652,16 @@
       });
       return sel;
     }
+    // one person, one job per session: where is this person already placed in the same session (other than this place)?
+    function sessionOf(place) { return V.sessions.filter(function (x) { return x.vol_places.indexOf(place) >= 0; })[0]; }
+    function sameWho(p, email, name) { return email ? p.email === email : !!name && !p.email && String(p.person_name).toLowerCase() === String(name).toLowerCase(); }
+    function placedElsewhere(place, email, name) {
+      var s = sessionOf(place); if (!s || (!email && !name)) return null;
+      return s.vol_places.filter(function (p) { return p !== place && p.person_name && sameWho(p, email, name); })[0] || null;
+    }
     function setPlace(place, patch) {
+      var dup = patch.person_name ? placedElsewhere(place, patch.email, patch.person_name) : null;
+      if (dup) { toast(patch.person_name + " is already down as " + roleBy(dup.role_id).name + " in this session. Each person can only do one job in a session."); draw(); return Promise.resolve(); }
       return sb.from("vol_places").update(Object.assign({ updated_at: new Date().toISOString() }, patch)).eq("id", place.id).then(ok).then(function () { Object.assign(place, patch); draw(); }).catch(function (e) { fail(e); draw(); });
     }
     // anyone else: choose someone we know, or add a new person (an email is optional, but it is what points go to)
@@ -3249,6 +3258,7 @@
     var parts = (location.hash || "").replace("#", "").split("/");
     var tab = parts[0];
     if (!TABS[tab] || !canSee(tab)) { tab = state.role === "contributor" ? "news" : "competitions"; parts = [tab]; }
+    var acct = $("account-link"); if (acct) { if (tab === "account") acct.setAttribute("aria-current", "page"); else acct.removeAttribute("aria-current"); }
     Array.prototype.forEach.call(document.querySelectorAll(".admin-tabs a"), function (a) {
       if (a.getAttribute("data-tab") === (tab === "privacy" ? "footer" : tab)) a.setAttribute("aria-current", "page");
       else a.removeAttribute("aria-current");
