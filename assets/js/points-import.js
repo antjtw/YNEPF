@@ -28,16 +28,21 @@
     return rows;
   }
   function pad(n) { return (n < 10 ? "0" : "") + n; }
-  // "2025-03-01", "2025-03-01 00:00:00", "01/03/2025" (day first) or "31/06/2026" (a day that does not exist: clamped to the month's last day)
-  function parseDate(s) {
+  var MONTHS = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, sept: 9, oct: 10, nov: 11, dec: 12 };
+  function iso(y, mo, d) { var last = new Date(Date.UTC(y, mo, 0)).getUTCDate(); return y + "-" + pad(mo) + "-" + pad(Math.min(d, last)); }
+  // Reads the date formats a spreadsheet export is likely to use: "2025-03-01", "2025-03-01 00:00:00", "01/03/2025" and "1/3/25" (day first),
+  // "1 Mar 2025", "1-Mar-25", "Mar 1, 2025". A day that does not exist ("31/06/2026") is clamped to the month's last day. A date with no
+  // year ("1 Mar", "01/03") comes back as { d, m } so the caller can work the year out from the columns either side.
+  function parseDateParts(s) {
     s = String(s || "").trim(); var m;
-    if ((m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s))) return m[1] + "-" + m[2] + "-" + m[3];
-    if ((m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(s))) {
-      var d = +m[1], mo = +m[2], y = +m[3], last = new Date(Date.UTC(y, mo, 0)).getUTCDate();
-      if (mo < 1 || mo > 12) return ""; return y + "-" + pad(mo) + "-" + pad(Math.min(d, last));
-    }
-    return "";
+    if ((m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s))) return { y: +m[1], m: +m[2], d: +m[3] };
+    if ((m = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/.exec(s))) { var y = +m[3]; if (y < 100) y += 2000; return { y: y, m: +m[2], d: +m[1] }; }
+    if ((m = /^(\d{1,2})\/(\d{1,2})$/.exec(s))) return { y: null, m: +m[2], d: +m[1] };
+    if ((m = /^(\d{1,2})(?:st|nd|rd|th)?[\s\-]+([A-Za-z]{3,9})\.?(?:[\s\-,]+(\d{2,4}))?$/.exec(s)) && MONTHS[m[2].slice(0, 4).toLowerCase()] || (m && MONTHS[m[2].slice(0, 3).toLowerCase()])) { var mo = MONTHS[m[2].slice(0, 4).toLowerCase()] || MONTHS[m[2].slice(0, 3).toLowerCase()]; var yy = m[3] ? +m[3] : null; if (yy !== null && yy < 100) yy += 2000; return { y: yy, m: mo, d: +m[1] }; }
+    if ((m = /^([A-Za-z]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s*(\d{2,4})?$/.exec(s)) && (MONTHS[m[1].slice(0, 4).toLowerCase()] || MONTHS[m[1].slice(0, 3).toLowerCase()])) { var mo2 = MONTHS[m[1].slice(0, 4).toLowerCase()] || MONTHS[m[1].slice(0, 3).toLowerCase()]; var y2 = m[3] ? +m[3] : null; if (y2 !== null && y2 < 100) y2 += 2000; return { y: y2, m: mo2, d: +m[2] }; }
+    return null;
   }
+  function parseDate(s) { var p = parseDateParts(s); return p && p.y && p.m >= 1 && p.m <= 12 ? iso(p.y, p.m, p.d) : ""; }
   function reasonFor(label, delta) {
     if (/^Q\d\b/i.test(label)) return (delta > 0 ? "Executive or committee service: " : "Spent: ") + label;
     return (delta > 0 ? "Volunteered: " : "Spent: ") + label;
@@ -53,11 +58,13 @@
     if (h < 0) { report.warnings.push("Could not find a row with Name, Email and Points. Save the Master database tab as a CSV and try again."); return { rows: [], people: [], report: report }; }
     var head = grid[h].map(function (c) { return String(c).trim(); }), low2 = head.map(function (c) { return c.toLowerCase(); });
     var nameCol = low2.indexOf("name"), emailCol = low2.indexOf("email"), pointsCol = low2.indexOf("points"), dateRow = h > 0 ? grid[h - 1] : [];
-    var cols = [];
+    var cols = [], prev = null;
     for (var c = pointsCol + 1; c < head.length; c++) {
       var label = head[c]; if (!label || /^notes?$/i.test(label)) continue;
-      var date = parseDate(dateRow[c]);
-      if (!date) { report.warnings.push("The column " + label + " has no date above it, so it was skipped."); continue; }
+      var dp = parseDateParts(dateRow[c]);
+      if (dp && !dp.y && prev) { dp.y = prev.y; if (dp.m < prev.m || (dp.m === prev.m && dp.d < prev.d)) dp.y++; }       // no year: carry on from the column before
+      if (!dp || !dp.y || dp.m < 1 || dp.m > 12) { report.warnings.push("The column " + label + " has no usable date above it (" + (String(dateRow[c] || "").trim() || "empty") + "), so it was skipped."); continue; }
+      prev = dp; var date = iso(dp.y, dp.m, dp.d);
       cols.push({ i: c, label: label, date: date }); report.columns.push(label + " (" + date + ")");
     }
     var byEmail = {}, order = [];
@@ -65,11 +72,11 @@
       var row = grid[r], name = String(row[nameCol] || "").trim(), email = String(row[emailCol] || "").trim().toLowerCase();
       if (!name && !email) continue;
       var sheetTotal = parseFloat(String(row[pointsCol] || "").trim()); if (!isFinite(sheetTotal)) sheetTotal = 0;
-      if (!email) { if (sheetTotal) report.noEmail.push({ name: name, points: sheetTotal }); continue; }
+      if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { if (sheetTotal) report.noEmail.push({ name: name, points: sheetTotal, email: email }); continue; }
       var p = byEmail[email]; if (!p) { p = byEmail[email] = { email: email, name: name, sheetTotal: 0, cells: {} }; order.push(email); }
       p.sheetTotal += sheetTotal;
       cols.forEach(function (col) {
-        var raw = String(row[col.i] === undefined ? "" : row[col.i]).trim(); if (raw === "") return;
+        var raw = String(row[col.i] === undefined ? "" : row[col.i]).trim().replace(/[\u2212\u2013\u2014]/g, "-").replace(/^\+/, ""); if (raw === "") return;
         var v = Number(raw);
         if (!isFinite(v)) { report.badCells.push({ name: name, column: col.label, value: raw }); return; }
         if (Math.round(v) !== v) { report.badCells.push({ name: name, column: col.label, value: raw }); return; }
