@@ -1513,7 +1513,7 @@
 
     // ---- points for helpers at a competition we did not staff
     function drawHelpers() {
-      var sel = el("select", { id: "help-comp" }), box = el("textarea", { id: "help-list", rows: "6", placeholder: "Jo Smith, jo@example.com\nAmir Khan, amir@example.com, 2" }), out = el("div", { "aria-live": "polite" });
+      var sel = el("select", { class: "control", id: "help-comp" }), box = el("textarea", { id: "help-list", rows: "6", placeholder: "Jo Smith, jo@example.com\nAmir Khan, amir@example.com, 2" }), out = el("div", { "aria-live": "polite" });
       helpersBox.replaceChildren(el("summary", null, "Points for helpers at another host's competition"),
         el("p", { class: "help" }, "A franchise competition's host staffs it, but their helpers still earn points. Paste the host's list, one person per line: name, email, and optionally the points (1 if left out). Each person earns once per competition."),
         el("div", { class: "field" }, el("label", { for: "help-comp" }, "Competition"), sel), el("div", { class: "field" }, el("label", { for: "help-list" }, "Helpers"), box), out);
@@ -1544,7 +1544,7 @@
     }
 
     load().then(function () {
-      var search = el("input", { type: "search", id: "pts-q", placeholder: "Search by name or email", "aria-label": "Search by name or email", style: "max-width:22rem" });
+      var search = el("input", { class: "control", type: "search", id: "pts-q", placeholder: "Search by name or email", "aria-label": "Search by name or email", style: "max-width:22rem" });
       search.addEventListener("input", function () { state.q = search.value; drawRows(); });
       panel.replaceChildren(panelHead("Volunteer points", el("span", { class: "actions" }, btn("Add points", function () { adjust(1); }, "btn-primary"), btn("Take points away", function () { adjust(-1); }, "btn-ghost"))),
         summary, el("div", { class: "control-row" }, search),
@@ -1583,7 +1583,7 @@
 
     // ---- first time: create the rota
     function drawSetup() {
-      var n = el("input", { type: "number", id: "vol-n", min: "1", max: "8", value: "2", style: "max-width:8rem" });
+      var n = el("input", { class: "control", type: "number", id: "vol-n", min: "1", max: "8", value: "2", style: "max-width:8rem" });
       var su = el("input", { type: "checkbox", id: "vol-su" }), td = el("input", { type: "checkbox", id: "vol-td" });
       su.checked = true; td.checked = true;
       view.replaceChildren(el("p", { class: "panel-intro" }, "Volunteers sign up for this competition, you decide who does what, then publish the rota. Start by saying how many sessions need staffing. The usual roles and numbers are filled in, and you can change every one."),
@@ -1619,7 +1619,7 @@
     }
     function levelLabel(v) { var l = REF_LEVELS.filter(function (x) { return x.value === v; })[0]; return l ? l.label : ""; }
     function personSelect(session, place) {
-      var role = roleBy(place.role_id), sel = el("select", { "aria-label": role.name + ", place " + place.position });
+      var role = roleBy(place.role_id), sel = el("select", { class: "control", "aria-label": role.name + ", place " + place.position });
       sel.appendChild(el("option", { value: "" }, "Empty"));
       var keep = {};
       if (role.uses_referees) {
@@ -1704,15 +1704,38 @@
           el("span", { class: "actions" }, btn("Edit session", function () { editSession(s); }))));
       order.forEach(function (rid) {
         var r = roleBy(rid), places = byRole[rid];
-        card.appendChild(el("div", { style: "margin:var(--space-3) 0" }, el("div", { class: "lab-headrow" }, el("h3", { style: "font-size:1rem;margin:0" }, r.name + (r.on_form ? "" : " (you choose)")), el("span", { class: "lab-headacts" }, btn("Add place", function () { addPlace(s, rid, places); }))),
-          places.length ? el("ul", { class: "item-list" }, places.map(function (p) {
-            var gone = unavailable(s, p), sel = personSelect(s, p); if (gone) { sel.setAttribute("aria-invalid", "true"); sel.style.borderColor = "var(--error-border, #b91c1c)"; sel.style.borderWidth = "3px"; }
-            return el("li", { class: "item-row" }, el("div", { class: "item-main" }, sel, gone ? el("p", { class: "form-error", role: "alert", style: "margin:var(--space-1) 0 0" }, p.person_name + " is no longer available for this role. Please amend this.") : null,
-              p.level ? el("p", { class: "help", style: "margin:var(--space-1) 0 0" }, p.level) : null, p.email && taken[p.email] > 1 ? el("p", { class: "form-error", style: "margin:var(--space-1) 0 0" }, p.person_name + " is in more than one place in this session.") : null),
-              el("span", { class: "actions" }, btn("Remove place", function () { removePlace(s, p); }, "btn-ghost")));
-          })) : el("p", { class: "help" }, "No places yet.")));
+        card.appendChild(el("div", { style: "margin:var(--space-3) 0" }, el("div", { class: "lab-headrow" }, el("h3", { style: "font-size:1rem;margin:0" }, r.name + (r.on_form ? "" : " (you choose)"), places.length ? null : el("span", { class: "help", style: "font-weight:400;margin-left:var(--space-2)" }, "No places yet")), el("span", { class: "lab-headacts" }, btn("Add place", function () { addPlace(s, rid, places); }))),
+          places.length ? el("ul", { class: "item-list" }, places.map(function (p) { return placeRow(s, p, taken); })) : null));
       });
       return card;
+    }
+    // one place: a dropdown while it is empty or being edited; once someone is in it, their name with the on-the-day buttons beside it
+    var editing = {};
+    var DAY_TAG = { arrived: ["Arrived", "tag tag-open"], no_show: ["No show", "tag tag-full"], cancelled: ["Told us in advance", "tag tag-position"] };
+    function placeRow(s, p, taken) {
+      var gone = unavailable(s, p), r = roleBy(p.role_id), st = DAY_TAG[p.status], filled = !!p.person_name, edit = !filled || editing[p.id];
+      var notes = [gone ? el("p", { class: "form-error", role: "alert", style: "margin:var(--space-1) 0 0" }, p.person_name + " is no longer available for this role. Please amend this.") : null,
+        p.email && taken[p.email] > 1 ? el("p", { class: "form-error", style: "margin:var(--space-1) 0 0" }, p.person_name + " is in more than one place in this session.") : null];
+      var main, acts = [];
+      if (edit) {
+        var sel = personSelect(s, p); sel.classList.add("control");
+        if (gone) { sel.setAttribute("aria-invalid", "true"); sel.style.borderColor = "var(--error-border, #b91c1c)"; sel.style.borderWidth = "3px"; }
+        main = el("div", { class: "item-main" }, sel, notes);
+        if (filled) acts.push(btn("Done", function () { delete editing[p.id]; draw(); }, "btn-secondary", { "aria-label": "Done editing " + p.person_name }));
+        acts.push(btn("Remove place", function () { removePlace(s, p); }, "btn-ghost"));
+      } else {
+        main = el("div", { class: "item-main" }, el("p", { class: "item-title" }, p.person_name, st ? el("span", { class: st[1], style: "margin-left:var(--space-2)" }, st[0]) : null),
+          el("p", { class: "item-sub" }, [p.level, p.email ? "" : "No email, so no points"].filter(Boolean).join(". ")), notes);
+        if (st) acts.push(btn("Undo", function () { mark(p, "planned"); }, "btn-ghost", { "aria-label": "Undo for " + p.person_name }));
+        else {
+          acts.push(btn("Arrived", function () { mark(p, "arrived"); }, "btn-secondary", { "aria-label": "Arrived: " + p.person_name }),
+            btn("No show", function () { mark(p, "no_show"); }, "btn-ghost", { "aria-label": "No show: " + p.person_name }),
+            btn("Told us", function () { mark(p, "cancelled"); }, "btn-ghost", { "aria-label": "Told us in advance: " + p.person_name, title: "They let us know in advance. They lose nothing." }),
+            btn("Edit", function () { editing[p.id] = true; draw(); }, "btn-ghost", { "aria-label": "Edit " + p.person_name }));
+        }
+        acts.push(btn("Remove place", function () { removePlace(s, p); }, "btn-danger", { "aria-label": "Remove " + r.name + " place for " + p.person_name }));
+      }
+      return el("li", { class: "item-row" }, main, el("span", { class: "actions" }, acts));
     }
     function addPlace(s, rid, places) {
       var next = places.reduce(function (m, p) { return Math.max(m, p.position); }, 0) + 1;
@@ -1777,22 +1800,6 @@
         draw();
       }).catch(function (e) { toast(friendly(e), "error"); });
     }
-    function onTheDay() {
-      var groups = []; V.sessions.forEach(function (s) { var ps = s.vol_places.filter(function (p) { return p.person_name; }); if (ps.length) groups.push({ s: s, ps: ps }); });
-      if (!groups.length) return null;
-      var label = { arrived: ["Arrived", "tag tag-open"], no_show: ["No show", "tag tag-full"], cancelled: ["Told us in advance", "tag tag-position"] };
-      return el("section", { "aria-labelledby": "vol-day-h", style: "margin:var(--space-5) 0" }, el("h3", { id: "vol-day-h" }, "On the day"),
-        el("p", { class: "help" }, "Tick people off as they arrive. Arrived gives them the role's points straight away. A no show, someone who did not turn up and did not tell us, loses all their points. Someone who let us know in advance loses nothing."),
-        groups.map(function (g) {
-          return el("div", { style: "margin:var(--space-3) 0" }, el("h4", { style: "margin:0 0 var(--space-1)" }, g.s.label),
-            el("ul", { class: "item-list" }, g.ps.map(function (p) {
-              var st = label[p.status];
-              return el("li", { class: "item-row" }, el("div", { class: "item-main" }, el("p", { class: "item-title" }, p.person_name), el("p", { class: "item-sub" }, roleBy(p.role_id).name + (p.email ? "" : ". No email, so no points"))),
-                el("span", { class: "actions" }, st ? [el("span", { class: st[1] }, st[0]), btn("Undo", function () { mark(p, "planned"); }, "btn-ghost")]
-                  : [el("button", { type: "button", class: "btn btn-sm btn-primary", onclick: function () { mark(p, "arrived"); }, "aria-label": "Arrived: " + p.person_name }, "Arrived"), btn("Told us in advance", function () { mark(p, "cancelled"); }, "btn-ghost", { "aria-label": "Told us in advance: " + p.person_name }), btn("No show", function () { mark(p, "no_show"); }, "btn-ghost", { "aria-label": "No show: " + p.person_name })]));
-            })));
-        }));
-    }
     function draw() {
       var open = !!V.rota.signup_open, published = V.rota.status === "published", people = V.signups.length + (V.signups.length === 1 ? " person has" : " people have") + " signed up so far.";
       var shirts = el("input", { type: "checkbox", id: "vol-shirts" }); shirts.checked = !!V.rota.offer_tshirts; shirts.addEventListener("change", function () { setRota({ offer_tshirts: shirts.checked }); });
@@ -1807,12 +1814,11 @@
         el("div", { class: "actions" }, published ? btn("Unpublish", function () { setRota({ status: "draft", published_at: null }, "Rota unpublished."); }, "btn-ghost") : el("button", { type: "button", class: "btn btn-primary", onclick: function () { setRota({ status: "published", published_at: new Date().toISOString() }, "Rota published."); } }, "Publish"),
           el("a", { class: "btn btn-sm btn-ghost", href: rotaUrl(true), target: "_blank", rel: "noopener" }, "Preview ", el("span", { class: "visually-hidden" }, "(opens in a new tab)")),
           published ? btn("Copy the rota link", function () { copyText(rotaUrl(false)); }, "btn-ghost") : null));
-      var dayBox = onTheDay(), needs = [];
+      var needs = [];
       V.sessions.forEach(function (s) { s.vol_places.forEach(function (p) { if (unavailable(s, p)) needs.push(p.person_name + " (" + s.label + ", " + roleBy(p.role_id).name + ")"); }); });
       var needBox = needs.length ? el("div", { class: "callout", role: "alert" }, el("p", { class: "callout-title" }, needs.length + (needs.length === 1 ? " place needs" : " places need") + " attention"), el("p", { style: "margin:0" }, "These people have changed their answers and are no longer available for the role they were given: " + needs.join("; ") + ". Please choose someone else.")) : null;
-      var kids = [el("p", { class: "panel-intro" }, "Open sign-up, choose who does what in each session, and publish the rota. Referees, the technical controller, the session manager and the platform manager are not on the form: you fill those in."), signupBox];
+      var kids = [el("p", { class: "panel-intro" }, "Open sign-up, choose who does what in each session, and publish the rota. Referees, the technical controller, the session manager and the platform manager are not on the form: you fill those in. On the day, press Arrived beside each name to give them the role\u2019s points. No show, for someone who did not turn up and did not tell us, removes all their points. Told us is for someone who let us know in advance, and costs them nothing."), signupBox];
       if (needBox) kids.push(needBox);
-      if (dayBox) kids.push(dayBox);
       V.sessions.forEach(function (s) { kids.push(sessionCard(s)); });
       kids.push(el("div", { class: "actions", style: "margin-top:var(--space-4)" }, btn("Add session", addSession)));
       kids.push(shareBox);
