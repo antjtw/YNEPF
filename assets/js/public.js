@@ -685,6 +685,21 @@
     }).catch(function (e) { fail(root, e); });
   }
 
+  // The points list: names and points only (emails are never sent to this page). Points expire 24 months after they were earned.
+  function points(root) {
+    Y.db().rpc("points_public_list").then(function (r) {
+      if (r.error) throw r.error;
+      var rows = (r.data || []).slice().sort(function (a, b) { return b.points - a.points || (a.name < b.name ? -1 : 1); });
+      if (!rows.length) { root.replaceChildren(el("p", null, "Nobody has any points yet.")); return; }
+      var q = el("input", { type: "search", id: "points-q", placeholder: "Search by name", "aria-label": "Search by name", style: "max-width:22rem" }), tbody = el("tbody");
+      function draw() { var t = q.value.trim().toLowerCase(); tbody.replaceChildren.apply(tbody, rows.filter(function (x) { return !t || x.name.toLowerCase().indexOf(t) >= 0; }).map(function (x) { return el("tr", null, el("th", { scope: "row" }, x.name), el("td", null, String(x.points))); })); }
+      q.addEventListener("input", draw); draw();
+      root.replaceChildren(el("p", null, "Volunteers earn points for every session or set up and tear down they help with. Points can be spent on priority entry and discounts, and last 24 months. ", el("a", { href: "faqs#how-do-i-earn-points" }, "How points work"), "."),
+        el("div", { class: "field" }, el("label", { for: "points-q" }, "Find a name"), q),
+        el("div", { class: "table-wrap" }, el("table", { class: "data" }, el("caption", { class: "visually-hidden" }, "Volunteer points"), el("thead", null, el("tr", null, el("th", { scope: "col" }, "Name"), el("th", { scope: "col" }, "Points"))), tbody)));
+    }).catch(function (e) { fail(root, e); });
+  }
+
   // The volunteer rota (/rota?c=<address>): who is helping in each session. Names and roles only. With ?preview=1 a signed-in entries team
   // member can see the saved rota before it is published.
   function rota(root) {
@@ -718,7 +733,7 @@
     }).catch(function (e) { fail(root, e); });
   }
 
-  var routes = { rota: rota, privacy: privacy, calendar: calendar, committee: committee, news: news, post: post, faqs: faqs, records: records, lifting: lifting };
+  var routes = { points: points, rota: rota, privacy: privacy, calendar: calendar, committee: committee, news: news, post: post, faqs: faqs, records: records, lifting: lifting };
   function boot() {
     var page = document.body.getAttribute("data-view") || document.body.getAttribute("data-page");
     var root = document.getElementById("live");

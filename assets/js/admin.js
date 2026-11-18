@@ -1387,6 +1387,133 @@
     }).catch(function (e) { view.replaceChildren(el("p", { class: "form-error" }, friendly(e))); });
   }
 
+  // ---- Volunteer points: who has what, add or take away points, bring in the old sheet, points for helpers at franchise competitions ----
+  // The balances come from the database (points expire 24 months after they were earned and a spend uses the oldest first), never from here.
+  function renderPoints(panel) {
+    var state = { rows: [], q: "", open: null };
+    panel.replaceChildren(panelHead("Volunteer points"), el("p", null, "Loading…"));
+    var tbody = el("tbody"), summary = el("p", { class: "panel-intro" }), history = el("div"), importBox = el("details", { class: "ol-settings", style: "margin-top:var(--space-5)" }), helpersBox = el("details", { class: "ol-settings", style: "margin-top:var(--space-3)" });
+    function msg(e) {
+      var m = String((e && e.message) || e || "").replace(/^.*?ERROR:\s*/s, "").split("\n")[0].trim();
+      return ({ "invalid:name": "That is a new person: add their name too.", "invalid:email": "Check the email address.", "invalid:delta": "Enter a number of points from 1 to 100.", "invalid:reason": "Say what the points are for.", insufficient: "They do not have that many points.", forbidden: "You do not have permission to do that." })[m] || friendly(e);
+    }
+    function when(iso) { return new Date(iso).toLocaleDateString("en-GB", { timeZone: Y.TZ, dateStyle: "medium" }); }
+    function load() {
+      return sb.rpc("points_overview").then(function (r) { if (r.error) throw r.error; state.rows = r.data || []; });
+    }
+    function drawRows() {
+      var q = state.q.trim().toLowerCase(), list = state.rows.filter(function (r) { return !q || r.name.toLowerCase().indexOf(q) >= 0 || r.email.toLowerCase().indexOf(q) >= 0; });
+      var withPts = state.rows.filter(function (r) { return r.balance > 0; }), total = withPts.reduce(function (t, r) { return t + r.balance; }, 0), soon = state.rows.reduce(function (t, r) { return t + (r.expiring || 0); }, 0);
+      summary.textContent = withPts.length + (withPts.length === 1 ? " person has" : " people have") + " points, " + total + " points in all." + (soon ? " " + soon + (soon === 1 ? " point expires" : " points expire") + " in the next 60 days." : "");
+      tbody.replaceChildren.apply(tbody, list.map(function (r) {
+        return el("tr", null, el("th", { scope: "row" }, r.name, el("small", null, r.email)), el("td", null, String(r.balance)), el("td", null, r.expiring ? r.expiring + " by " + when(r.next_expiry) : "–"), el("td", null, String(r.earned)), el("td", null, String(r.spent)),
+          el("td", null, btn("History", function () { showHistory(r); })));
+      }));
+      if (!list.length) tbody.appendChild(el("tr", null, el("td", { colspan: "6" }, el("p", { class: "empty", style: "margin:0" }, "Nobody matches."))));
+    }
+    function showHistory(r) {
+      state.open = r.email;
+      history.replaceChildren(el("p", null, "Loading…"));
+      sb.from("points_ledger").select("*").eq("email", r.email).order("earned_at", { ascending: false }).order("id", { ascending: false }).then(ok).then(function (rows) {
+        history.replaceChildren(el("h2", { id: "pts-history-h", tabindex: "-1" }, "History: " + r.name), el("p", { class: "help" }, r.email + ". " + r.balance + " points now."),
+          rows.length ? el("div", { class: "table-scroll" }, el("table", { class: "admin-table" },
+            el("thead", null, el("tr", null, ["When", "What", "Points", "By"].map(function (h) { return el("th", { scope: "col" }, h); }))),
+            el("tbody", null, rows.map(function (x) { return el("tr", null, el("td", null, when(x.earned_at)), el("td", null, x.reason), el("td", null, (x.delta > 0 ? "+" : "") + x.delta), el("td", null, x.created_by || "")); })))) : el("p", { class: "empty" }, "Nothing yet."),
+          el("p", null, btn("Close", function () { state.open = null; history.replaceChildren(); })));
+        var h = document.getElementById("pts-history-h"); if (h) { h.scrollIntoView({ block: "nearest" }); h.focus(); }
+      }).catch(function (e) { history.replaceChildren(el("p", { class: "form-error" }, friendly(e))); });
+    }
+    function adjust(sign) {
+      var add = sign > 0;
+      openForm({ title: add ? "Add points" : "Take points away", saveLabel: add ? "Add points" : "Take points away",
+        intro: add ? "A thank you, a correction, or points earned somewhere we did not tick off. It goes in the ledger with your name, so there is a record." : "For a spend (priority entry 1, £20 off 4, £40 off 8, half price BP membership 5, free membership 10) or a correction. It cannot take someone below zero.",
+        values: {}, fields: [{ name: "email", label: "Their email address", type: "email", required: true }].concat(add ? [{ name: "name", label: "Their name (only for someone new)", help: "Leave empty for someone who already has points." }] : [])
+          .concat([{ name: "points", label: "Points", type: "number", required: true, min: "1", max: "100", half: true }, { name: "date", label: "Date (optional)", type: "date", half: true, help: "For adding points retroactively. Points expire 24 months after this date." }, { name: "reason", label: "What is it for?", required: true, help: add ? "For example: Helped with the livestream." : "For example: Priority entry, March Open." }]),
+        validate: function (v) { var n = Number(v.points); return !n || n < 1 || n > 100 || Math.round(n) !== n ? "Enter a whole number of points from 1 to 100." : null; },
+        onSave: function (v) {
+          return sb.rpc("points_adjust", { p: { email: String(v.email).trim(), name: String(v.name || "").trim(), delta: (add ? 1 : -1) * Math.round(Number(v.points)), reason: String(v.reason).trim(), date: v.date || "" } }).then(function (r) {
+            if (r.error) throw new Error(msg(r.error)); toast((add ? "Added" : "Taken away") + ". They now have " + (r.data && r.data.balance) + " points."); return load().then(function () { drawRows(); if (state.open) showHistory(state.rows.filter(function (x) { return x.email === state.open; })[0] || { email: state.open, name: state.open, balance: 0 }); });
+          });
+        } });
+    }
+
+    // ---- import the old sheet
+    function drawImport() {
+      var file = el("input", { type: "file", accept: ".csv,text/csv", id: "pts-file" }), out = el("div", { "aria-live": "polite" });
+      importBox.replaceChildren(el("summary", null, "Import the old points sheet"),
+        el("p", { class: "help" }, "In the sheet, open the Master database tab and choose File, Download, Comma-separated values (.csv). Choose that file here. Nothing is saved until you press Import. Importing the same file again changes nothing."),
+        el("div", { class: "field" }, el("label", { for: "pts-file" }, "The CSV file"), file), out);
+      file.addEventListener("change", function () {
+        var f = file.files && file.files[0]; if (!f) return;
+        f.text().then(function (text) {
+          var res = window.PointsImport.parse(text), rep = res.report, kids = [];
+          if (rep.warnings.length) kids.push(el("ul", { class: "form-error" }, rep.warnings.map(function (w) { return el("li", null, w); })));
+          if (!res.rows.length) { out.replaceChildren.apply(out, kids); return; }
+          kids.push(el("p", null, rep.people + " people with an email address, " + rep.earned + " points earned and " + rep.spent + " spent over " + rep.columns.length + " events. The sheet's own totals add up to " + rep.expected + " points."));
+          if (rep.noEmail.length) kids.push(el("div", { class: "callout" }, el("p", { class: "callout-title" }, rep.noEmail.length + " rows have no email address, so they cannot be imported"), el("p", { style: "margin:0" }, rep.noEmail.map(function (x) { return x.name + " (" + x.points + ")"; }).join(", ") + ". Add their emails in the sheet and import again, or add their points here afterwards with Add points.")));
+          if (rep.badCells.length) kids.push(el("div", { class: "callout" }, el("p", { class: "callout-title" }, rep.badCells.length + " cells are not whole numbers and were ignored"), el("p", { style: "margin:0" }, rep.badCells.map(function (x) { return x.name + ", " + x.column + ": “" + x.value + "”"; }).join("; "))));
+          if (rep.mismatches.length) kids.push(el("div", { class: "form-error" }, el("p", null, rep.mismatches.length + " people would not match the sheet's own total:"), el("ul", null, rep.mismatches.slice(0, 10).map(function (x) { return el("li", null, x.name + ": the sheet says " + x.sheet + ", the columns add to " + x.loaded); }))));
+          else kids.push(el("p", { class: "help" }, "Every person's columns add up to the total in the sheet."));
+          kids.push(el("div", { class: "actions" }, btn("Import " + res.rows.length + " point entries", function () {
+            sb.rpc("points_import", { p: { rows: res.rows } }).then(function (r) {
+              if (r.error) throw r.error;
+              return load().then(function () {
+                drawRows(); var mine = {}; state.rows.forEach(function (x) { mine[x.email] = x.balance; });
+                var diff = res.people.filter(function (p) { return (mine[p.email] || 0) !== p.sheetTotal; });
+                out.replaceChildren(el("p", null, "Imported " + r.data.inserted + " entries" + (r.data.skipped ? " (" + r.data.skipped + " skipped: already there)" : "") + "."),
+                  diff.length ? el("div", { class: "callout" }, el("p", { class: "callout-title" }, diff.length + " people now have a different balance from the sheet"), el("p", { style: "margin:0" }, "Usually because some of their points are more than 24 months old and have expired: " + diff.slice(0, 8).map(function (p) { return p.name + " (sheet " + p.sheetTotal + ", now " + (mine[p.email] || 0) + ")"; }).join("; ") + (diff.length > 8 ? " and more." : "."))) : el("p", { class: "help" }, "Every balance matches the sheet."));
+              });
+            }).catch(function (e) { toast(msg(e), "error"); });
+          }, "btn-primary")));
+          out.replaceChildren.apply(out, kids);
+        });
+      });
+    }
+
+    // ---- points for helpers at a competition we did not staff
+    function drawHelpers() {
+      var sel = el("select", { id: "help-comp" }), box = el("textarea", { id: "help-list", rows: "6", placeholder: "Jo Smith, jo@example.com\nAmir Khan, amir@example.com, 2" }), out = el("div", { "aria-live": "polite" });
+      helpersBox.replaceChildren(el("summary", null, "Points for helpers at another host's competition"),
+        el("p", { class: "help" }, "A franchise competition's host staffs it, but their helpers still earn points. Paste the host's list, one person per line: name, email, and optionally the points (1 if left out). Each person earns once per competition."),
+        el("div", { class: "field" }, el("label", { for: "help-comp" }, "Competition"), sel), el("div", { class: "field" }, el("label", { for: "help-list" }, "Helpers"), box), out);
+      sb.from("competitions").select("id,name,start_date").order("start_date", { ascending: false }).limit(60).then(ok).then(function (cs) { sel.replaceChildren.apply(sel, cs.map(function (x) { return el("option", { value: x.id }, x.name + " (" + x.start_date + ")"); })); });
+      function parse() {
+        var people = [], bad = [];
+        String(box.value).split(/\r?\n/).forEach(function (line) {
+          line = line.trim(); if (!line) return;
+          var m = /^(.*?)[,\t]\s*([^\s,<>]+@[^\s,<>]+)\s*(?:[,\t]\s*(\d+))?\s*$/.exec(line) || /^(.*?)\s*<([^>]+@[^>]+)>\s*(?:[,\t]\s*(\d+))?\s*$/.exec(line);
+          if (!m) bad.push(line); else people.push({ name: m[1].trim(), email: m[2].trim().toLowerCase(), points: m[3] ? Number(m[3]) : 1 });
+        });
+        return { people: people, bad: bad };
+      }
+      helpersBox.appendChild(el("div", { class: "actions" }, btn("Check the list", function () {
+        var p = parse(), known = {}; state.rows.forEach(function (x) { known[x.email] = x; });
+        var kids = [];
+        if (p.bad.length) kids.push(el("p", { class: "form-error" }, "These lines have no email address and will be skipped: " + p.bad.join("; ")));
+        if (p.people.length) kids.push(el("div", { class: "table-scroll" }, el("table", { class: "admin-table" }, el("thead", null, el("tr", null, ["Name", "Email", "Points", ""].map(function (h) { return el("th", { scope: "col" }, h); }))),
+          el("tbody", null, p.people.map(function (x) { return el("tr", null, el("th", { scope: "row" }, x.name || "—"), el("td", null, x.email), el("td", null, String(x.points)), el("td", null, known[x.email] ? "Already known (" + known[x.email].balance + " points now)" : "New person")); })))));
+        if (p.people.length) kids.push(el("div", { class: "actions" }, btn("Award these points", function () {
+          sb.rpc("points_award_helpers", { p: { competition_id: sel.value, rows: p.people } }).then(function (r) {
+            if (r.error) throw r.error; toast("Awarded to " + r.data.awarded + (r.data.awarded === 1 ? " person" : " people") + (r.data.skipped ? ", " + r.data.skipped + " skipped (already awarded or not valid)" : "") + ".");
+            box.value = ""; out.replaceChildren(); return load().then(drawRows);
+          }).catch(function (e) { toast(msg(e), "error"); });
+        }, "btn-primary")));
+        out.replaceChildren.apply(out, kids);
+      }, "btn-secondary")));
+    }
+
+    load().then(function () {
+      var search = el("input", { type: "search", id: "pts-q", placeholder: "Search by name or email", "aria-label": "Search by name or email", style: "max-width:22rem" });
+      search.addEventListener("input", function () { state.q = search.value; drawRows(); });
+      panel.replaceChildren(panelHead("Volunteer points", el("span", { class: "actions" }, btn("Add points", function () { adjust(1); }, "btn-primary"), btn("Take points away", function () { adjust(-1); }, "btn-ghost"))),
+        summary, el("div", { class: "control-row" }, search),
+        el("div", { class: "table-scroll" }, el("table", { class: "admin-table" }, el("caption", { class: "visually-hidden" }, "Volunteer points"),
+          el("thead", null, el("tr", null, ["Name", "Points", "Expiring soon", "Earned", "Spent", ""].map(function (h) { return el("th", { scope: "col" }, h); }))), tbody)),
+        history, importBox, helpersBox);
+      drawRows(); drawImport(); drawHelpers();
+    }).catch(function (e) { panel.replaceChildren(panelHead("Volunteer points"), el("p", { class: "form-error" }, friendly(e))); });
+  }
+
   // ---- Volunteers: set up the rota, open sign-up, pick who does what, publish -----------------------------------------
   // Referees, the technical controller, the session manager and the platform manager are filled in here by the coordinator; volunteers only
   // choose from the roles marked on_form. A place holds a person's name and (if we have it) their email, which is what points will go to.
@@ -1544,6 +1671,33 @@
       }));
       var a = el("a", { href: URL.createObjectURL(new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv" })), download: (c.slug || "competition") + "-volunteers.csv" }); document.body.appendChild(a); a.click(); a.remove();
     }
+    // ---- on the day: tick people off as they arrive. Arrived earns the role's points; a no show loses all their points; telling us in advance costs nothing.
+    function mark(p, status) {
+      if (status === "no_show" && !window.confirm("Mark " + p.person_name + " as a no show? They lose ALL their volunteer points. You can undo it, but only do this if they did not turn up and did not tell us.")) return;
+      sb.rpc("vol_mark", { pl: p.id, new_status: status }).then(function (r) {
+        if (r.error) throw r.error;
+        var d = r.data || {}; p.status = status;
+        toast(status === "arrived" ? (d.no_email ? p.person_name + " arrived. They have no email on file, so no points." : "Arrived: " + (d.points > 0 ? "+" + d.points + " point" + (d.points === 1 ? "" : "s") : "no points") + " for " + p.person_name + ".")
+          : status === "no_show" ? "No show: " + (d.points < 0 ? "removed " + (-d.points) + " points from " : "") + p.person_name + "." : status === "cancelled" ? p.person_name + " told us in advance." : "Undone.");
+        draw();
+      }).catch(function (e) { toast(friendly(e), "error"); });
+    }
+    function onTheDay() {
+      var groups = []; V.sessions.forEach(function (s) { var ps = s.vol_places.filter(function (p) { return p.person_name; }); if (ps.length) groups.push({ s: s, ps: ps }); });
+      if (!groups.length) return null;
+      var label = { arrived: ["Arrived", "tag tag-open"], no_show: ["No show", "tag tag-full"], cancelled: ["Told us in advance", "tag tag-position"] };
+      return el("section", { "aria-labelledby": "vol-day-h", style: "margin:var(--space-5) 0" }, el("h3", { id: "vol-day-h" }, "On the day"),
+        el("p", { class: "help" }, "Tick people off as they arrive. Arrived gives them the role's points straight away. A no show, someone who did not turn up and did not tell us, loses all their points. Someone who let us know in advance loses nothing."),
+        groups.map(function (g) {
+          return el("div", { style: "margin:var(--space-3) 0" }, el("h4", { style: "margin:0 0 var(--space-1)" }, g.s.label),
+            el("ul", { class: "item-list" }, g.ps.map(function (p) {
+              var st = label[p.status];
+              return el("li", { class: "item-row" }, el("div", { class: "item-main" }, el("p", { class: "item-title" }, p.person_name), el("p", { class: "item-sub" }, roleBy(p.role_id).name + (p.email ? "" : ". No email, so no points"))),
+                el("span", { class: "actions" }, st ? [el("span", { class: st[1] }, st[0]), btn("Undo", function () { mark(p, "planned"); }, "btn-ghost")]
+                  : [el("button", { type: "button", class: "btn btn-sm btn-primary", onclick: function () { mark(p, "arrived"); }, "aria-label": "Arrived: " + p.person_name }, "Arrived"), btn("Told us in advance", function () { mark(p, "cancelled"); }, "btn-ghost", { "aria-label": "Told us in advance: " + p.person_name }), btn("No show", function () { mark(p, "no_show"); }, "btn-ghost", { "aria-label": "No show: " + p.person_name })]));
+            })));
+        }));
+    }
     function draw() {
       var open = !!V.rota.signup_open, published = V.rota.status === "published", people = V.signups.length + (V.signups.length === 1 ? " person has" : " people have") + " signed up so far.";
       var shirts = el("input", { type: "checkbox", id: "vol-shirts" }); shirts.checked = !!V.rota.offer_tshirts; shirts.addEventListener("change", function () { setRota({ offer_tshirts: shirts.checked }); });
@@ -1558,7 +1712,9 @@
         el("div", { class: "actions" }, published ? btn("Unpublish", function () { setRota({ status: "draft", published_at: null }, "Rota unpublished."); }, "btn-ghost") : el("button", { type: "button", class: "btn btn-primary", onclick: function () { setRota({ status: "published", published_at: new Date().toISOString() }, "Rota published."); } }, "Publish"),
           el("a", { class: "btn btn-sm btn-ghost", href: rotaUrl(true), target: "_blank", rel: "noopener" }, "Preview ", el("span", { class: "visually-hidden" }, "(opens in a new tab)")),
           published ? btn("Copy the rota link", function () { copyText(rotaUrl(false)); }, "btn-ghost") : null));
+      var dayBox = onTheDay();
       var kids = [el("p", { class: "panel-intro" }, "Open sign-up, choose who does what in each session, and publish the rota. Referees, the technical controller, the session manager and the platform manager are not on the form: you fill those in."), signupBox];
+      if (dayBox) kids.push(dayBox);
       V.sessions.forEach(function (s) { kids.push(sessionCard(s)); });
       kids.push(el("div", { class: "actions", style: "margin-top:var(--space-4)" }, btn("Add session", addSession)));
       kids.push(shareBox);
@@ -2989,13 +3145,14 @@
     faqs: function (p) { renderGrouped(p, FAQ); },
     footer: function (p) { renderGrouped(p, FOOTER); },
     privacy: renderPrivacy,
+    points: renderPoints,
     account: renderAccount
   };
 
   // Which roles see which tab. contributor: news only. entries: the entries desk. editor: site content.
   var TAB_ROLES = {
     competitions: ["admin", "editor", "entries"], news: ["admin", "editor", "contributor"], home: ["admin", "editor"],
-    organisation: ["admin", "editor"], records: ["admin", "editor"], faqs: ["admin", "editor"], footer: ["admin", "editor"], privacy: ["admin", "editor"], users: ["admin"],
+    organisation: ["admin", "editor"], records: ["admin", "editor"], faqs: ["admin", "editor"], footer: ["admin", "editor"], privacy: ["admin", "editor"], points: ["admin", "entries"], users: ["admin"],
     account: ["admin", "entries", "editor", "contributor"]
   };
   function canSee(tab) { return (TAB_ROLES[tab] || []).indexOf(state.role) >= 0; }

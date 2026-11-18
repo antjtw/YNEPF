@@ -51,6 +51,7 @@ const pages = [
   "privacy.html",
   "volunteer.html",
   "rota.html",
+  "points.html",
   "chairperson.html",
   "rules.html",
   "contact.html",
