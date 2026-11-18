@@ -276,3 +276,9 @@ Top to bottom: the sort settings, then **Build and save** (Sort the entries or C
 ### The privacy policy page
 
 The page is at `/privacy` and is linked from the footer. Its text is edited in the site editor: **Footer**, find **Privacy policy** in the Legal group, press **Edit page** (or **Edit**, then **Edit the privacy policy page**). The page editor is a what-you-see-is-what-you-get editor with a **Last updated** date. Saving updates the page straight away. The footer link's address is fixed and it cannot be deleted, only its link text can be changed. The first version (`docs/privacy-policy-default.md`) is loaded once by the all-in-one SQL and never overwrites later edits. Run the latest all-in-one SQL once to get it, and to point the footer's Privacy policy link at the new page.
+
+### Audit trail: priority links and discount codes
+
+- **Priority entry:** when links are emailed (automatically 24 hours before entry opens, or when you press Send now), the competitions inbox gets a note listing who was sent a link and who could not be reached. On a competition's **Codes and links** tab, the priority list shows for each person when their link was sent and when (and as whom) it was used.
+- **Discount codes:** each time a code is used, whether the person paid or the code made the entry free, the competitions inbox gets a note with the code, who used it, the discount and what they paid. Under the codes on the same tab, **Who has used a code** lists every entry that used one, newest first.
+- This needs the updated `stripe-webhook`, `entry-checkout` and `waitlist` Edge Functions deployed (paste each `index.ts`).

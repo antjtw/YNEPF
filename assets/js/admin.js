@@ -1654,10 +1654,27 @@
     sb.from("discount_codes").select("*").order("created_at", { ascending: false }).then(ok).then(function (all) {
       var codes = all.filter(function (d) { return d.competition_id === c.id || d.competition_id === null; });
       var ids = codes.map(function (d) { return d.id; });
-      return (ids.length ? sb.from("entries").select("discount_code_id,status,hold_expires_at").in("discount_code_id", ids).then(function (r) { return r.error ? [] : r.data || []; }) : Promise.resolve([])).then(function (used) {
+      return (ids.length ? sb.from("entries").select("id,full_name,email,discount_code_id,status,hold_expires_at,discount_pence,price_pence,paid_at,created_at").in("discount_code_id", ids).order("created_at", { ascending: false }).then(function (r) { return r.error ? [] : r.data || []; }) : Promise.resolve([])).then(function (used) {
         var now = new Date();
         function everUsed(d) { return used.some(function (e) { return e.discount_code_id === d.id; }); }      // any entry at all, even a cancelled one, remembers the code
         function uses(d) { return used.filter(function (e) { return e.discount_code_id === d.id && (e.status === "paid" || e.status === "comped" || (e.status === "held" && new Date(e.hold_expires_at) > now)); }).length; }
+        // The trail: every entry that used a code, newest first, so you can see what is being redeemed and by whom.
+        function redemptions() {
+          var byId = {}; codes.forEach(function (d) { byId[d.id] = d; });
+          var rows = used.filter(function (e) { return byId[e.discount_code_id] && !(e.status === "held" && new Date(e.hold_expires_at) <= now); });
+          var label = { paid: "Paid", comped: "Free entry", held: "Paying now", cancelled: "Cancelled", refunded: "Refunded" };
+          return el("div", { style: "margin-top:var(--space-6)" }, el("h2", null, "Who has used a code"),
+            el("p", { class: "panel-intro" }, "Every entry that used a code, newest first. The competitions inbox also gets an email each time a code is used."),
+            rows.length ? el("div", { class: "table-scroll" }, el("table", { class: "admin-table" },
+              el("thead", null, el("tr", null, ["When", "Code", "Used by", "Discount", "Entry"].map(function (h) { return el("th", { scope: "col" }, h); }))),
+              el("tbody", null, rows.map(function (e) {
+                return el("tr", null, el("td", null, new Date(e.paid_at || e.created_at).toLocaleString("en-GB", { timeZone: Y.TZ, dateStyle: "medium", timeStyle: "short" })),
+                  el("td", null, el("code", { class: "code-text" }, byId[e.discount_code_id].code)),
+                  el("th", { scope: "row" }, e.full_name, el("small", null, e.email)),
+                  el("td", null, e.discount_pence ? entryMoney(e.discount_pence) + " off" + (e.price_pence ? ", paid " + entryMoney(e.price_pence) : ", free") : "–"),
+                  el("td", null, label[e.status] || e.status));
+              })))) : el("p", { class: "empty" }, "No code has been used yet."));
+        }
         function state(d) {
           if (!d.active) return ["Switched off", "tag tag-full"];
           if (d.expires_at && new Date(d.expires_at) <= now) return ["Expired", "tag tag-full"];
@@ -1687,6 +1704,7 @@
                       .then(function () { toast(kept ? "Switched off." : "Deleted."); renderDiscountsTab(view, c); }).catch(function (er) { toast(friendly(er), "error"); });
                   }, "btn-danger"))));
             })))) : el("p", { class: "empty" }, "No discount codes yet."),
+          redemptions(),
           c.entry_method === "yne" ? prioritySection(c) : null);
       });
     }).catch(function (e) { view.replaceChildren(el("p", { class: "form-error" }, friendly(e))); });
@@ -1951,7 +1969,7 @@
     function load() {
       box.replaceChildren(el("h2", null, "Priority entry"), el("p", null, "Loading…"));
       Promise.all([
-        sb.from("invites").select("id,email,full_name,used_at,sent_at").eq("competition_id", c.id).order("email").then(ok),
+        sb.from("invites").select("id,email,full_name,used_at,sent_at,entries(full_name,status)").eq("competition_id", c.id).order("email").then(ok),
         sb.from("entry_settings").select("priority_hours").eq("competition_id", c.id).maybeSingle().then(function (r) { return r.error ? null : r.data; }, function () { return null; })
       ]).then(function (res) {
         var rows = res[0], hours = (res[1] && res[1].priority_hours) || 24, next = function () { load(); };
@@ -1966,10 +1984,12 @@
             btn("Add people", function () { addPriority(c, next); }, "btn-primary"),
             waiting.length ? btn("Send to everyone waiting now", function () { if (!window.confirm("Email the link now to the " + waiting.length + (waiting.length === 1 ? " person" : " people") + " still waiting?")) return; sendPriority(c, null, next); }, "btn-secondary") : null),
           rows.length ? el("div", { class: "table-scroll" }, el("table", { class: "admin-table" },
-            el("thead", null, el("tr", null, ["Name", "Email", "Status", "Actions"].map(function (h) { return el("th", { scope: "col" }, h); }))),
+            el("thead", null, el("tr", null, ["Name", "Email", "Link sent", "Used", "Status", "Actions"].map(function (h) { return el("th", { scope: "col" }, h); }))),
             el("tbody", null, rows.map(function (r) {
-              var st = r.used_at ? ["Entered with their link", "tag tag-open"] : r.sent_at ? ["Link sent " + stamp(r.sent_at), "tag tag-position"] : [start && start <= new Date() ? "Sending shortly" : "Will be sent automatically", "tag tag-closed"];
-              return el("tr", null, el("th", { scope: "row" }, r.full_name || "—"), el("td", null, r.email), el("td", null, el("span", { class: st[1] }, st[0])),
+              var st = r.used_at ? ["Entered with their link", "tag tag-open"] : r.sent_at ? ["Link sent", "tag tag-position"] : [start && start <= new Date() ? "Sending shortly" : "Will be sent automatically", "tag tag-closed"];
+              var en = Array.isArray(r.entries) ? r.entries[0] : r.entries;
+              return el("tr", null, el("th", { scope: "row" }, r.full_name || "—"), el("td", null, r.email), el("td", null, r.sent_at ? stamp(r.sent_at) : "Not yet"),
+                el("td", null, r.used_at ? stamp(r.used_at) + (en ? " as " + en.full_name : "") : "Not yet"), el("td", null, el("span", { class: st[1] }, st[0])),
                 el("td", null, r.used_at ? "" : el("span", { class: "actions" },
                   btn(r.sent_at ? "Send again" : "Send now", function () { sendPriority(c, r.id, next); }),
                   btn("Remove", function () { if (!window.confirm("Remove " + (r.full_name || r.email) + " from the list?" + (r.sent_at ? " Their link will stop working." : ""))) return; sb.from("invites").delete().eq("id", r.id).then(ok).then(next).catch(function (e) { toast(friendly(e), "error"); }); }, "btn-danger"))));

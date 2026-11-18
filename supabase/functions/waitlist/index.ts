@@ -90,6 +90,17 @@ export function priorityEmail(o: Who & { link: string; windowStart: string; open
   ]);
 }
 
+// An internal note to the competitions inbox when priority entry links go out, so the team can see who was sent one.
+export function prioritySentNotification(o: { competition: string; sent: { name: string; email: string }[]; failed: { name: string; email: string }[]; deskUrl?: string }) {
+  const who = (p: { name: string; email: string }) => `- ${p.name ? p.name + " " : ""}<${p.email}>`;
+  return [
+    `Priority entry links for ${o.competition} have been emailed.`, "",
+    `Sent to ${o.sent.length} ${o.sent.length === 1 ? "person" : "people"}:`, ...(o.sent.length ? o.sent.map(who) : ["- nobody"]),
+    ...(o.failed.length ? ["", `Could not be sent to ${o.failed.length} (they will be tried again at the next check):`, ...o.failed.map(who)] : []),
+    ...(o.deskUrl ? ["", `See who has been sent a link, and who has used it: ${o.deskUrl}`] : []),
+  ].join("\n");
+}
+
 export function liftingOrderEmail(o: Who & { link: string; kind: "provisional" | "final" }) {
   return sign(o, [
     `Hi ${o.name || "there"},`, "",
@@ -213,13 +224,15 @@ if (typeof Deno !== "undefined") {
       const hours = Number(st?.priority_hours ?? 24);
       const windowStart = c.entry_opens ? new Date(new Date(c.entry_opens).getTime() - hours * 3600 * 1000).toISOString() : new Date().toISOString();
       let sent = 0, failed = 0;
+      const sentTo: { name: string; email: string }[] = [], failedTo: { name: string; email: string }[] = [];
       for (const p of people) {
         const tok = newToken();
         const iss = await rpc("priority_issue", { iid: p.id, th: await sha256Hex(tok), force });
-        if (!iss.ok) { console.error("priority link not made", await iss.text()); failed++; continue; }
+        if (!iss.ok) { console.error("priority link not made", await iss.text()); failed++; failedTo.push({ name: p.name, email: p.email }); continue; }
         const ok = await send(p.email, `Your priority entry link: ${c.name}`, priorityEmail({ name: p.name, competition: c.name, date: dateText(c.start_date), entriesEmail: copy, link: offerLink(siteUrl, c.slug, tok).replace("&offer=", "&invite="), windowStart, opens: c.entry_opens ?? undefined }));
-        if (ok) sent++; else { failed++; await rpc("priority_unissue", { iid: p.id }); }
+        if (ok) { sent++; sentTo.push({ name: p.name, email: p.email }); } else { failed++; failedTo.push({ name: p.name, email: p.email }); await rpc("priority_unissue", { iid: p.id }); }
       }
+      if (sent || failed) await send(copy, `Priority entry links sent: ${c.name}`, prioritySentNotification({ competition: c.name, sent: sentTo, failed: failedTo, deskUrl: `${siteUrl}/admin/#competitions/${c.id}/discounts` }));
       return { sent, failed };
     };
 

@@ -78,6 +78,9 @@ assert(es.validEntry("123e4567-e89b-12d3-a456-426614174000") && !es.validEntry("
   assert(o.includes("https://x/enter?c=a&offer=b") && /Saturday,? 2 January 2027 at 12:00/.test(o), "offer email has the link and the deadline in UK time: " + o);
   assert(wl.reminderEmail({ ...who, expiresAt: "2027-07-02T12:00:00Z", slug: "a", siteUrl: "https://x" }).includes("2 July 2027 at 13:00"), "summer deadlines are shown in British Summer Time");
   assert(wl.expiredEmail({ ...who, slug: "a", siteUrl: "https://x/" }).includes("https://x/enter?c=a"), "expired email says how to rejoin");
+  const pn = wl.prioritySentNotification({ competition: "March Open", sent: [{ name: "Ann Lee", email: "ann@x.com" }, { name: "", email: "bob@x.com" }], failed: [{ name: "Cy", email: "cy@x.com" }], deskUrl: "https://x/admin" });
+  assert(pn.includes("Sent to 2 people") && pn.includes("- Ann Lee <ann@x.com>") && pn.includes("- <bob@x.com>") && pn.includes("Could not be sent to 1") && pn.includes("https://x/admin"), "priority sent note lists who got a link and who failed");
+  assert(wl.prioritySentNotification({ competition: "X", sent: [], failed: [] }).includes("- nobody"), "an empty list says nobody");
   const lo1 = wl.liftingOrderEmail({ ...who, link: "https://x/lifting/?c=a", kind: "provisional" }), lo2 = wl.liftingOrderEmail({ ...who, name: "", link: "https://x/lifting/?c=a", kind: "final" });
   assert(lo1.includes("provisional lifting order") && lo1.includes("may change") && lo1.includes("https://x/lifting/?c=a"), "provisional email says it may change and has the link");
   assert(lo2.includes("Hi there,") && lo2.includes("final lifting order") && !lo2.includes("may change"), "final email says it is final");
@@ -139,5 +142,11 @@ assert(es.validEntry("123e4567-e89b-12d3-a456-426614174000") && !es.validEntry("
     const none = mod.refundNotification({ by: "ed@ynepf.co.uk", name: "Sam Smith", email: "sam@x.co", competition: "Spring Open", refundedPence: 0, cancelled: true, reason: "Withdrew" });
     assert(none.includes("cancelled Sam Smith's entry in Spring Open. No money was refunded.") && !none.includes("processing fee"), "cancel with no refund: " + none);
   }
+}
+{
+  const dn = wh.discountNotification({ code: "SAM-20OFF-ABC", name: "Sam Lifter", email: "sam@x.com", competition: "March Open", discountPence: 2000, paidPence: 3000, recipientName: "Sam", recipientEmail: "sam@x.com", reason: "Volunteer points: £20 off", deskUrl: "https://x/d" });
+  assert(dn.includes("SAM-20OFF-ABC") && dn.includes("Sam Lifter (sam@x.com)") && dn.includes("£20.00 off, so they paid £30.00") && dn.includes("Volunteer points: £20 off") && dn.includes("https://x/d"), "discount note names the code, who used it and the amounts");
+  assert(wh.discountNotification({ code: "C", name: "N", email: "e@x.com", competition: "X", discountPence: 4500, paidPence: 0 }).includes("so the entry is free"), "a full discount says the entry is free");
+  assert(typeof co.discountNotification === "function", "the checkout function has the note too (free entries)");
 }
 console.log("function helper tests passed");

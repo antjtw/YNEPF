@@ -95,6 +95,18 @@ export function exactAge(dob: string, on: string): number {
 export function pounds(pence: number): string { return "£" + (pence / 100).toFixed(2); }
 
 // An internal note to the federation's competitions inbox each time someone is confirmed, so the team can see entries arriving.
+// An internal note to the competitions inbox whenever a discount code is used, so the team can see what is being redeemed and by whom.
+export function discountNotification(o: { code: string; name: string; email: string; competition: string; discountPence: number; paidPence: number; recipientName?: string; recipientEmail?: string; reason?: string; deskUrl?: string }) {
+  return [
+    `The discount code ${o.code} has been used for ${o.competition}.`, "",
+    `Used by: ${o.name} (${o.email})`,
+    `Discount: ${pounds(o.discountPence)} off${o.paidPence > 0 ? `, so they paid ${pounds(o.paidPence)}` : ", so the entry is free"}`,
+    ...(o.recipientName || o.recipientEmail ? [`The code was made for: ${[o.recipientName, o.recipientEmail].filter(Boolean).join(", ")}`] : []),
+    ...(o.reason ? [`Reason it was made: ${o.reason}`] : []),
+    ...(o.deskUrl ? ["", `See every use of the codes: ${o.deskUrl}`] : []),
+  ].join("\n");
+}
+
 export function entryNotification(e: { name: string; email: string; competition: string; date: string; event: string; equipment: string; weightClass?: string; sex?: string; category?: string; division?: string; isGuest?: boolean; club?: string; pence: number; discountPence?: number; extras?: { name: string; option?: string; pence: number }[]; under18?: boolean; openipfUrl?: string; taken: number; capacity?: number | null; deskUrl?: string }) {
   const lines = [
     `${e.name} has entered ${e.competition} (${e.date}).`, "",
@@ -214,7 +226,7 @@ if (typeof Deno !== "undefined") {
 
     // 2. A code that takes the whole price off makes this a free entry: it is already confirmed, so there is nothing to pay.
     if ((out as { free?: boolean }).free) {
-      const [row] = await (await fetch(`${url}/rest/v1/entries?id=eq.${entry_id}&select=email,full_name,event,equipment,price_pence,discount_pence,date_of_birth,club,sex,openipf_url,is_guest,competition_id,weight_classes(label),divisions(name,is_home),competitions(name,start_date,entry_closes,capacity)`, { headers: { apikey: svc, authorization: `Bearer ${svc}` } })).json();
+      const [row] = await (await fetch(`${url}/rest/v1/entries?id=eq.${entry_id}&select=email,full_name,event,equipment,price_pence,discount_pence,discount_code_id,discount_codes(code,recipient_name,recipient_email,reason),date_of_birth,club,sex,openipf_url,is_guest,competition_id,weight_classes(label),divisions(name,is_home),competitions(name,start_date,entry_closes,capacity)`, { headers: { apikey: svc, authorization: `Bearer ${svc}` } })).json();
       if (row) {
         const from = Deno.env.get("MAIL_FROM") ?? "YNEPF <onboarding@resend.dev>", copy = Deno.env.get("NOTIFY_TO") ?? "competitions@ynepf.co.uk";
         const compYear = new Date(row.competitions.start_date).getFullYear();
@@ -241,6 +253,17 @@ if (typeof Deno !== "undefined") {
             taken: Array.isArray(takenRows) ? takenRows.length : 0, capacity: row.competitions.capacity,
             deskUrl: siteUrl && row.competition_id ? `${siteUrl}/admin/#competitions/${row.competition_id}/entries` : undefined }) }),
         }).catch(() => {});
+        // A discount code was used: a second note, so redemptions are easy to follow.
+        const dc = Array.isArray(row.discount_codes) ? row.discount_codes[0] : row.discount_codes;
+        if (row.discount_code_id && dc?.code) {
+          await fetch("https://api.resend.com/emails", {
+            method: "POST", headers: { authorization: `Bearer ${Deno.env.get("RESEND_API_KEY")}`, "content-type": "application/json" },
+            body: JSON.stringify({ from, to: [copy], reply_to: copy, subject: `Discount code used: ${dc.code}, ${row.full_name}`, text: discountNotification({
+              code: dc.code, name: row.full_name, email: row.email, competition: row.competitions.name, discountPence: row.discount_pence || 0, paidPence: row.price_pence,
+              recipientName: dc.recipient_name || undefined, recipientEmail: dc.recipient_email || undefined, reason: dc.reason || undefined,
+              deskUrl: siteUrl && row.competition_id ? `${siteUrl}/admin/#competitions/${row.competition_id}/discounts` : undefined }) }),
+          }).catch(() => {});
+        }
       }
       return reply(200, { free: true, entry_id, slug });
     }
