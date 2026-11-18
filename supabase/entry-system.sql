@@ -978,7 +978,8 @@ select
   k.lifting_order_url,
   k.openipf_url,
   k.slug,
-  exists (select 1 from public.lifting_orders lo where lo.competition_id = k.id and lo.status = 'published') as lifting_published
+  exists (select 1 from public.lifting_orders lo where lo.competition_id = k.id and lo.status = 'published') as lifting_published,
+  k.entries_closed_manually
 from (
   select c.*, (c.entry_method = 'yne' and not c.entries_closed_manually and (c.entry_opens is null or c.entry_opens <= now())
                and (c.entry_closes is null or c.entry_closes > now()) and public.places_open(c.id) < 1) as auto_full

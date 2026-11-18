@@ -197,7 +197,7 @@
     if (c.kind === "event") return "none";
     var opens = c.entry_opens ? new Date(c.entry_opens) : null;
     var closes = c.entry_closes ? new Date(c.entry_closes) : null;
-    if (closes && now >= closes) return "closed";
+    if ((closes && now >= closes) || c.entries_closed_manually) return "closed";      // closing date passed, or "Close entries now" ticked
     if (c.entries_full) return "full";
     if (opens && now < opens) return "soon";
     if (opens || closes || c.entry_url) return "open";
