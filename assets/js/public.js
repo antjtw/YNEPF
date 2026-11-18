@@ -696,8 +696,62 @@
       q.addEventListener("input", draw); draw();
       root.replaceChildren(el("p", null, "Volunteers earn points for every session or set up and tear down they help with. Points can be spent on priority entry and discounts, and last 24 months. ", el("a", { href: "faqs#how-do-i-earn-points" }, "How points work"), "."),
         el("div", { class: "field" }, el("label", { for: "points-q" }, "Find a name"), q),
-        el("div", { class: "table-wrap" }, el("table", { class: "data" }, el("caption", { class: "visually-hidden" }, "Volunteer points"), el("thead", null, el("tr", null, el("th", { scope: "col" }, "Name"), el("th", { scope: "col" }, "Points"))), tbody)));
+        el("div", { class: "table-wrap" }, el("table", { class: "data" }, el("caption", { class: "visually-hidden" }, "Volunteer points"), el("thead", null, el("tr", null, el("th", { scope: "col" }, "Name"), el("th", { scope: "col" }, "Points"))), tbody)),
+        spendPoints());
     }).catch(function (e) { fail(root, e); });
+  }
+
+  // Spend your own points: an emailed one-time code proves the address is yours, then points become a £20 discount code (4 points each).
+  // Priority entry needs nothing here: it arrives by email by itself, and costs 1 point when the entry is confirmed.
+  function spendPoints() {
+    var CFG = window.YNEPF_CONFIG || {}, email = el("input", { type: "email", id: "sp-email", autocomplete: "email", required: true }), code = el("input", { type: "text", id: "sp-code", inputmode: "numeric", autocomplete: "one-time-code", maxlength: "6" });
+    var msg = el("p", { role: "status", "aria-live": "polite", class: "help" }), step2 = el("div", { hidden: "" }), step3 = el("div", { hidden: "" });
+    function post(action, payload) {
+      return fetch((CFG.supabaseUrl || "").replace(/\/$/, "") + "/functions/v1/waitlist", { method: "POST", headers: { "Content-Type": "application/json", apikey: CFG.supabaseAnonKey || "", Authorization: "Bearer " + (CFG.supabaseAnonKey || "") },
+        body: JSON.stringify(Object.assign({ action: action, email: email.value.trim() }, payload)) }).then(function (r) { return r.json().catch(function () { return {}; }); }).catch(function () { return { ok: false, message: "We could not reach the server. Please try again." }; });
+    }
+    function say(t, bad) { msg.textContent = t || ""; msg.className = bad ? "form-error" : "help"; }
+    var send = el("button", { type: "button", class: "btn btn-secondary" }, "Email me a code");
+    send.addEventListener("click", function () {
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.value.trim())) return say("Enter the email address you volunteered with.", true);
+      send.disabled = true; say("Sending…");
+      post("points_start", {}).then(function (b) { send.disabled = false; if (!b.ok) return say(b.message || "We could not send a code.", true); say("If that address has points, a 6 digit code is on its way. It works for 15 minutes."); step2.hidden = false; code.focus(); });
+    });
+    var show = el("button", { type: "button", class: "btn btn-primary" }, "Show my points");
+    show.addEventListener("click", function () {
+      if (!code.value.trim()) return say("Enter the code from the email.", true);
+      show.disabled = true; say("Checking…");
+      post("points_options", { code: code.value }).then(function (b) {
+        show.disabled = false; if (!b.ok) return say(b.message || "That code did not work.", true);
+        say(""); drawOptions(b);
+      });
+    });
+    function drawOptions(o) {
+      var max = Math.min(5, Math.floor(o.available / o.points_per_step));
+      var comp = el("select", { class: "control", id: "sp-comp" }, o.competitions.map(function (c) { return el("option", { value: c.id }, c.name); }));
+      var steps = el("select", { class: "control", id: "sp-steps" }); for (var k = 1; k <= Math.max(max, 1); k++) steps.appendChild(el("option", { value: String(k) }, k + (k === 1 ? " discount: £" : " discounts: £") + (k * o.step_pence / 100) + " off for " + (k * o.points_per_step) + " points"));
+      var go = el("button", { type: "button", class: "btn btn-primary" }, "Get my discount code");
+      var lines = [el("p", null, (o.name ? o.name + ", you" : "You") + " have ", el("strong", null, o.balance + (o.balance === 1 ? " point" : " points")), o.reserved ? ", and " + o.reserved + " " + (o.reserved === 1 ? "is" : "are") + " already set aside (a priority link or a discount code you have not used yet). That leaves " : ". That leaves ", o.reserved ? el("strong", null, o.available + " to spend") : el("strong", null, o.available + " to spend"), "."),
+        el("p", { class: "help" }, "Priority entry (1 point) needs nothing from you: the link arrives by email before entry opens, and the point is only taken when your entry is confirmed. A discount costs 4 points for every £20 off the entry fee, and the points are taken when your entry is confirmed.")];
+      if (!o.competitions.length) lines.push(el("p", null, "No competition is open for entry right now. Come back when entry opens."));
+      else if (max < 1) lines.push(el("p", null, "You need at least 4 free points for a £20 discount."));
+      else {
+        go.addEventListener("click", function () {
+          go.disabled = true; say("Making your code…");
+          post("points_redeem", { code: code.value, competition_id: comp.value, steps: Number(steps.value) }).then(function (b) {
+            go.disabled = false; if (!b.ok) return say(b.message || "We could not make a code.", true);
+            say(""); step2.hidden = true; step3.hidden = false; step3.replaceChildren(el("div", { class: "success-panel", role: "status" }, el("h2", null, "Your £" + b.pounds + " discount"), el("p", { class: "lead" }, el("strong", { style: "font-size:1.5rem" }, b.code)),
+              el("p", null, "It is for " + b.competition + ", for this email address, and can be used once. We have also emailed it to you. Type it into the discount box on the entry form."), el("p", null, b.available_after + (b.available_after === 1 ? " point" : " points") + " still free to spend.")));
+          });
+        });
+        lines.push(el("div", { class: "field" }, el("label", { for: "sp-comp" }, "Which competition?"), comp), el("div", { class: "field" }, el("label", { for: "sp-steps" }, "How much?"), steps), el("div", { class: "actions" }, go));
+      }
+      step3.hidden = false; step3.replaceChildren.apply(step3, lines);
+    }
+    return el("section", { "aria-labelledby": "sp-h", style: "margin-top:var(--space-7);max-width:var(--measure)" }, el("h2", { id: "sp-h" }, "Spend your points"),
+      el("p", null, "Enter the email address you volunteered with and we will email you a code. Then you can see your points and turn them into a discount on your entry."),
+      el("div", { class: "field" }, el("label", { for: "sp-email" }, "Your email address"), email), el("div", { class: "actions" }, send), msg,
+      (function () { step2.replaceChildren(el("div", { class: "field" }, el("label", { for: "sp-code" }, "The code we emailed you"), code), el("div", { class: "actions" }, show)); return step2; })(), step3);
   }
 
   // The volunteer rota (/rota?c=<address>): who is helping in each session. Names and roles only. With ?preview=1 a signed-in entries team

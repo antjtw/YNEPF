@@ -80,13 +80,14 @@ export function expiredEmail(o: Who & { slug: string; siteUrl: string }) {
   ]);
 }
 
-export function priorityEmail(o: Who & { link: string; windowStart: string; opens?: string }) {
+export function priorityEmail(o: Who & { link: string; windowStart: string; opens?: string; points?: boolean }) {
   return sign(o, [
     `Hi ${o.name || "there"},`, "",
     `You can enter ${o.competition}${o.date ? ` (${o.date})` : ""} early, with priority entry.`, "",
     `Your personal link works from ${when(o.windowStart)} (UK time)${o.opens ? `, before general entry opens on ${when(o.opens)}` : ""}:`,
     o.link, "",
     "Please enter with the email address this message was sent to, and keep the link to yourself: it only works once. You can still enter when general entry opens if you would rather wait.",
+    ...(o.points ? ["", "This is your thank-you for volunteering. Priority entry costs 1 volunteer point, taken only once your entry is confirmed. If you do not use the link, you keep the point."] : []),
   ]);
 }
 
@@ -113,6 +114,20 @@ export function volunteerSignupEmail(o: Who & { lines: string[]; link: string; e
 }
 export function volunteerLinkEmail(o: Who & { link: string }) {
   return sign(o, [`Hi ${o.name || "there"},`, "", `Here is your personal link to see and change your volunteer answers for ${o.competition}:`, o.link, "", "If you did not ask for this, you can ignore this email."]);
+}
+// ---- Volunteer points: the one-time code, the discount code, and a note for the inbox when a code is made ---------------------------------
+export function pointsCodeEmail(o: { name: string; code: string; entriesEmail?: string }) {
+  return [`Hi ${o.name || "there"},`, "", `Your code to look at and spend your volunteer points is ${o.code}.`, "It works for 15 minutes and can be used once. If you did not ask for it, you can ignore this email: nothing has changed.", "", `Yorkshire & North East Powerlifting Federation${o.entriesEmail ? `\n${o.entriesEmail}` : ""}`].join("\n");
+}
+export function pointsDiscountEmail(o: { name: string; code: string; competition: string; pounds: number; points: number; expires?: string; link: string; entriesEmail?: string }) {
+  return [`Hi ${o.name || "there"},`, "", `Here is your £${o.pounds} discount for ${o.competition}:`, "", o.code, "",
+    `Type it into the discount box on the entry form, using this email address: ${o.link}`,
+    `It can be used once${o.expires ? ` and runs out on ${when(o.expires)}` : ""}. The ${o.points} points it is worth are taken from your balance when your entry is confirmed.`, "",
+    `Yorkshire & North East Powerlifting Federation${o.entriesEmail ? `\n${o.entriesEmail}` : ""}`].join("\n");
+}
+export function pointsRedeemedNotification(o: { name: string; email: string; competition: string; pounds: number; points: number; code: string; deskUrl?: string }) {
+  return [`${o.name} (${o.email}) turned ${o.points} volunteer points into a £${o.pounds} discount code for ${o.competition}.`, "", `Code: ${o.code}`, "The points come off their balance when an entry using the code is confirmed.",
+    ...(o.deskUrl ? ["", `Discount codes and who has used them: ${o.deskUrl}`] : [])].join("\n");
 }
 export function volunteerNotification(o: { name: string; email: string; competition: string; lines: string[]; edited: boolean; deskUrl?: string }) {
   return [`${o.edited ? "A volunteer changed their answers" : "A new volunteer has signed up"} for ${o.competition}.`, "", `${o.name} (${o.email})`, ...o.lines.map((l) => `- ${l}`),
@@ -247,7 +262,7 @@ if (typeof Deno !== "undefined") {
 
     // Makes each person's personal link (only its hash is kept) and emails it. If the email fails the person goes back to
     // "waiting to be sent" and the next check tries again.
-    const sendPriority = async (c: { id: string; name: string; slug: string; start_date: string; entry_opens: string | null }, people: { id: string; email: string; name: string }[], force: boolean) => {
+    const sendPriority = async (c: { id: string; name: string; slug: string; start_date: string; entry_opens: string | null }, people: { id: string; email: string; name: string; points?: boolean }[], force: boolean) => {
       const sres = await fetch(`${url}/rest/v1/entry_settings?competition_id=eq.${encodeURIComponent(c.id)}&select=priority_hours`, { headers: H });
       const [st] = await sres.json().catch(() => []);
       const hours = Number(st?.priority_hours ?? 24);
@@ -258,7 +273,7 @@ if (typeof Deno !== "undefined") {
         const tok = newToken();
         const iss = await rpc("priority_issue", { iid: p.id, th: await sha256Hex(tok), force });
         if (!iss.ok) { console.error("priority link not made", await iss.text()); failed++; failedTo.push({ name: p.name, email: p.email }); continue; }
-        const ok = await send(p.email, `Your priority entry link: ${c.name}`, priorityEmail({ name: p.name, competition: c.name, date: dateText(c.start_date), entriesEmail: copy, link: offerLink(siteUrl, c.slug, tok).replace("&offer=", "&invite="), windowStart, opens: c.entry_opens ?? undefined }));
+        const ok = await send(p.email, `Your priority entry link: ${c.name}`, priorityEmail({ name: p.name, competition: c.name, date: dateText(c.start_date), entriesEmail: copy, link: offerLink(siteUrl, c.slug, tok).replace("&offer=", "&invite="), windowStart, opens: c.entry_opens ?? undefined, points: !!p.points }));
         if (ok) { sent++; sentTo.push({ name: p.name, email: p.email }); } else { failed++; failedTo.push({ name: p.name, email: p.email }); await rpc("priority_unissue", { iid: p.id }); }
       }
       if (sent || failed) await send(copy, `Priority entry links sent: ${c.name}`, prioritySentNotification({ competition: c.name, sent: sentTo, failed: failedTo, deskUrl: `${siteUrl}/admin/#competitions/${c.id}/discounts` }));
@@ -355,6 +370,7 @@ if (typeof Deno !== "undefined") {
       }
       // Priority entry links for competitions whose priority window has opened.
       if (!body.competition_id) {
+        await rpc("priority_fill", {});           // everyone with a volunteer point joins the priority list first
         const pids: string[] = await (await rpc("priority_competitions", {})).json().catch(() => []);
         for (const id of Array.isArray(pids) ? pids : []) {
           const c = await comp(id); if (!c) continue;
@@ -417,6 +433,40 @@ if (typeof Deno !== "undefined") {
       if (!out.found) return reply(200, { ok: true, found: false });
       const sent = await send(out.email, `Your volunteer link: ${out.competition}`, volunteerLinkEmail({ name: out.name, competition: out.competition, entriesEmail: copy, link: volunteerLink(siteUrl, out.slug, out.token) }));
       return reply(200, { ok: true, found: true, sent });
+    }
+
+    // ---- spend your volunteer points: ask for a one-time code, look at the options, turn points into a discount code ----------------
+    if (action === "points_start" || action === "points_options" || action === "points_redeem") {
+      if (!allowTry(ip + "|points", Date.now(), 20)) return reply(429, { ok: false, message: "Too many tries. Please wait a few minutes and try again." });
+      const email = String(body.email ?? "").trim().toLowerCase();
+      if (action === "points_start") {
+        const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, "0");
+        const r = await rpc("points_login_start", { p_email: email, th: await sha256Hex(code) });
+        const out = await r.json().catch(() => null);
+        if (!r.ok || !out) return reply(500, { ok: false, message: "We could not do that just now. Please try again in a moment." });
+        if (out.error === "rate") return reply(429, { ok: false, message: "That is a few codes already. Please wait an hour and try again." });
+        if (out.error === "invalid_email") return reply(400, { ok: false, message: "That email address does not look right." });
+        if (out.send) await send(email, "Your volunteer points code", pointsCodeEmail({ name: out.name, code, entriesEmail: copy }));
+        return reply(200, { ok: true });          // the same answer whether or not the address has points
+      }
+      const th = await sha256Hex(String(body.code ?? "").replace(/\s/g, ""));
+      if (action === "points_options") {
+        const r = await rpc("points_options", { p_email: email, th });
+        const out = await r.json().catch(() => null);
+        if (!r.ok || !out) return reply(500, { ok: false, message: "We could not do that just now. Please try again in a moment." });
+        return reply(200, out.ok ? out : { ok: false, message: "That code did not work. It may have run out, or been used. You can ask for a new one." });
+      }
+      const r = await rpc("points_redeem", { p_email: email, th, comp: String(body.competition_id ?? ""), steps: Number(body.steps ?? 0) });
+      const out = await r.json().catch(() => null);
+      if (!r.ok || !out) return reply(500, { ok: false, message: "We could not do that just now. Please try again in a moment." });
+      if (!out.ok) {
+        const msg: Record<string, string> = { code: "That code did not work. It may have run out, or been used. You can ask for a new one.", points: "You do not have enough free points for that.", steps: "Choose between 1 and 5 discounts.", competition: "Entry for that competition is not open to this." };
+        return reply(200, { ok: false, message: msg[out.error] ?? "We could not do that." });
+      }
+      const pounds = out.discount_pence / 100;
+      await send(email, `Your £${pounds} discount: ${out.competition}`, pointsDiscountEmail({ name: out.name, code: out.code, competition: out.competition, pounds, points: out.points, expires: out.expires_at, link: `${siteUrl}/enter?c=${encodeURIComponent(out.slug)}`, entriesEmail: copy }));
+      await send(copy, `Volunteer points spent: ${out.name || email}`, pointsRedeemedNotification({ name: out.name || email, email, competition: out.competition, pounds, points: out.points, code: out.code, deskUrl: `${siteUrl}/admin/#competitions/${String(body.competition_id)}/discounts` }));
+      return reply(200, { ok: true, code: out.code, pounds, points: out.points, competition: out.competition, available_after: out.available_after, slug: out.slug });
     }
 
     // ---- the entries team shares the published lifting order with everyone in it ------------------------------------

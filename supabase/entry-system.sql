@@ -474,6 +474,8 @@ create table if not exists public.invites (                -- priority entry (ph
 -- opens (the link is made at that moment, so a row with no token_hash is "waiting to be sent").
 alter table public.entry_settings add column if not exists priority_hours integer not null default 24;
 alter table public.invites add column if not exists full_name text not null default '';
+alter table public.invites add column if not exists from_points boolean not null default false;                       -- a link made from volunteer points: it costs one point when the entry is confirmed
+alter table public.entry_settings add column if not exists priority_from_points boolean not null default true;      -- everyone with a point gets a priority link
 alter table public.invites add column if not exists sent_at timestamptz;
 alter table public.invites alter column token_hash drop not null;
 update public.invites set sent_at = now() where sent_at is null and token_hash is not null;     -- links made by hand earlier count as sent
@@ -947,6 +949,7 @@ create table if not exists public.vol_rota (
   status text not null default 'draft' check (status in ('draft', 'published')),
   published_at timestamptz
 );
+alter table public.vol_rota add column if not exists signup_closes_at timestamptz;        -- sign-up turns itself off at this moment (optional)
 -- The sessions to staff (a lifting session, set up, tear down) and the places in each.
 create table if not exists public.vol_sessions (
   id uuid primary key default gen_random_uuid(),
@@ -1047,7 +1050,9 @@ select
   k.openipf_url,
   k.slug,
   exists (select 1 from public.lifting_orders lo where lo.competition_id = k.id and lo.status = 'published') as lifting_published,
-  k.entries_closed_manually
+  k.entries_closed_manually,
+  exists (select 1 from public.vol_rota v where v.competition_id = k.id and v.signup_open and coalesce(v.signup_closes_at, 'infinity') > now()) as volunteers_open,
+  exists (select 1 from public.vol_rota v where v.competition_id = k.id and v.status = 'published') as rota_published
 from (
   select c.*, (c.entry_method = 'yne' and not c.entries_closed_manually and (c.entry_opens is null or c.entry_opens <= now())
                and (c.entry_closes is null or c.entry_closes > now()) and public.places_open(c.id) < 1) as auto_full
@@ -1323,6 +1328,10 @@ begin
       case when v_age < 18 then trim(p->>'guardian_name') else '' end, case when v_age < 18 then trim(p->>'guardian_phone') else '' end,
       case when v_age < 18 then trim(p->>'guardian_email') else '' end, v_age < 18, v_access, coalesce(c.end_date, c.start_date) + 30);
   if v_invite is not null then update public.invites set entry_id = v_entry where id = v_invite; end if;
+  if v_free then          -- a free entry is confirmed here, so the link is used and any points are spent now
+    update public.invites set used_at = now() where entry_id = v_entry and used_at is null;
+    perform public.points_spend_for_entry(v_entry);
+  end if;
   return jsonb_build_object('entry_id', v_entry, 'price_pence', v_price, 'hold_expires_at', v_expires, 'competition', c.name, 'slug', c.slug, 'free', v_free, 'discount_pence', v_discount, 'extras_pence', v_extras);
 end
 $$;
@@ -1608,6 +1617,7 @@ begin
   update public.entries set status = 'paid', paid_at = now(), hold_expires_at = null,
     cancelled_at = null, cancel_reason = '' where id = e;
   update public.invites set used_at = now() where entry_id = e and used_at is null;
+  perform public.points_spend_for_entry(e);          -- priority and points discounts cost their points now the entry is confirmed
   return 'paid';
 end
 $$;
@@ -1648,6 +1658,7 @@ declare
   v_guest_days integer := coalesce((p->>'guest_delay_days')::int, 14);
   v_offer_hours integer := coalesce((p->>'offer_window_hours')::int, 48);
   v_priority_hours integer := coalesce((p->>'priority_hours')::int, 24);
+  v_priority_points boolean := coalesce((p->>'priority_from_points')::boolean, true);
   -- Qualification: none | link (the OpenIPF link is required, nothing is checked) | glp (a minimum GL score) | totals (a qualifying total per weight class).
   v_qual text := coalesce(nullif(p->>'qualification', ''), case when coalesce((p->>'openipf_required')::boolean, false) then 'link' else 'none' end);
   v_ipf text;
@@ -1680,13 +1691,13 @@ begin
     entries_closed_manually = coalesce((p->>'entries_closed_manually')::boolean, false),
     is_franchise = coalesce((p->>'is_franchise')::boolean, is_franchise)
     where id = c;
-  insert into public.entry_settings (competition_id, events, equipment, hold_minutes, openipf_mode, qualification_mode, qualification_glp, guest_delay_days, offer_window_hours, priority_hours, updated_at)
+  insert into public.entry_settings (competition_id, events, equipment, hold_minutes, openipf_mode, qualification_mode, qualification_glp, guest_delay_days, offer_window_hours, priority_hours, priority_from_points, updated_at)
     values (c, case when cardinality(v_events) = 0 then array['full_power', 'bench_only'] else v_events end,
             case when cardinality(v_equip) = 0 then array['classic', 'equipped'] else v_equip end,
-            v_hold, v_ipf, case when v_qual in ('glp', 'totals') then v_qual else 'none' end, case when v_qual = 'glp' then v_glp end, v_guest_days, least(greatest(v_offer_hours, 1), 168), least(greatest(v_priority_hours, 1), 336), now())
+            v_hold, v_ipf, case when v_qual in ('glp', 'totals') then v_qual else 'none' end, case when v_qual = 'glp' then v_glp end, v_guest_days, least(greatest(v_offer_hours, 1), 168), least(greatest(v_priority_hours, 1), 336), v_priority_points, now())
     on conflict (competition_id) do update set events = excluded.events, equipment = excluded.equipment,
       hold_minutes = excluded.hold_minutes, openipf_mode = excluded.openipf_mode, qualification_mode = excluded.qualification_mode, qualification_glp = excluded.qualification_glp, guest_delay_days = excluded.guest_delay_days,
-      offer_window_hours = excluded.offer_window_hours, priority_hours = excluded.priority_hours, updated_at = now();
+      offer_window_hours = excluded.offer_window_hours, priority_hours = excluded.priority_hours, priority_from_points = excluded.priority_from_points, updated_at = now();
 
   -- Qualifying totals by weight class (only when that is the chosen standard). p->'qualifying_totals' = [{"sex": "M", "label": "83", "total_kg": 450}]
   if v_qual = 'totals' and jsonb_typeof(p->'qualifying_totals') = 'array' then
@@ -1784,7 +1795,7 @@ $$;
 create or replace function public.priority_pending(c uuid, only_id uuid default null, include_sent boolean default false) returns jsonb
 language sql stable security definer set search_path = public
 as $$
-  select coalesce(jsonb_agg(jsonb_build_object('id', i.id, 'email', i.email, 'name', i.full_name) order by i.email), '[]'::jsonb)
+  select coalesce(jsonb_agg(jsonb_build_object('id', i.id, 'email', i.email, 'name', i.full_name, 'points', i.from_points) order by i.email), '[]'::jsonb)
     from public.invites i
    where i.competition_id = c and i.used_at is null
      and (only_id is null or i.id = only_id)
@@ -2115,7 +2126,7 @@ begin
   select * into c from public.competitions where competitions.slug = volunteer_form.slug;
   if not found or not (c.published or public.is_entries()) then return jsonb_build_object('open', false); end if;
   select * into v from public.vol_rota where competition_id = c.id;
-  if not found or not v.signup_open then return jsonb_build_object('open', false, 'name', c.name); end if;
+  if not found or not v.signup_open or coalesce(v.signup_closes_at, 'infinity') <= now() then return jsonb_build_object('open', false, 'name', c.name); end if;
   if token is not null and btrim(token) <> '' then
     select * into su from public.vol_signups where competition_id = c.id and edit_token = token;
     if not found then return jsonb_build_object('open', true, 'name', c.name, 'slug', c.slug, 'bad_token', true); end if;
@@ -2147,7 +2158,7 @@ begin
   select * into c from public.competitions where slug = p->>'slug';
   if not found then raise exception 'closed'; end if;
   select * into v from public.vol_rota where competition_id = c.id;
-  if not found or not v.signup_open then raise exception 'closed'; end if;
+  if not found or not v.signup_open or coalesce(v.signup_closes_at, 'infinity') <= now() then raise exception 'closed'; end if;
   v_name := btrim(coalesce(p->>'name', '')); v_email := lower(btrim(coalesce(p->>'email', '')));
   v_mobile := btrim(coalesce(p->>'mobile', '')); v_shirt := btrim(coalesce(p->>'tshirt', '')); v_note := left(btrim(coalesce(p->>'note', '')), 500);
   if v_token <> '' then
@@ -2430,3 +2441,166 @@ begin
 end $$;
 revoke all on function public.points_award_helpers(jsonb) from public, anon;
 grant execute on function public.points_award_helpers(jsonb) to authenticated;
+
+
+-- ---------------------------------------------------------------------------
+-- 20. Volunteer points at work (stage 3): priority links from the ledger, points spent when an entry is confirmed, self-service discount codes
+-- ---------------------------------------------------------------------------
+alter table public.entry_settings add column if not exists priority_from_points boolean not null default true;      -- everyone with a point gets a priority link
+alter table public.invites add column if not exists from_points boolean not null default false;                       -- this link costs one point when the entry is confirmed
+alter table public.discount_codes add column if not exists points_cost integer not null default 0 check (points_cost >= 0);
+alter table public.discount_codes add column if not exists points_spent_at timestamptz;
+
+-- Everyone with at least one unexpired point gets a priority link for each online competition whose priority window has opened and general
+-- entry has not. Their rows join the priority list ("waiting to be sent"), and the waitlist function's timer emails the links. Anyone who already
+-- has a link (made by hand or earlier) or who has already entered is left alone. Called by the timer.
+create or replace function public.priority_fill() returns integer
+language plpgsql security definer set search_path = public
+as $$
+declare c record; n integer := 0; k integer;
+begin
+  for c in
+    select co.id from public.competitions co join public.entry_settings s on s.competition_id = co.id
+     where co.published and co.entry_method = 'yne' and s.priority_from_points and not co.entries_closed_manually
+       and co.entry_opens is not null and co.entry_opens > now()
+       and co.entry_opens - make_interval(hours => s.priority_hours) <= now()
+  loop
+    insert into public.invites (competition_id, email, full_name, from_points)
+      select c.id, e.email, coalesce(p.full_name, ''), true
+        from (select distinct l.email from public.points_ledger l) e
+        left join public.vol_people p on p.email = e.email
+       where public.points_balance(e.email) >= 1
+         and not exists (select 1 from public.invites i where i.competition_id = c.id and i.email = e.email)
+         and not exists (select 1 from public.entries en where en.competition_id = c.id and en.email = e.email and en.status in ('paid', 'comped'));
+    get diagnostics k = row_count; n := n + k;
+  end loop;
+  return n;
+end $$;
+
+-- Once an entry is confirmed: a priority link made from points costs one point, and a discount code bought with points costs what it was priced at.
+-- Each is spent once (the ledger key stops a second run doubling it), and never more than the person still has.
+create or replace function public.points_spend_for_entry(e uuid) returns void
+language plpgsql security definer set search_path = public
+as $$
+declare r record; v_name text; amt integer;
+begin
+  for r in select i.id, i.email, i.competition_id from public.invites i where i.entry_id = e and i.from_points loop
+    select name into v_name from public.competitions where id = r.competition_id;
+    if public.points_balance(r.email) >= 1 then
+      perform public.points_insert(r.email, -1, 'Priority entry: ' || coalesce(v_name, 'a competition'), 'spent', now(), r.competition_id, null, 'priority:' || r.id);
+    end if;
+  end loop;
+  for r in select d.id, d.points_cost, d.recipient_email, d.competition_id from public.entries en join public.discount_codes d on d.id = en.discount_code_id
+            where en.id = e and d.points_cost > 0 and d.points_spent_at is null and d.recipient_email <> '' loop
+    select name into v_name from public.competitions where id = r.competition_id;
+    amt := least(r.points_cost, public.points_balance(r.recipient_email));
+    if amt > 0 then
+      perform public.points_insert(r.recipient_email, -amt, 'Discount: ' || coalesce(v_name, 'a competition'), 'spent', now(), r.competition_id, null, 'discount:' || r.id);
+    end if;
+    update public.discount_codes set points_spent_at = now() where id = r.id;
+  end loop;
+end $$;
+revoke all on function public.priority_fill(), public.points_spend_for_entry(uuid) from public, anon, authenticated;
+do $$ begin
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    grant execute on function public.priority_fill(), public.points_spend_for_entry(uuid) to service_role;
+  end if;
+end $$;
+
+-- ---- Spend your own points: an emailed one-time code, then a £20 discount for every 4 points -------------------------------------------------
+-- Everything here is called only by the waitlist Edge Function (service role). The code is emailed; only its hash is stored, it works for
+-- 15 minutes, five wrong tries lock it, and an address with no points is told nothing different from one that has some.
+create table if not exists public.points_login (
+  id uuid primary key default gen_random_uuid(),
+  email text not null check (email = lower(email)),
+  code_hash text not null,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  attempts integer not null default 0,
+  used_at timestamptz
+);
+alter table public.points_login enable row level security;
+
+create or replace function public.points_login_start(p_email text, th text) returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare v_email text := lower(btrim(coalesce(p_email, ''))); v_name text;
+begin
+  if v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then return jsonb_build_object('ok', false, 'error', 'invalid_email'); end if;
+  if (select count(*) from public.points_login where email = v_email and created_at > now() - interval '1 hour') >= 5 then return jsonb_build_object('ok', false, 'error', 'rate'); end if;
+  if not exists (select 1 from public.points_ledger where email = v_email) then return jsonb_build_object('ok', true, 'send', false); end if;
+  insert into public.points_login (email, code_hash, expires_at) values (v_email, th, now() + interval '15 minutes');
+  select full_name into v_name from public.vol_people where email = v_email;
+  return jsonb_build_object('ok', true, 'send', true, 'name', coalesce(v_name, ''));
+end $$;
+
+-- Is this a good code for this address? A wrong one counts against the address (five and it is locked until a new one is asked for).
+create or replace function public.points_login_ok(p_email text, th text) returns uuid
+language plpgsql security definer set search_path = public
+as $$
+declare v_id uuid;
+begin
+  select id into v_id from public.points_login
+   where email = lower(btrim(coalesce(p_email, ''))) and code_hash = th and used_at is null and expires_at > now() and attempts < 5
+   order by created_at desc limit 1;
+  if v_id is null then
+    update public.points_login set attempts = attempts + 1 where email = lower(btrim(coalesce(p_email, ''))) and used_at is null and expires_at > now();
+  end if;
+  return v_id;
+end $$;
+
+-- What they have and what they can do with it: points, points already set aside (unused codes, priority links waiting), what is free to spend, and the competitions a code can be for.
+create or replace function public.points_options(p_email text, th text) returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare v_email text := lower(btrim(coalesce(p_email, ''))); v_bal integer; v_res integer; v_name text;
+begin
+  if public.points_login_ok(v_email, th) is null then return jsonb_build_object('ok', false, 'error', 'code'); end if;
+  v_bal := public.points_balance(v_email);
+  v_res := coalesce((select sum(d.points_cost) from public.discount_codes d where d.recipient_email = v_email and d.points_cost > 0 and d.points_spent_at is null and d.active and (d.expires_at is null or d.expires_at > now())), 0)
+         + (select count(*) from public.invites i join public.competitions c on c.id = i.competition_id
+             where i.email = v_email and i.from_points and i.used_at is null and not c.entries_closed_manually and coalesce(c.entry_closes, 'infinity') > now());
+  select full_name into v_name from public.vol_people where email = v_email;
+  return jsonb_build_object('ok', true, 'name', coalesce(v_name, ''), 'balance', v_bal, 'reserved', v_res, 'available', greatest(v_bal - v_res, 0),
+    'points_per_step', 4, 'step_pence', 2000,
+    'competitions', coalesce((select jsonb_agg(jsonb_build_object('id', c.id, 'name', c.name, 'slug', c.slug, 'start_date', c.start_date) order by c.start_date)
+        from public.competitions c where c.published and c.entry_method = 'yne' and not c.entries_closed_manually and coalesce(c.entry_closes, 'infinity') > now() and c.start_date >= current_date), '[]'::jsonb));
+end $$;
+
+-- Turn points into a discount code for one competition: £20 for every 4 points (up to 5 steps at a time). The code is only for this email and can be used once.
+-- The points are set aside now and come off the balance when an entry using the code is confirmed. Uses up the emailed code.
+create or replace function public.points_redeem(p_email text, th text, comp uuid, steps integer) returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare v_email text := lower(btrim(coalesce(p_email, ''))); v_login uuid; o jsonb; c public.competitions%rowtype; v_name text; v_prefix text; v_code text; u text; tries integer := 0;
+  v_row public.discount_codes%rowtype; v_cost integer; v_pence integer;
+  alphabet constant text := 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+begin
+  if steps is null or steps < 1 or steps > 5 then return jsonb_build_object('ok', false, 'error', 'steps'); end if;
+  o := public.points_options(v_email, th);
+  if not (o->>'ok')::boolean then return o; end if;
+  select * into c from public.competitions where id = comp;
+  if not found or not c.published or c.entry_method <> 'yne' or c.entries_closed_manually or coalesce(c.entry_closes, 'infinity') <= now() or c.start_date < current_date then return jsonb_build_object('ok', false, 'error', 'competition'); end if;
+  v_cost := steps * 4; v_pence := steps * 2000;
+  if (o->>'available')::int < v_cost then return jsonb_build_object('ok', false, 'error', 'points', 'available', (o->>'available')::int); end if;
+  v_name := o->>'name';
+  v_prefix := left(upper(regexp_replace(v_name, '[^A-Za-z]', '', 'g')), 10); if v_prefix = '' then v_prefix := 'YNE'; end if;
+  loop
+    u := replace(gen_random_uuid()::text, '-', '');
+    v_code := v_prefix || '-' || (v_pence / 100)::text || 'OFF-' || (select string_agg(substr(alphabet, (('x' || substr(u, i * 2 - 1, 2))::bit(8)::int % length(alphabet)) + 1, 1), '') from generate_series(1, 6) i);
+    exit when not exists (select 1 from public.discount_codes where code_key = upper(v_code));
+    tries := tries + 1; if tries > 20 then raise exception 'could not make a unique code'; end if;
+  end loop;
+  insert into public.discount_codes (competition_id, code, recipient_name, recipient_email, kind, value, max_uses, expires_at, reason, created_by, points_cost)
+    values (c.id, v_code, v_name, v_email, 'amount', v_pence, 1, coalesce(c.entry_closes, (c.start_date + 1)::timestamptz), 'Volunteer points: ' || v_cost || ' points for £' || (v_pence / 100), 'self-service', v_cost)
+    returning * into v_row;
+  update public.points_login set used_at = now() where email = v_email and code_hash = th and used_at is null;
+  return jsonb_build_object('ok', true, 'code', v_row.code, 'discount_pence', v_pence, 'points', v_cost, 'competition', c.name, 'name', v_name, 'slug', c.slug, 'expires_at', v_row.expires_at,
+    'available_after', (o->>'available')::int - v_cost);
+end $$;
+revoke all on function public.points_login_start(text, text), public.points_login_ok(text, text), public.points_options(text, text), public.points_redeem(text, text, uuid, integer) from public, anon, authenticated;
+do $$ begin
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    grant execute on function public.points_login_start(text, text), public.points_login_ok(text, text), public.points_options(text, text), public.points_redeem(text, text, uuid, integer) to service_role;
+  end if;
+end $$;

@@ -474,6 +474,73 @@ ok(pubPts.length >= 3 && Object.keys(pubPts[0]).sort().join() === "name,points" 
 ok(!(await can(`select public.points_balance('vic@x.com')`)) && !(await can(`select * from public.points_ledger`)), "the public cannot read the ledger or call balances");
 await db.exec("reset role");
 
+
+// ---- stage 3: priority links from points, points spent when an entry is confirmed, self-service discount codes
+const PC = "a3a3a3a3-0000-4000-8000-000000000003";
+await db.exec(`update public.entry_settings set priority_from_points = false where competition_id = '${PR}'`);          // the earlier priority tests keep their own people
+await db.exec(`insert into public.competitions (id,name,start_date,capacity,published,slug,entry_method,entry_opens) values ('${PC}','Points Open','2027-05-15',50,true,'points-open','yne', now() + interval '10 hours');
+ insert into public.entry_settings (competition_id) values ('${PC}');
+ insert into public.price_rules (competition_id,sort_order,label,event,age_category,price_pence) values ('${PC}',1,'Full power','full_power',null,6000);
+ select public.points_insert('pat@x.com', 5, 'Volunteered: test', 'earned', now(), null, null, 'p3:a');
+ select public.points_insert('old@x.com', 1, 'Volunteered: long ago', 'earned', now() - interval '3 years', null, null, 'p3:b');
+ insert into public.vol_people (email, full_name) values ('pat@x.com', 'Pat Helper') on conflict do nothing;`);
+await db.exec(`insert into public.invites (competition_id, email, full_name) values ('${PC}', 'man@x.com', 'Manual Person');
+ select public.points_insert('man@x.com', 3, 'Volunteered: test', 'earned', now(), null, null, 'p3:c');`);
+const s3_n = (await q(`select public.priority_fill() n`))[0].n;
+ok(s3_n >= 1 && (await q(`select email from public.invites where competition_id = '${PC}' and from_points order by email`)).every((x) => x.email !== "old@x.com" && x.email !== "man@x.com") && (await q(`select 1 from public.invites where competition_id = '${PC}' and email = 'pat@x.com' and from_points`)).length === 1, "priority_fill: people with an unexpired point and no link already get one (pat), not an expired one (old) or a hand-made one (man)");
+ok((await q(`select public.priority_fill() n`))[0].n === 0, "and running it again adds nobody");
+let invs = (await q(`select email, from_points, token_hash from public.invites where competition_id = '${PC}' order by email`));
+ok(invs.length >= 2 && invs.find((x) => x.email === "pat@x.com").from_points && !invs.find((x) => x.email === "man@x.com").from_points && invs.every((x) => !x.token_hash), "priority list: pat from points, the hand-made one unchanged, both waiting to be sent");
+ok((await q(`select public.priority_competitions() r`))[0].r.includes(PC), "the timer picks the competition up");
+const s3_patInv = (await q(`select id from public.invites where competition_id='${PC}' and email='pat@x.com'`))[0].id;
+await q(`select public.priority_issue('${s3_patInv}', $1)`, [await hash("pat-token")]);
+const s3_manInv = (await q(`select id from public.invites where competition_id='${PC}' and email='man@x.com'`))[0].id;
+await q(`select public.priority_issue('${s3_manInv}', $1)`, [await hash("man-token")]);
+const s3_sp = (o) => q(`select public.start_entry($1::jsonb) r`, [JSON.stringify({ ...good, competition_id: PC, ...o })]).then((r) => r[0].r).catch((e) => ({ error: e.message }));
+const s3_e1 = await s3_sp({ email: "pat@x.com", full_name: "Pat Helper", invite: "pat-token" });
+ok(s3_e1.entry_id && s3_e1.price_pence === 6000, "pat enters with their link before general entry opens: " + JSON.stringify(s3_e1));
+ok((await bal("pat@x.com")) === 5, "nothing is spent while the entry is only started");
+ok((await q(`select public.confirm_entry_payment('${s3_e1.entry_id}') r`))[0].r === "paid" && (await bal("pat@x.com")) === 4, "confirmed: the priority link costs one point");
+await q(`select public.confirm_entry_payment('${s3_e1.entry_id}')`);
+ok((await bal("pat@x.com")) === 4 && (await q(`select count(*)::int n from public.points_ledger where import_key like 'priority:%'`))[0].n === 1, "confirming again does not spend it twice");
+const s3_e2 = await s3_sp({ email: "man@x.com", full_name: "Manual Person", invite: "man-token", date_of_birth: "1991-02-03" });
+await q(`select public.confirm_entry_payment('${s3_e2.entry_id}')`);
+ok((await bal("man@x.com")) === 3, "a link made by hand costs no points");
+// self-service: ask for a code, look at the options, turn points into a discount code
+const s3_lg = async (email, code) => q(`select public.points_login_start($1, $2) r`, [email, await hash(code)]).then((r) => r[0].r);
+ok((await s3_lg("pat@x.com", "111111")).send === true && (await s3_lg("nobody@x.com", "222222")).send === false && (await s3_lg("not an email", "3")).ok === false, "a code is only made for an address with points history, and the answer tells a stranger nothing");
+const s3_opt = async (email, code) => q(`select public.points_options($1, $2) r`, [email, await hash(code)]).then((r) => r[0].r);
+ok((await s3_opt("pat@x.com", "999999")).ok === false, "a wrong code shows nothing");
+let s3_o1 = await s3_opt("pat@x.com", "111111");
+ok(s3_o1.ok && s3_o1.balance === 4 && s3_o1.reserved === 0 && s3_o1.available === 4 && s3_o1.competitions.some((x) => x.id === PC), "the right code shows balance, points set aside and what is free: " + JSON.stringify({ ...s3_o1, competitions: s3_o1.competitions.length }));
+const PD = "a3a3a3a3-0000-4000-8000-000000000004";
+await db.exec(`insert into public.competitions (id,name,start_date,capacity,published,slug,entry_method,entry_opens) values ('${PD}','Discount Open','2027-07-10',50,true,'discount-open','yne', now() - interval '1 day');
+ insert into public.entry_settings (competition_id) values ('${PD}');
+ insert into public.price_rules (competition_id,sort_order,label,event,age_category,price_pence) values ('${PD}',1,'Full power','full_power',null,6000);`);
+const s3_rd = async (email, code, comp, steps) => q(`select public.points_redeem($1, $2, $3::uuid, $4) r`, [email, await hash(code), comp, steps]).then((r) => r[0].r).catch((e) => ({ error: e.message }));
+ok((await s3_rd("pat@x.com", "111111", PD, 2)).error === "points", "£40 needs 8 points: refused when there are only 4");
+const s3_red = await s3_rd("pat@x.com", "111111", PD, 1);
+ok(s3_red.ok && s3_red.discount_pence === 2000 && s3_red.points === 4 && /^PAT/.test(s3_red.code) && s3_red.available_after === 0, "4 points buy a £20 code: " + JSON.stringify(s3_red));
+ok((await s3_opt("pat@x.com", "111111")).ok === false, "the emailed code works once");
+const s3_dc = (await q(`select recipient_email, points_cost, kind, value, max_uses, competition_id from public.discount_codes where code = $1`, [s3_red.code]))[0];
+ok(s3_dc.recipient_email === "pat@x.com" && s3_dc.points_cost === 4 && s3_dc.kind === "amount" && s3_dc.value === 2000 && s3_dc.max_uses === 1 && s3_dc.competition_id === PD, "the code is for that person, that competition, once");
+await s3_lg("pat@x.com", "333333"); ok((await s3_opt("pat@x.com", "333333")).available === 0 && (await s3_opt("pat@x.com", "333333")).reserved === 4, "points in an unused code are set aside, so they cannot be spent twice");
+ok((await bal("pat@x.com")) === 4, "but the balance only drops when the code is used");
+await db.exec(`update public.competitions set entry_opens = now() - interval '1 hour' where id = '${PC}'`);
+const s3_e3 = await s3_sp({ competition_id: PD, email: "pat@x.com", full_name: "Pat Helper", discount_code: s3_red.code, date_of_birth: "1992-01-01" });
+ok(s3_e3.price_pence === 4000 && s3_e3.discount_pence === 2000, "the code takes £20 off: " + JSON.stringify(s3_e3));
+ok((await bal("pat@x.com")) === 4, "still not spent: the entry is not confirmed");
+await q(`select public.confirm_entry_payment('${s3_e3.entry_id}')`);
+ok((await bal("pat@x.com")) === 0 && (await q(`select points_spent_at from public.discount_codes where code = $1`, [s3_red.code]))[0].points_spent_at, "confirmed: the 4 points come off");
+// five wrong tries lock a code; five requests an hour is the limit
+await s3_lg("pat@x.com", "444444"); for (let i = 0; i < 5; i++) await s3_opt("pat@x.com", "wrong" + i);
+ok((await s3_opt("pat@x.com", "444444")).ok === false, "five wrong tries lock the code");
+await db.exec(`delete from public.points_login`); for (let i = 0; i < 5; i++) await s3_lg("pat@x.com", "c" + i);
+ok((await s3_lg("pat@x.com", "c9")).error === "rate", "no more than five codes an hour for one address");
+await db.exec("set role anon");
+ok(!(await can(`select public.priority_fill()`)) && !(await can(`select public.points_options('pat@x.com', 'x')`)) && !(await can(`select public.points_redeem('pat@x.com', 'x', '${PC}', 1)`)) && !(await can(`select public.points_login_start('pat@x.com', 'x')`)) && !(await can(`select * from public.points_login`)), "the public cannot call any of these, or read the codes");
+await db.exec("reset role");
+
 // who may do what
 await db.exec("set role anon");
 ok(!(await can(`select public.waitlist_join('{}'::jsonb)`)) && !(await can(`select public.waitlist_sweep('${W}')`)) && !(await can(`select public.waitlist_make_offer('${W}'::uuid, 'x')`)), "the public cannot call the waiting list functions (only our server can)");

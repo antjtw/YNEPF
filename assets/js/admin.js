@@ -614,6 +614,7 @@
           help: "One per line: M or F, the weight class, then the total in kg. For example M 83: 450 or F 63: 300. Classes you leave out are not checked." }),
         E({ name: "hold_minutes", label: "Minutes a place is held while paying", type: "number", min: "5", show: isOnline, help: "Between 5 and 30. A short hold stops places being parked." }),
         E({ name: "priority_hours", label: "Priority entry starts this many hours before general entry", type: "number", min: "1", show: isOnline, help: "People on the Codes and links priority list are emailed their personal link when this window opens, and can enter from then until general entry opens. 24 is one day." }),
+        E({ name: "priority_from_points", label: "Priority links for volunteers", type: "checkbox", show: isOnline, help: "Everyone with at least one volunteer point is emailed a personal priority link when the priority window opens. Using it costs 1 point, taken only once their entry is confirmed. Untick for a competition where volunteers should not get priority." }),
         E({ name: "offer_window_hours", label: "Hours an offered place is held for the waiting list", type: "number", min: "1", show: isOnline, help: "When the competition is full, the waiting list opens by itself. When a place frees up, the person who has waited longest is emailed a personal link and has this long to use it (up to 168 hours). Then it passes to the next person." }),
         E({ name: "guest_delay_days", label: "Guests can enter this many days after entry opens", type: "number", min: "0", show: isOnline, help: "A guest is anyone outside the Yorkshire & North East division. Usually 14 (two weeks). They are told the date on the entry form." }),
         { heading: "Full, closed and waiting list" },
@@ -645,7 +646,7 @@
         p_full: price(function (r) { return r.event === "full_power" && !r.age_category; }), p_bench: price(function (r) { return r.event === "bench_only" && !r.age_category; }),
         p_sj: price(function (r) { return r.age_category === "SJ"; }),
         qualification: settings.qualification_mode === "glp" || settings.qualification_mode === "totals" ? settings.qualification_mode : settings.openipf_mode === "required" ? "link" : "none", qualification_glp: settings.qualification_glp === undefined || settings.qualification_glp === null ? "" : Number(settings.qualification_glp), qualifying_totals_text: totalsText(qtotals), hold_minutes: settings.hold_minutes || 5, offer_window_hours: settings.offer_window_hours || 48, priority_hours: settings.priority_hours || 24, guest_delay_days: settings.guest_delay_days === undefined || settings.guest_delay_days === null ? 14 : settings.guest_delay_days,
-        entries_closed_manually: !!c.entries_closed_manually, is_franchise: isNew ? true : c.is_franchise !== false
+        entries_closed_manually: !!c.entries_closed_manually, priority_from_points: settings.priority_from_points !== false, is_franchise: isNew ? true : c.is_franchise !== false
       });
       var F = fields();
       var form = pageForm(F, values);
@@ -705,7 +706,7 @@
         step.then(function (id) {
           if (!canEntry()) return id;
           var p = {
-            entry_method: v.method === "online" ? "yne" : "external", hold_minutes: v.hold_minutes || 5, guest_delay_days: v.guest_delay_days === null ? 14 : v.guest_delay_days, offer_window_hours: v.offer_window_hours || 48, priority_hours: v.priority_hours || 24, entries_closed_manually: !!v.entries_closed_manually, is_franchise: !!v.is_franchise,
+            entry_method: v.method === "online" ? "yne" : "external", hold_minutes: v.hold_minutes || 5, guest_delay_days: v.guest_delay_days === null ? 14 : v.guest_delay_days, offer_window_hours: v.offer_window_hours || 48, priority_hours: v.priority_hours || 24, priority_from_points: !!v.priority_from_points, entries_closed_manually: !!v.entries_closed_manually, is_franchise: !!v.is_franchise,
             qualification: v.qualification || "none", qualification_glp: v.qualification === "glp" && v.qualification_glp !== null && v.qualification_glp !== "" ? Number(v.qualification_glp) : null, qualifying_totals: v.qualification === "totals" ? totals.list : undefined,
             events: [v.ev_full && "full_power", v.ev_bench && "bench_only"].filter(Boolean), equipment: [v.eq_classic && "classic", v.eq_equipped && "equipped"].filter(Boolean),
             prices: { full_power: pence(v.p_full), bench_only: pence(v.p_bench), sub_junior: pence(v.p_sj) }
@@ -1801,13 +1802,18 @@
       }).catch(function (e) { toast(friendly(e), "error"); });
     }
     function draw() {
-      var open = !!V.rota.signup_open, published = V.rota.status === "published", people = V.signups.length + (V.signups.length === 1 ? " person has" : " people have") + " signed up so far.";
+      var closesAt = V.rota.signup_closes_at ? new Date(V.rota.signup_closes_at) : null, lapsed = !!(closesAt && closesAt <= new Date()), open = !!V.rota.signup_open && !lapsed, published = V.rota.status === "published", people = V.signups.length + (V.signups.length === 1 ? " person has" : " people have") + " signed up so far.";
       var shirts = el("input", { type: "checkbox", id: "vol-shirts" }); shirts.checked = !!V.rota.offer_tshirts; shirts.addEventListener("change", function () { setRota({ offer_tshirts: shirts.checked }); });
       var signupBox = el("section", { "aria-labelledby": "vol-signup-h", style: "margin:var(--space-4) 0" }, el("h3", { id: "vol-signup-h" }, "Sign-up"),
-        el("p", { class: "help", role: "status" }, (open ? "Sign-up is open. Anyone with the link can sign up. " : "Sign-up is closed. Open it when you are ready, usually a couple of weeks after entry opens. ") + people),
+        el("p", { class: "help", role: "status" }, (open ? "Sign-up is open. Anyone with the link can sign up" + (closesAt ? " until " + closesAt.toLocaleString("en-GB", { timeZone: Y.TZ, dateStyle: "medium", timeStyle: "short" }) : "") + ". It shows on the calendar as a Volunteer button. " : lapsed && V.rota.signup_open ? "Sign-up closed by itself on " + closesAt.toLocaleString("en-GB", { timeZone: Y.TZ, dateStyle: "medium", timeStyle: "short" }) + ". " : "Sign-up is closed. Open it when you are ready, usually a couple of weeks after entry opens. ") + people),
         el("p", { class: "help" }, "The link to share: ", el("code", null, formUrl())),
-        el("div", { class: "actions" }, open ? btn("Close sign-up", function () { setRota({ signup_open: false }, "Sign-up closed."); }, "btn-ghost") : el("button", { type: "button", class: "btn btn-primary", onclick: function () { if (!V.sessions.length) return toast("Add a session first.", "error"); setRota({ signup_open: true }, "Sign-up is open."); } }, "Open sign-up"),
+        el("div", { class: "actions" }, open ? btn("Close sign-up", function () { setRota({ signup_open: false }, "Sign-up closed."); }, "btn-ghost") : el("button", { type: "button", class: "btn btn-primary", onclick: function () { if (!V.sessions.length) return toast("Add a session first.", "error"); setRota(lapsed ? { signup_open: true, signup_closes_at: null } : { signup_open: true }, "Sign-up is open."); } }, "Open sign-up"),
           btn("Copy the link", function () { copyText(formUrl()); }, "btn-ghost"), V.signups.length ? btn("Download sign-ups (CSV)", downloadSignups, "btn-ghost") : null),
+        (function () {
+          var when = el("input", { type: "datetime-local", id: "vol-closes", value: Y.toLondonInput(V.rota.signup_closes_at) });
+          when.addEventListener("change", function () { setRota({ signup_closes_at: Y.fromLondonInput(when.value) }, when.value ? "Sign-up will close then." : "Sign-up will stay open until you close it."); });
+          return el("div", { class: "field", style: "margin-top:var(--space-3);max-width:22rem" }, el("label", { for: "vol-closes" }, "Close sign-up automatically (optional)"), el("p", { class: "help", id: "vol-closes-help" }, "UK time. Leave empty to close it yourself."), when);
+        })(),
         el("div", { class: "field field-check", style: "margin-top:var(--space-3)" }, shirts, el("div", null, el("label", { for: "vol-shirts" }, "Ask for a T-shirt size"), el("p", { class: "help" }, "Unisex sizes XS to 5XL. Turn it off for competitions where we are not providing T-shirts."))));
       var shareBox = el("section", { "aria-labelledby": "vol-pub-h", style: "margin:var(--space-5) 0" }, el("h3", { id: "vol-pub-h" }, "Publishing"),
         el("p", { class: "help", id: "vol-pub-note", role: "status" }, published ? "The rota is published: anyone can see who is helping, by name and role. Changes show straight away." : "The rota is not published. Publishing puts names and roles on a public page (no emails or mobile numbers). Preview shows it to the entries team first."),
@@ -2415,7 +2421,7 @@
     function load() {
       box.replaceChildren(el("h2", null, "Priority entry"), el("p", null, "Loading…"));
       Promise.all([
-        sb.from("invites").select("id,email,full_name,used_at,sent_at,entries(full_name,status)").eq("competition_id", c.id).order("email").then(ok),
+        sb.from("invites").select("id,email,full_name,used_at,sent_at,from_points,entries(full_name,status)").eq("competition_id", c.id).order("email").then(ok),
         sb.from("entry_settings").select("priority_hours").eq("competition_id", c.id).maybeSingle().then(function (r) { return r.error ? null : r.data; }, function () { return null; })
       ]).then(function (res) {
         var rows = res[0], hours = (res[1] && res[1].priority_hours) || 24, next = function () { load(); };
@@ -2424,7 +2430,7 @@
         function stamp(d) { return new Date(d).toLocaleString("en-GB", { timeZone: Y.TZ, dateStyle: "medium", timeStyle: "short" }); }
         box.replaceChildren(el("h2", null, "Priority entry"),
           el("p", { class: "panel-intro" }, start
-            ? "Everyone on this list is emailed their personal link automatically on " + stamp(start) + ", " + hours + " hours before general entry opens. They can enter from then."
+            ? "Everyone on this list is emailed their personal link automatically on " + stamp(start) + ", " + hours + " hours before general entry opens. They can enter from then. Volunteers with points are added automatically at that moment, and the point is only taken once their entry is confirmed."
             : "Set when entry opens on the Details tab first. Links are emailed automatically " + hours + " hours before it."),
           el("div", { class: "actions", style: "margin-bottom:var(--space-3)" },
             btn("Add people", function () { addPriority(c, next); }, "btn-primary"),
@@ -2434,7 +2440,7 @@
             el("tbody", null, rows.map(function (r) {
               var st = r.used_at ? ["Entered with their link", "tag tag-open"] : r.sent_at ? ["Link sent", "tag tag-position"] : [start && start <= new Date() ? "Sending shortly" : "Will be sent automatically", "tag tag-closed"];
               var en = Array.isArray(r.entries) ? r.entries[0] : r.entries;
-              return el("tr", null, el("th", { scope: "row" }, r.full_name || "—"), el("td", null, r.email), el("td", null, r.sent_at ? stamp(r.sent_at) : "Not yet"),
+              return el("tr", null, el("th", { scope: "row" }, r.full_name || "—", r.from_points ? el("small", null, "Volunteer points (1 point when they enter)") : null), el("td", null, r.email), el("td", null, r.sent_at ? stamp(r.sent_at) : "Not yet"),
                 el("td", null, r.used_at ? stamp(r.used_at) + (en ? " as " + en.full_name : "") : "Not yet"), el("td", null, el("span", { class: st[1] }, st[0])),
                 el("td", null, r.used_at ? "" : el("span", { class: "actions" },
                   btn(r.sent_at ? "Send again" : "Send now", function () { sendPriority(c, r.id, next); }),
