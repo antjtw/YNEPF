@@ -2161,3 +2161,202 @@ begin
 end $$;
 revoke all on function public.rota_preview(uuid) from public, anon;
 grant execute on function public.rota_preview(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 18. Volunteer points (stage 2): the ledger, balances, tick-off on the day, adjustments, import
+-- ---------------------------------------------------------------------------
+-- The ledger is append only (nobody can update or delete a row): corrections are new rows. A balance is worked out, never stored:
+-- points are earned in lots that expire 24 months after they were earned, and a spend uses the oldest unexpired lot first.
+alter table public.points_ledger add column if not exists kind text not null default 'earned'
+  check (kind in ('earned', 'spent', 'adjustment', 'forfeit', 'reversal', 'restore', 'import'));
+alter table public.points_ledger add column if not exists competition_id uuid references public.competitions (id) on delete set null;
+alter table public.points_ledger add column if not exists place_id uuid references public.vol_places (id) on delete set null;
+alter table public.points_ledger add column if not exists created_by text not null default '';
+alter table public.points_ledger add column if not exists import_key text;
+create unique index if not exists points_ledger_import_key on public.points_ledger (import_key) where import_key is not null;
+create index if not exists points_ledger_place on public.points_ledger (place_id);
+
+create or replace function public.points_set_expiry() returns trigger language plpgsql as $$
+begin
+  if new.delta > 0 and new.expires_at is null then new.expires_at := new.earned_at + interval '24 months'; end if;
+  return new;
+end $$;
+drop trigger if exists points_ledger_expiry on public.points_ledger;
+create trigger points_ledger_expiry before insert on public.points_ledger for each row execute function public.points_set_expiry();
+
+-- The lots still left for one person at a moment in time (earned, not spent, not expired).
+create or replace function public.points_lots(p_email text, p_at timestamptz default now())
+returns table (remaining integer, earned_at timestamptz, expires_at timestamptz)
+language plpgsql stable security definer set search_path = public
+as $$
+declare r record; amt integer[] := '{}'; exp timestamptz[] := '{}'; at_ timestamptz[] := '{}'; i integer; need integer; take integer;
+begin
+  for r in select l.delta, l.earned_at, coalesce(l.expires_at, l.earned_at + interval '24 months') as ex from public.points_ledger l where l.email = lower(p_email) order by l.earned_at, l.id loop
+    if r.delta > 0 then
+      amt := amt || r.delta; exp := exp || r.ex; at_ := at_ || r.earned_at;
+    else
+      need := -r.delta;
+      for i in 1 .. coalesce(array_length(amt, 1), 0) loop
+        exit when need <= 0;
+        if amt[i] > 0 and exp[i] > r.earned_at then take := least(amt[i], need); amt[i] := amt[i] - take; need := need - take; end if;
+      end loop;
+    end if;
+  end loop;
+  for i in 1 .. coalesce(array_length(amt, 1), 0) loop
+    if amt[i] > 0 and exp[i] > p_at then remaining := amt[i]; earned_at := at_[i]; expires_at := exp[i]; return next; end if;
+  end loop;
+end $$;
+revoke all on function public.points_lots(text, timestamptz) from public, anon, authenticated;
+
+create or replace function public.points_balance(p_email text, p_at timestamptz default now()) returns integer
+language sql stable security definer set search_path = public
+as $$ select coalesce(sum(remaining), 0)::int from public.points_lots(p_email, p_at) $$;
+revoke all on function public.points_balance(text, timestamptz) from public, anon, authenticated;
+
+-- The public points list: names and points only, never anyone's email, and nobody with no points. (A function, not a view, so the public
+-- cannot call the balance function for an email address of their choice.)
+drop view if exists public.points_public;
+create or replace function public.points_public_list() returns table (name text, points integer)
+language sql stable security definer set search_path = public
+as $$
+  select p.full_name, b.points from public.vol_people p
+  cross join lateral (select public.points_balance(p.email) as points) b
+  where b.points > 0 order by p.full_name
+$$;
+revoke all on function public.points_public_list() from public;
+grant execute on function public.points_public_list() to anon, authenticated;
+
+-- Everyone with points history, for the entries team: balance, what they earned and spent over time, and what is about to expire.
+create or replace function public.points_overview() returns table (email text, name text, balance integer, earned integer, spent integer, expiring integer, next_expiry timestamptz)
+language plpgsql stable security definer set search_path = public
+as $$
+begin
+  if not public.is_entries() then raise exception 'forbidden'; end if;
+  return query
+  select e.email, coalesce(p.full_name, e.email), public.points_balance(e.email),
+         (select coalesce(sum(delta) filter (where delta > 0), 0)::int from public.points_ledger l where l.email = e.email),
+         (select coalesce(-sum(delta) filter (where delta < 0), 0)::int from public.points_ledger l where l.email = e.email),
+         (select coalesce(sum(x.remaining), 0)::int from public.points_lots(e.email) x where x.expires_at <= now() + interval '60 days'),
+         (select min(x.expires_at) from public.points_lots(e.email) x)
+  from (select distinct l.email from public.points_ledger l) e
+  left join public.vol_people p on p.email = e.email
+  order by 2;
+end $$;
+revoke all on function public.points_overview() from public, anon;
+grant execute on function public.points_overview() to authenticated;
+
+-- Internal: add one row to the ledger.
+create or replace function public.points_insert(p_email text, p_delta integer, p_reason text, p_kind text, p_at timestamptz, p_comp uuid, p_place uuid, p_key text) returns boolean
+language plpgsql security definer set search_path = public
+as $$
+declare who text := 'system';
+begin
+  if auth.uid() is not null then select coalesce(u.email, 'unknown') into who from auth.users u where u.id = auth.uid(); end if;
+  insert into public.points_ledger (email, delta, reason, kind, earned_at, competition_id, place_id, created_by, import_key)
+    values (lower(p_email), p_delta, p_reason, p_kind, coalesce(p_at, now()), p_comp, p_place, coalesce(who, 'system'), p_key)
+    on conflict (import_key) where import_key is not null do nothing;
+  return found;
+end $$;
+revoke all on function public.points_insert(text, integer, text, text, timestamptz, uuid, uuid, text) from public, anon, authenticated;
+
+-- Tick off a volunteer on the day. arrived: they earn the role's points. no_show: they lose their whole balance. cancelled: they told us in
+-- advance, so nothing happens. planned: undo. Moving between states reverses the earlier effect first.
+create or replace function public.vol_mark(pl uuid, new_status text) returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare p public.vol_places%rowtype; s public.vol_sessions%rowtype; c public.competitions%rowtype; r public.vol_roles%rowtype; v_net integer; v_bal integer; v_pts integer := 0;
+begin
+  if not public.is_entries() then raise exception 'forbidden'; end if;
+  if new_status not in ('planned', 'arrived', 'no_show', 'cancelled') then raise exception 'invalid:status'; end if;
+  select * into p from public.vol_places where id = pl for update;
+  if not found then raise exception 'not_found'; end if;
+  select * into s from public.vol_sessions where id = p.vol_session_id;
+  select * into c from public.competitions where id = s.competition_id;
+  select * into r from public.vol_roles where id = p.role_id;
+  if p.status = new_status then return jsonb_build_object('points', 0, 'status', p.status); end if;
+  -- undo what the old state did
+  select coalesce(sum(delta), 0) into v_net from public.points_ledger where place_id = pl;
+  if p.email is not null and v_net <> 0 then
+    perform public.points_insert(p.email, -v_net, case when p.status = 'arrived' then 'Reversed: ' else 'Restored: ' end || r.name || ', ' || s.label || ', ' || c.name,
+      case when p.status = 'arrived' then 'reversal' else 'restore' end, now(), c.id, pl, null);
+  end if;
+  -- apply the new one
+  if p.email is not null and new_status = 'arrived' then
+    v_pts := r.points;
+    perform public.points_insert(p.email, v_pts, 'Volunteered: ' || r.name || ', ' || s.label || ', ' || c.name, 'earned', least(c.start_date::timestamptz + interval '12 hours', now()), c.id, pl, null);   -- dated the competition day, never in the future
+  elsif p.email is not null and new_status = 'no_show' then
+    v_bal := public.points_balance(p.email);
+    if v_bal > 0 then
+      v_pts := -v_bal;
+      perform public.points_insert(p.email, -v_bal, 'Forfeited: did not turn up and did not tell us (' || r.name || ', ' || s.label || ', ' || c.name || ')', 'forfeit', now(), c.id, pl, null);
+    end if;
+  end if;
+  update public.vol_places set status = new_status, updated_at = now() where id = pl;
+  return jsonb_build_object('points', v_pts, 'status', new_status, 'no_email', p.email is null);
+end $$;
+revoke all on function public.vol_mark(uuid, text) from public, anon;
+grant execute on function public.vol_mark(uuid, text) to authenticated;
+
+-- Add or take away points by hand: a thank you, a correction, a spend (membership, a discount). p = { email, name, delta, reason, date }
+create or replace function public.points_adjust(p jsonb) returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare v_email text := lower(btrim(coalesce(p->>'email', ''))); v_delta integer := (p->>'delta')::int; v_reason text := btrim(coalesce(p->>'reason', '')); v_at timestamptz; v_bal integer;
+begin
+  if not public.is_entries() then raise exception 'forbidden'; end if;
+  if v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then raise exception 'invalid:email'; end if;
+  if v_delta is null or v_delta = 0 or abs(v_delta) > 100 then raise exception 'invalid:delta'; end if;
+  if v_reason = '' then raise exception 'invalid:reason'; end if;
+  v_at := coalesce(nullif(p->>'date', '')::date::timestamptz + interval '12 hours', now());
+  if not exists (select 1 from public.vol_people where email = v_email) then
+    if btrim(coalesce(p->>'name', '')) = '' then raise exception 'invalid:name'; end if;
+    insert into public.vol_people (email, full_name) values (v_email, btrim(p->>'name'));
+  end if;
+  if v_delta < 0 then
+    v_bal := public.points_balance(v_email);
+    if -v_delta > v_bal then raise exception 'insufficient'; end if;
+  end if;
+  perform public.points_insert(v_email, v_delta, v_reason, case when v_delta > 0 then 'adjustment' else 'spent' end, v_at, null, null, null);
+  return jsonb_build_object('balance', public.points_balance(v_email));
+end $$;
+revoke all on function public.points_adjust(jsonb) from public, anon;
+grant execute on function public.points_adjust(jsonb) to authenticated;
+
+-- Bring in the points sheet: p = { rows: [ { key, email, name, date, delta, reason } ] }. A key already imported is skipped, so it is safe to run twice.
+create or replace function public.points_import(p jsonb) returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare r jsonb; v_email text; n_in integer := 0; n_skip integer := 0;
+begin
+  if not public.is_entries() then raise exception 'forbidden'; end if;
+  for r in select * from jsonb_array_elements(coalesce(p->'rows', '[]'::jsonb)) loop
+    v_email := lower(btrim(coalesce(r->>'email', '')));
+    if v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' or coalesce((r->>'delta')::int, 0) = 0 or btrim(coalesce(r->>'key', '')) = '' then n_skip := n_skip + 1; continue; end if;
+    insert into public.vol_people (email, full_name) values (v_email, coalesce(nullif(btrim(r->>'name'), ''), v_email)) on conflict (email) do nothing;
+    if public.points_insert(v_email, (r->>'delta')::int, left(coalesce(r->>'reason', 'Imported'), 200), 'import', (r->>'date')::date::timestamptz + interval '12 hours', null, null, 'sheet:' || (r->>'key')) then n_in := n_in + 1; else n_skip := n_skip + 1; end if;
+  end loop;
+  return jsonb_build_object('inserted', n_in, 'skipped', n_skip);
+end $$;
+revoke all on function public.points_import(jsonb) from public, anon;
+grant execute on function public.points_import(jsonb) to authenticated;
+
+-- Points for people who helped at a competition we did not staff (a franchise): p = { competition_id, rows: [ { name, email, points } ] }.
+-- One award per person per competition: sending the same email again is skipped.
+create or replace function public.points_award_helpers(p jsonb) returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare c public.competitions%rowtype; r jsonb; v_email text; v_pts integer; n_in integer := 0; n_skip integer := 0;
+begin
+  if not public.is_entries() then raise exception 'forbidden'; end if;
+  select * into c from public.competitions where id = (p->>'competition_id')::uuid;
+  if not found then raise exception 'not_found'; end if;
+  for r in select * from jsonb_array_elements(coalesce(p->'rows', '[]'::jsonb)) loop
+    v_email := lower(btrim(coalesce(r->>'email', ''))); v_pts := coalesce((r->>'points')::int, 1);
+    if v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' or v_pts < 1 or v_pts > 10 then n_skip := n_skip + 1; continue; end if;
+    insert into public.vol_people (email, full_name) values (v_email, coalesce(nullif(btrim(r->>'name'), ''), v_email)) on conflict (email) do nothing;
+    if public.points_insert(v_email, v_pts, 'Helped at ' || c.name, 'earned', least(c.start_date::timestamptz + interval '12 hours', now()), c.id, null, 'helper:' || c.id || ':' || v_email) then n_in := n_in + 1; else n_skip := n_skip + 1; end if;
+  end loop;
+  return jsonb_build_object('awarded', n_in, 'skipped', n_skip);
+end $$;
+revoke all on function public.points_award_helpers(jsonb) from public, anon;
+grant execute on function public.points_award_helpers(jsonb) to authenticated;

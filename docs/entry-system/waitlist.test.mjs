@@ -393,6 +393,69 @@ await db.exec("reset role"); await db.query(`select set_config('request.uid','${
 ok((await q(`select count(*)::int n from public.vol_signups`))[0].n === 0, "an editor sees no sign-ups");
 await db.exec("reset role");
 
+// ---- volunteer points: ledger, expiry, tick-off, adjustments, import ----
+await db.exec("reset role");
+const bal = async (e, at = "now()") => (await q(`select public.points_balance('${e}', ${at}) b`))[0].b;
+const pe = async (fn, who, arg) => asUser(who, async () => { try { return (await db.query(`select public.${fn}($1::jsonb) r`, [JSON.stringify(arg)])).rows[0].r; } catch (e) { return { error: e.message }; } });
+await db.exec(`insert into public.vol_people (email, full_name) values ('fifo@x.com','Fifo Person'), ('vic@x.com','Vic V Changed') on conflict (email) do nothing`);
+// earned 3 points two years and a month ago (expired), 2 a year ago, 1 last month; spent 1 six months ago: the spend uses the oldest unexpired lot
+await db.exec(`insert into public.points_ledger (email, delta, reason, kind, earned_at) values
+  ('fifo@x.com', 3, 'old', 'import', now() - interval '25 months'),
+  ('fifo@x.com', 2, 'a year ago', 'import', now() - interval '12 months'),
+  ('fifo@x.com', 1, 'last month', 'import', now() - interval '1 month'),
+  ('fifo@x.com', -1, 'spent', 'spent', now() - interval '6 months')`);
+ok((await bal("fifo@x.com")) === 3, "points expire 24 months after earning, and a spend uses the oldest live lot first (it took one from the 25 month old lot, which was still live six months ago): balance " + (await bal("fifo@x.com")));
+ok((await bal("fifo@x.com", "now() - interval '7 months'")) === 5 - 0, "balance as it was seven months ago (the 25 month old points were still live): " + (await bal("fifo@x.com", "now() - interval '7 months'")));
+await db.exec(`insert into public.points_ledger (email, delta, reason, kind, earned_at) values ('fifo@x.com', 1, 'soon', 'import', now() - interval '23 months 20 days')`);
+const ov = (await asUser(U.entries, async () => (await db.query(`select * from public.points_overview() where email = 'fifo@x.com'`)).rows))[0];
+ok(ov && ov.balance === 4 && ov.expiring === 1 && ov.earned === 7 && ov.spent === 1, "the overview shows balance, what is about to expire, and totals: " + JSON.stringify(ov));
+ok((await asUser(U.editor, async () => { try { await db.query(`select * from public.points_overview()`); return "ok"; } catch (e) { return e.message; } })).includes("forbidden"), "an editor cannot see the overview");
+// tick-off on the day
+const placeOf = async (sid, rid, n = 1) => (await q(`select id from public.vol_places where vol_session_id = '${sid}' and role_id = '${rid}' and position = ${n}`))[0].id;
+await db.exec(`update public.vol_places set person_name = 'Vic V Changed', email = 'vic@x.com' where id = '${await placeOf(s1.id, rMc)}'`);
+const plMc = await placeOf(s1.id, rMc);
+const mark = (st, who = U.entries) => asUser(who, async () => { try { return (await db.query(`select public.vol_mark($1::uuid, $2) r`, [plMc, st])).rows[0].r; } catch (e) { return { error: e.message }; } });
+ok((await mark("arrived", U.editor)).error?.includes("forbidden"), "an editor cannot tick people off");
+let m = await mark("arrived");
+ok(m.points === 1 && (await bal("vic@x.com")) === 1, "arrived: they earn the role's point");
+ok((await mark("arrived")).points === 0 && (await bal("vic@x.com")) === 1, "ticking arrived twice does not pay twice");
+await mark("planned"); ok((await bal("vic@x.com")) === 0, "undoing arrived takes the point back");
+await mark("arrived");
+await asUser(U.entries, () => pe("points_adjust", U.entries, { email: "vic@x.com", delta: 4, reason: "Thank you for the extra work" }));
+ok((await bal("vic@x.com")) === 5, "a manual thank-you adds points");
+m = await mark("no_show");
+ok(m.points === -4 && (await bal("vic@x.com")) === 0, "no show: this place stops counting and they lose the rest of their balance too, so nothing is left (" + JSON.stringify(m) + ")");
+await mark("cancelled"); ok((await bal("vic@x.com")) === 4, "undoing a no-show gives the forfeited points back");
+await mark("no_show"); await mark("planned"); await mark("cancelled");
+ok((await q(`select status from public.vol_places where id = '${plMc}'`))[0].status === "cancelled" && (await bal("vic@x.com")) === 4, "told us in advance (cancelled): no points lost");
+// adjustments: take away, never below zero, reason needed
+let adj = await pe("points_adjust", U.entries, { email: "vic@x.com", delta: -2, reason: "Half price BP membership (5)" });
+ok(adj.balance === 2, "taking points away (a spend) lowers the balance: " + JSON.stringify(adj));
+ok((await pe("points_adjust", U.entries, { email: "vic@x.com", delta: -9, reason: "x" })).error?.includes("insufficient"), "cannot spend more than the balance");
+ok((await pe("points_adjust", U.entries, { email: "vic@x.com", delta: 1, reason: "" })).error?.includes("invalid:reason"), "a reason is required");
+ok((await pe("points_adjust", U.entries, { email: "new@x.com", delta: 1, reason: "r" })).error?.includes("invalid:name"), "a new person needs a name");
+ok((await pe("points_adjust", U.editor, { email: "vic@x.com", delta: 1, reason: "r" })).error?.includes("forbidden"), "only the entries team can adjust points");
+// the ledger is append only and shows who did what
+await asUser(U.entries, async () => {
+  ok(!(await can(`update public.points_ledger set delta = 99`)) && !(await can(`delete from public.points_ledger`)), "nobody can change or delete a ledger row");
+});
+ok((await q(`select count(*)::int n from public.points_ledger where email = 'vic@x.com' and created_by <> ''`))[0].n >= 3, "rows record who made them");
+// import: safe to run twice, sums match
+const imp = { rows: [{ key: "r1:a", email: "imp@x.com", name: "Imp One", date: "2025-03-01", delta: 2, reason: "Volunteered: March Open" }, { key: "r1:b", email: "imp@x.com", name: "Imp One", date: "2025-04-12", delta: -1, reason: "Spent: NESC" }, { key: "r2:a", email: "BAD", date: "2025-03-01", delta: 1, reason: "x" }] };
+let ir = await pe("points_import", U.entries, imp);
+ok(ir.inserted === 2 && ir.skipped === 1 && (await bal("imp@x.com")) === 1, "import adds the rows and skips the bad one: " + JSON.stringify(ir));
+ir = await pe("points_import", U.entries, imp); ok(ir.inserted === 0 && (await bal("imp@x.com")) === 1, "importing the same sheet again changes nothing");
+// helpers at a competition we did not staff
+const hp = await pe("points_award_helpers", U.entries, { competition_id: VC, rows: [{ name: "Hal Helper", email: "hal@x.com", points: 2 }, { name: "No Email", email: "" }] });
+ok(hp.awarded === 1 && hp.skipped === 1 && (await bal("hal@x.com")) === 2, "helpers at a franchise competition earn points once: " + JSON.stringify(hp));
+ok((await pe("points_award_helpers", U.entries, { competition_id: VC, rows: [{ name: "Hal Helper", email: "hal@x.com", points: 2 }] })).awarded === 0, "and not twice");
+// the public list is names and points only
+await db.exec("set role anon");
+const pubPts = (await db.query(`select * from public.points_public_list() order by points desc`)).rows;
+ok(pubPts.length >= 3 && Object.keys(pubPts[0]).sort().join() === "name,points" && !pubPts.some((x) => x.points <= 0), "the public points list shows names and points only, never zero: " + JSON.stringify(pubPts[0]));
+ok(!(await can(`select public.points_balance('vic@x.com')`)) && !(await can(`select * from public.points_ledger`)), "the public cannot read the ledger or call balances");
+await db.exec("reset role");
+
 // who may do what
 await db.exec("set role anon");
 ok(!(await can(`select public.waitlist_join('{}'::jsonb)`)) && !(await can(`select public.waitlist_sweep('${W}')`)) && !(await can(`select public.waitlist_make_offer('${W}'::uuid, 'x')`)), "the public cannot call the waiting list functions (only our server can)");
