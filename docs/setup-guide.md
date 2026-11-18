@@ -39,7 +39,7 @@ This guide grows as the entry system is built. Parts marked **(to be written)** 
 
 **D. Give the right people the right role.** In the editor, **Users**, press **Change role**:
 - **Admin**: you, and anyone who adds or removes users.
-- **Entries team**: whoever runs entries.
+- **Competitions team** (called Entries team in the database): whoever runs entries and volunteers.
 - **Editor**: site content only. **Contributor**: news posts only.
 
 ---
@@ -282,3 +282,12 @@ The page is at `/privacy` and is linked from the footer. Its text is edited in t
 - **Priority entry:** when links are emailed (automatically 24 hours before entry opens, or when you press Send now), the competitions inbox gets a note listing who was sent a link and who could not be reached. On a competition's **Codes and links** tab, the priority list shows for each person when their link was sent and when (and as whom) it was used.
 - **Discount codes:** each time a code is used, whether the person paid or the code made the entry free, the competitions inbox gets a note with the code, who used it, the discount and what they paid. Under the codes on the same tab, **Who has used a code** lists every entry that used one, newest first.
 - This needs the updated `stripe-webhook`, `entry-checkout` and `waitlist` Edge Functions deployed (paste each `index.ts`).
+
+### Volunteers: sign-up and the rota (a competition's Volunteers tab)
+
+1. **Create the rota:** say how many lifting sessions need staffing, and whether to include set up and tear down. The usual roles and numbers are filled in: chief referee 1, side referees 2, technical controller 1, session manager 1, table 2, MC 1, platform manager 1, platform crew 4, warm-up / runner 1, ad-hoc 2; set up and tear down have a co-ordinator and six crew.
+2. **Open sign-up** when you are ready (usually about two weeks after entry opens). Share the link shown (`/volunteer?c=<address>`). Volunteers give their name, email, an optional mobile number (for WhatsApp groups) and a unisex T-shirt size (XS to 5XL, which you can turn off), confirm they are 18 or over, and tick the roles they could do in each session. The form says plainly that not turning up without telling us loses their points. Signing up again with the same email replaces earlier answers. **Download sign-ups (CSV)** gives you the mobile numbers and T-shirt sizes.
+3. **Choose who does what:** each place has a dropdown. People who said they could do that role in that session are listed first, then other volunteers who signed up, then everyone else we know, then **Someone else…** to add a person (such as a referee) with an optional email so they can earn points. Referees, the technical controller, the session manager and the platform manager are not on the form: you fill those in. A person in two places in the same session is flagged. **Add place** and **Remove place** change the numbers, **Edit session** renames it, sets the times shown on the rota, and has a **jury** tick (adds three jury places) and **Remove session**. **Add session** is at the bottom.
+4. **Publish** the rota: it goes on a public page (`/rota?c=<address>`) showing names and roles only, never emails or mobile numbers. **Preview** shows it to the entries team first.
+
+Needs the latest all-in-one SQL (new `vol_` tables, the sign-up functions and the rota view) and the privacy policy update (`docs/privacy-policy-update.sql`) which mentions mobile numbers and T-shirt sizes. Franchise competitions have no sign-up; points for their helpers come in a later stage.

@@ -333,7 +333,7 @@
     sb.from("competitions").select("*").eq("id", args[0]).maybeSingle().then(function (res) {
       var c = ok(res);
       if (!c) return panel.replaceChildren(panelHead("Not found"), el("p", null, "That item no longer exists."), backLink());
-      renderEditor(panel, c, c.kind === "event" ? "event" : "competition", args[1] === "entries" ? "entries" : args[1] === "lifting" ? "lifting" : args[1] === "discounts" ? "discounts" : args[1] === "money" ? "money" : args[1] === "extras" ? "extras" : args[1] === "waiting" ? "waiting" : args[1] === "results" ? "results" : "details");
+      renderEditor(panel, c, c.kind === "event" ? "event" : "competition", args[1] === "entries" ? "entries" : args[1] === "volunteers" ? "volunteers" : args[1] === "lifting" ? "lifting" : args[1] === "discounts" ? "discounts" : args[1] === "money" ? "money" : args[1] === "extras" ? "extras" : args[1] === "waiting" ? "waiting" : args[1] === "results" ? "results" : "details");
     }).catch(function (e) { panel.replaceChildren(el("p", { class: "form-error" }, friendly(e)), backLink()); });
   }
 
@@ -510,6 +510,7 @@
       if (canEntry()) tabs.appendChild(el("a", { href: "#competitions/" + c.id + "/entries", "aria-current": tab === "entries" ? "page" : null }, "Entries"));
       if (canEntry() && c.entry_method === "yne") tabs.appendChild(el("a", { href: "#competitions/" + c.id + "/lifting", "aria-current": tab === "lifting" ? "page" : null }, "Lifting order"));
       if (canEntry() && c.entry_method === "yne") tabs.appendChild(el("a", { href: "#competitions/" + c.id + "/waiting", "aria-current": tab === "waiting" ? "page" : null }, "Waiting list"));
+      if (canEntry() && c.entry_method === "yne") tabs.appendChild(el("a", { href: "#competitions/" + c.id + "/volunteers", "aria-current": tab === "volunteers" ? "page" : null }, "Volunteers"));
       if (canEntry()) tabs.appendChild(el("a", { href: "#competitions/" + c.id + "/discounts", "aria-current": tab === "discounts" ? "page" : null }, "Codes and links"));
       if (canEntry()) tabs.appendChild(el("a", { href: "#competitions/" + c.id + "/extras", "aria-current": tab === "extras" ? "page" : null }, "Extras"));
       if (canEntry()) tabs.appendChild(el("a", { href: "#competitions/" + c.id + "/money", "aria-current": tab === "money" ? "page" : null }, "Money"));
@@ -519,6 +520,7 @@
     panel.appendChild(view);
     if (tab === "entries" && !isNew && !isEvent) return renderEntriesTab(view, c);
     if (tab === "waiting" && !isNew && !isEvent) return renderWaitingTab(view, c);
+    if (tab === "volunteers" && !isNew && !isEvent) return renderVolunteersTab(view, c);
     if (tab === "lifting" && !isNew && !isEvent) return renderLiftingTab(view, c);
     if (tab === "discounts" && !isNew && !isEvent) return renderDiscountsTab(view, c);
     if (tab === "extras" && !isNew && !isEvent) return renderExtrasTab(view, c);
@@ -1382,6 +1384,190 @@
         exportBox,
         el("section", { "aria-labelledby": "lo-settings-h", style: "margin:var(--space-5) 0" }, el("h3", { id: "lo-settings-h" }, "Settings"), secForm.el));
       status(); pubStatus(); draw();
+    }).catch(function (e) { view.replaceChildren(el("p", { class: "form-error" }, friendly(e))); });
+  }
+
+  // ---- Volunteers: set up the rota, open sign-up, pick who does what, publish -----------------------------------------
+  // Referees, the technical controller, the session manager and the platform manager are filled in here by the coordinator; volunteers only
+  // choose from the roles marked on_form. A place holds a person's name and (if we have it) their email, which is what points will go to.
+  var SIZES = ["XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL"];
+  function renderVolunteersTab(view, c) {
+    view.replaceChildren(el("p", null, "Loading…"));
+    var V = { rota: null, roles: [], sessions: [], signups: [], people: [] };
+    function load() {
+      return Promise.all([
+        sb.from("vol_rota").select("*").eq("competition_id", c.id).maybeSingle(),
+        sb.from("vol_roles").select("*").order("sort_order"),
+        sb.from("vol_sessions").select("*, vol_places(*)").eq("competition_id", c.id).order("sort_order"),
+        sb.from("vol_signups").select("*, vol_signup_roles(vol_session_id, role_id)").eq("competition_id", c.id).order("created_at"),
+        sb.from("vol_people").select("email,full_name,mobile,tshirt").order("full_name")
+      ]).then(function (r) {
+        V.rota = r[0].error ? null : r[0].data; V.roles = ok(r[1]); V.sessions = ok(r[2]); V.signups = ok(r[3]); V.people = ok(r[4]);
+        V.sessions.forEach(function (s) { s.vol_places = (s.vol_places || []).slice().sort(function (a, b) { return a.position - b.position; }); });
+      });
+    }
+    var roleBy = function (id) { return V.roles.filter(function (r) { return r.id === id; })[0] || { name: "?", sort_order: 0 }; };
+    function formUrl() { return new URL("../volunteer?c=" + encodeURIComponent(c.slug || ""), location.href).href; }
+    function rotaUrl(preview) { return new URL("../rota?c=" + encodeURIComponent(c.slug || "") + (preview ? "&preview=1" : ""), location.href).href; }
+    function fail(e) { toast(friendly(e), "error"); }
+
+    // ---- first time: create the rota
+    function drawSetup() {
+      var n = el("input", { type: "number", id: "vol-n", min: "1", max: "8", value: "2", style: "max-width:8rem" });
+      var su = el("input", { type: "checkbox", id: "vol-su" }), td = el("input", { type: "checkbox", id: "vol-td" });
+      su.checked = true; td.checked = true;
+      view.replaceChildren(el("p", { class: "panel-intro" }, "Volunteers sign up for this competition, you decide who does what, then publish the rota. Start by saying how many sessions need staffing. The usual roles and numbers are filled in, and you can change every one."),
+        el("div", { class: "field" }, el("label", { for: "vol-n" }, "How many sessions need staffing?"), el("p", { class: "help" }, "Lifting sessions, not counting set up and tear down."), n),
+        el("div", { class: "field field-check" }, su, el("div", null, el("label", { for: "vol-su" }, "Include set up (usually the evening before)"))),
+        el("div", { class: "field field-check" }, td, el("div", null, el("label", { for: "vol-td" }, "Include tear down (straight after the last session)"))),
+        el("div", { class: "actions" }, btn("Create the rota", function () {
+          var count = Math.max(1, Math.min(8, Math.round(Number(n.value) || 1))), plan = [];
+          if (su.checked) plan.push({ area: "setup", label: "Set up" });
+          for (var i = 1; i <= count; i++) plan.push({ area: "session", label: "Session " + i });
+          if (td.checked) plan.push({ area: "teardown", label: "Tear down" });
+          sb.from("vol_rota").upsert({ competition_id: c.id, signup_open: false, offer_tshirts: true, status: "draft" }).then(ok).then(function () {
+            return sb.from("vol_sessions").insert(plan.map(function (p, i) { return { competition_id: c.id, area: p.area, label: p.label, sort_order: (i + 1) * 10 }; })).select().then(ok);
+          }).then(function (ss) {
+            var rows = []; ss.forEach(function (s) { V.roles.filter(function (r) { return r.area === s.area; }).forEach(function (r) { for (var k = 1; k <= r.default_places; k++) rows.push({ vol_session_id: s.id, role_id: r.id, position: k }); }); });
+            return rows.length ? sb.from("vol_places").insert(rows).then(ok) : null;
+          }).then(function () { return load(); }).then(function () { if (!V.rota) V.rota = { competition_id: c.id, signup_open: false, offer_tshirts: true, status: "draft" }; toast("Rota created."); draw(); }).catch(fail);
+        }, "btn-primary")));
+    }
+
+    // ---- who can be chosen for a place
+    function choosable(session, place) {
+      var ticked = {}, signed = {};
+      V.signups.forEach(function (su) { signed[su.email] = su; (su.vol_signup_roles || []).forEach(function (x) { if (x.vol_session_id === session.id && x.role_id === place.role_id) ticked[su.email] = true; }); });
+      return { yes: V.signups.filter(function (su) { return ticked[su.email]; }), others: V.signups.filter(function (su) { return !ticked[su.email]; }), pool: V.people.filter(function (pp) { return !signed[pp.email]; }) };
+    }
+    function personSelect(session, place) {
+      var ch = choosable(session, place), sel = el("select", { "aria-label": roleBy(place.role_id).name + ", place " + place.position });
+      var group = function (label, list) { return list.length ? el("optgroup", { label: label }, list.map(function (x) { return el("option", { value: x.email }, x.full_name); })) : null; };
+      sel.appendChild(el("option", { value: "" }, "Empty"));
+      [group("Said they could do this (" + ch.yes.length + ")", ch.yes), group("Other volunteers who signed up", ch.others), group("Everyone else we know", ch.pool)].forEach(function (x) { if (x) sel.appendChild(x); });
+      if (place.person_name && !place.email) sel.appendChild(el("option", { value: "__current" }, place.person_name + " (no email)"));
+      sel.appendChild(el("option", { value: "__new" }, "Someone else…"));
+      if (place.email && !Array.prototype.some.call(sel.options, function (o) { return o.value === place.email; })) sel.appendChild(el("option", { value: place.email }, place.person_name || place.email));
+      sel.value = place.email ? place.email : (place.person_name ? "__current" : "");
+      sel.addEventListener("change", function () {
+        var v = sel.value;
+        if (v === "__current") return;
+        if (v === "__new") { sel.value = place.email ? place.email : (place.person_name ? "__current" : ""); return addPerson(session, place); }
+        var who = v ? V.signups.concat(V.people).filter(function (x) { return x.email === v; })[0] : null;
+        setPlace(place, v ? { email: v, person_name: who ? who.full_name : v } : { email: null, person_name: "" });
+      });
+      return sel;
+    }
+    function setPlace(place, patch) {
+      return sb.from("vol_places").update(Object.assign({ updated_at: new Date().toISOString() }, patch)).eq("id", place.id).then(ok).then(function () { Object.assign(place, patch); draw(); }).catch(function (e) { fail(e); draw(); });
+    }
+    function addPerson(session, place) {
+      openForm({ title: "Add someone to the rota", intro: "For people who have not signed up, such as referees. Add an email address if you want them to earn points.", saveLabel: "Add to this place",
+        fields: [{ name: "full_name", label: "Name", required: true }, { name: "email", label: "Email address (optional)", type: "email" }, { name: "mobile", label: "Mobile number (optional)", half: true }, { name: "tshirt", label: "T-shirt size (optional)", type: "select", half: true, options: [{ value: "", label: "Not known" }].concat(SIZES.map(function (z) { return { value: z, label: z }; })) }],
+        values: {}, validate: function (v) { return v.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(v.email).trim()) ? "That email address does not look right." : null; },
+        onSave: function (v) {
+          var email = String(v.email || "").trim().toLowerCase(), name = String(v.full_name || "").trim();
+          var make = email ? sb.from("vol_people").upsert({ email: email, full_name: name, mobile: String(v.mobile || "").trim(), tshirt: v.tshirt || "" }).then(ok).then(function () { if (!V.people.some(function (x) { return x.email === email; })) V.people.push({ email: email, full_name: name }); }) : Promise.resolve();
+          return make.then(function () { return setPlace(place, { email: email || null, person_name: name }); });
+        } });
+    }
+
+    // ---- a session: its places, grouped by role
+    function sessionCard(s) {
+      var taken = {}; s.vol_places.forEach(function (p) { if (p.email) taken[p.email] = (taken[p.email] || 0) + 1; });
+      var byRole = {}, order = []; s.vol_places.forEach(function (p) { if (!byRole[p.role_id]) { byRole[p.role_id] = []; order.push(p.role_id); } byRole[p.role_id].push(p); });
+      V.roles.forEach(function (r) { if (r.area === s.area && !byRole[r.id] && (r.name !== "Jury" || s.jury)) { byRole[r.id] = []; order.push(r.id); } });
+      order.sort(function (a, b) { return roleBy(a).sort_order - roleBy(b).sort_order; });
+      var filled = s.vol_places.filter(function (p) { return p.person_name; }).length;
+      var card = el("section", { class: "card", "aria-label": s.label },
+        el("div", { class: "card-head" }, el("div", null, el("h2", null, s.label + (s.jury ? " (with a jury)" : "")), el("p", null, (s.when_text ? s.when_text + " · " : "") + filled + " of " + s.vol_places.length + " places filled")),
+          el("span", { class: "actions" }, btn("Edit session", function () { editSession(s); }))));
+      order.forEach(function (rid) {
+        var r = roleBy(rid), places = byRole[rid];
+        card.appendChild(el("div", { style: "margin:var(--space-3) 0" }, el("div", { class: "lab-headrow" }, el("h3", { style: "font-size:1rem;margin:0" }, r.name + (r.on_form ? "" : " (you choose)")), el("span", { class: "lab-headacts" }, btn("Add place", function () { addPlace(s, rid, places); }))),
+          places.length ? el("ul", { class: "item-list" }, places.map(function (p) {
+            return el("li", { class: "item-row" }, el("div", { class: "item-main" }, personSelect(s, p), p.email && taken[p.email] > 1 ? el("p", { class: "form-error", style: "margin:var(--space-1) 0 0" }, p.person_name + " is in more than one place in this session.") : null),
+              el("span", { class: "actions" }, btn("Remove place", function () { removePlace(s, p); }, "btn-ghost")));
+          })) : el("p", { class: "help" }, "No places yet.")));
+      });
+      return card;
+    }
+    function addPlace(s, rid, places) {
+      var next = places.reduce(function (m, p) { return Math.max(m, p.position); }, 0) + 1;
+      sb.from("vol_places").insert({ vol_session_id: s.id, role_id: rid, position: next }).select().then(ok).then(function (rows) { s.vol_places.push(rows[0]); draw(); }).catch(fail);
+    }
+    function removePlace(s, p) {
+      if (p.person_name && !window.confirm("Remove this place? " + p.person_name + " is in it.")) return;
+      sb.from("vol_places").delete().eq("id", p.id).then(ok).then(function () { s.vol_places = s.vol_places.filter(function (x) { return x.id !== p.id; }); draw(); }).catch(fail);
+    }
+    function editSession(s) {
+      openForm({ title: "Edit " + s.label, saveLabel: "Save changes", values: { label: s.label, when_text: s.when_text, jury: s.jury },
+        fields: [{ name: "label", label: "Name", required: true }, { name: "when_text", label: "Times", help: "For example: Weigh-in 08:00, lift off 10:00. Shown on the rota." }].concat(s.area === "session" ? [{ name: "jury", label: "This session has a jury", type: "checkbox", help: "Adds three jury places. Only tick it when the technical controller asks for one." }] : []),
+        extra: [{ label: "Remove session", onclick: function () { removeSession(s); } }],
+        onSave: function (v) {
+          var patch = { label: String(v.label).trim(), when_text: String(v.when_text || "").trim(), jury: !!v.jury };
+          var jury = V.roles.filter(function (r) { return r.name === "Jury"; })[0], had = s.vol_places.filter(function (p) { return jury && p.role_id === jury.id; }), job = Promise.resolve();
+          if (s.area !== "session") patch.jury = false;
+          if (jury && s.area === "session" && patch.jury && !had.length) job = sb.from("vol_places").insert([1, 2, 3].map(function (k) { return { vol_session_id: s.id, role_id: jury.id, position: k }; })).select().then(ok).then(function (rows) { s.vol_places = s.vol_places.concat(rows); });
+          if (jury && s.area === "session" && !patch.jury && had.length) {
+            var filledJury = had.filter(function (p) { return p.person_name; });
+            if (filledJury.length && !window.confirm("The jury places have " + filledJury.length + (filledJury.length === 1 ? " person" : " people") + " in them. Remove the jury anyway?")) patch.jury = true;
+            else job = sb.from("vol_places").delete().in("id", had.map(function (p) { return p.id; })).then(ok).then(function () { s.vol_places = s.vol_places.filter(function (p) { return had.indexOf(p) < 0; }); });
+          }
+          return job.then(function () { return sb.from("vol_sessions").update(patch).eq("id", s.id).then(ok); }).then(function () { Object.assign(s, patch); draw(); });
+        } });
+    }
+    function removeSession(s) {
+      var n = s.vol_places.filter(function (p) { return p.person_name; }).length;
+      if (!window.confirm("Remove " + s.label + "?" + (n ? " " + n + (n === 1 ? " person is" : " people are") + " in its places." : "") + " This cannot be undone.")) return;
+      sb.from("vol_sessions").delete().eq("id", s.id).then(ok).then(function () { V.sessions = V.sessions.filter(function (x) { return x !== s; }); toast("Session removed."); draw(); }).catch(fail);
+    }
+    function addSession() {
+      openForm({ title: "Add a session", saveLabel: "Add session", values: { area: "session" }, fields: [{ name: "label", label: "Name", required: true }, { name: "area", label: "What is it?", type: "select", options: [{ value: "session", label: "A lifting session" }, { value: "setup", label: "Set up" }, { value: "teardown", label: "Tear down" }] }],
+        onSave: function (v) {
+          var last = V.sessions.reduce(function (m, x) { return Math.max(m, x.sort_order); }, 0) + 10;
+          return sb.from("vol_sessions").insert({ competition_id: c.id, area: v.area, label: String(v.label).trim(), sort_order: last }).select().then(ok).then(function (ss) {
+            var rows = []; V.roles.filter(function (r) { return r.area === v.area; }).forEach(function (r) { for (var k = 1; k <= r.default_places; k++) rows.push({ vol_session_id: ss[0].id, role_id: r.id, position: k }); });
+            return (rows.length ? sb.from("vol_places").insert(rows).select().then(ok) : Promise.resolve([])).then(function (pl) { ss[0].vol_places = pl; V.sessions.push(ss[0]); draw(); });
+          });
+        } });
+    }
+
+    // ---- sign-up, people, publishing
+    function setRota(patch, msg) { return sb.from("vol_rota").update(patch).eq("competition_id", c.id).then(ok).then(function () { Object.assign(V.rota, patch); if (msg) toast(msg); draw(); }).catch(fail); }
+    function downloadSignups() {
+      var head = ["Name", "Email", "Mobile", "T-shirt", "Signed up", "Note"].concat(V.sessions.map(function (s) { return s.label; }));
+      var lines = [head.map(csvCell).join(",")].concat(V.signups.map(function (su) {
+        return [su.full_name, su.email, su.mobile, su.tshirt, new Date(su.created_at).toLocaleString("en-GB", { timeZone: Y.TZ }), su.note].concat(V.sessions.map(function (s) {
+          return (su.vol_signup_roles || []).filter(function (x) { return x.vol_session_id === s.id; }).map(function (x) { return roleBy(x.role_id).name; }).join("; ");
+        })).map(csvCell).join(",");
+      }));
+      var a = el("a", { href: URL.createObjectURL(new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv" })), download: (c.slug || "competition") + "-volunteers.csv" }); document.body.appendChild(a); a.click(); a.remove();
+    }
+    function draw() {
+      var open = !!V.rota.signup_open, published = V.rota.status === "published", people = V.signups.length + (V.signups.length === 1 ? " person has" : " people have") + " signed up so far.";
+      var shirts = el("input", { type: "checkbox", id: "vol-shirts" }); shirts.checked = !!V.rota.offer_tshirts; shirts.addEventListener("change", function () { setRota({ offer_tshirts: shirts.checked }); });
+      var signupBox = el("section", { "aria-labelledby": "vol-signup-h", style: "margin:var(--space-4) 0" }, el("h3", { id: "vol-signup-h" }, "Sign-up"),
+        el("p", { class: "help", role: "status" }, (open ? "Sign-up is open. Anyone with the link can sign up. " : "Sign-up is closed. Open it when you are ready, usually a couple of weeks after entry opens. ") + people),
+        el("p", { class: "help" }, "The link to share: ", el("code", null, formUrl())),
+        el("div", { class: "actions" }, open ? btn("Close sign-up", function () { setRota({ signup_open: false }, "Sign-up closed."); }, "btn-ghost") : el("button", { type: "button", class: "btn btn-primary", onclick: function () { if (!V.sessions.length) return toast("Add a session first.", "error"); setRota({ signup_open: true }, "Sign-up is open."); } }, "Open sign-up"),
+          btn("Copy the link", function () { copyText(formUrl()); }, "btn-ghost"), V.signups.length ? btn("Download sign-ups (CSV)", downloadSignups, "btn-ghost") : null),
+        el("div", { class: "field field-check", style: "margin-top:var(--space-3)" }, shirts, el("div", null, el("label", { for: "vol-shirts" }, "Ask for a T-shirt size"), el("p", { class: "help" }, "Unisex sizes XS to 5XL. Turn it off for competitions where we are not providing T-shirts."))));
+      var shareBox = el("section", { "aria-labelledby": "vol-pub-h", style: "margin:var(--space-5) 0" }, el("h3", { id: "vol-pub-h" }, "Publishing"),
+        el("p", { class: "help", id: "vol-pub-note", role: "status" }, published ? "The rota is published: anyone can see who is helping, by name and role. Changes show straight away." : "The rota is not published. Publishing puts names and roles on a public page (no emails or mobile numbers). Preview shows it to the entries team first."),
+        el("div", { class: "actions" }, published ? btn("Unpublish", function () { setRota({ status: "draft", published_at: null }, "Rota unpublished."); }, "btn-ghost") : el("button", { type: "button", class: "btn btn-primary", onclick: function () { setRota({ status: "published", published_at: new Date().toISOString() }, "Rota published."); } }, "Publish"),
+          el("a", { class: "btn btn-sm btn-ghost", href: rotaUrl(true), target: "_blank", rel: "noopener" }, "Preview ", el("span", { class: "visually-hidden" }, "(opens in a new tab)")),
+          published ? btn("Copy the rota link", function () { copyText(rotaUrl(false)); }, "btn-ghost") : null));
+      var kids = [el("p", { class: "panel-intro" }, "Open sign-up, choose who does what in each session, and publish the rota. Referees, the technical controller, the session manager and the platform manager are not on the form: you fill those in."), signupBox];
+      V.sessions.forEach(function (s) { kids.push(sessionCard(s)); });
+      kids.push(el("div", { class: "actions", style: "margin-top:var(--space-4)" }, btn("Add session", addSession)));
+      kids.push(shareBox);
+      view.replaceChildren.apply(view, kids);
+    }
+    load().then(function () {
+      if (!V.rota && !V.sessions.length) return drawSetup();
+      if (!V.rota) V.rota = { competition_id: c.id, signup_open: false, offer_tshirts: true, status: "draft" };
+      draw();
     }).catch(function (e) { view.replaceChildren(el("p", { class: "form-error" }, friendly(e))); });
   }
 
@@ -2422,7 +2608,7 @@
       el("div", { class: "panel-intro" },
         el("p", null, "Only the people listed here can change the website. ",
           el("strong", null, "Admins"), " can do everything, including adding and removing users. ",
-          el("strong", null, "Entries team"), " run entries: settings, entries, refunds and reports. ",
+          el("strong", null, "Competitions team"), " run entries and volunteers: settings, entries, refunds, reports and the volunteer rota. ",
           el("strong", null, "Editors"), " manage competitions, news, records, the organisation page and FAQs. ",
           el("strong", null, "Contributors"), " can write news posts only."),
         el("p", null, "To give someone access, add their email address here. They then go to this page and either continue with Google or choose “Create your login”, using that same email. Removing someone takes their access away straight away.")),
@@ -2447,10 +2633,10 @@
         })))));
     }).catch(function (e) { panel.lastChild.textContent = friendly(e); });
   }
-  var ROLE_NAMES = { admin: "Admin", entries: "Entries team", editor: "Editor", contributor: "Contributor" };
+  var ROLE_NAMES = { admin: "Admin", entries: "Competitions team", editor: "Editor", contributor: "Contributor" };
   var ROLE_OPTIONS = [
     { value: "editor", label: "Editor: can edit the website" },
-    { value: "entries", label: "Entries team: runs entries, refunds and reports" },
+    { value: "entries", label: "Competitions team: runs entries, volunteers, refunds and reports" },
     { value: "contributor", label: "Contributor: can write news posts only" },
     { value: "admin", label: "Admin: can do everything, including users" }
   ];

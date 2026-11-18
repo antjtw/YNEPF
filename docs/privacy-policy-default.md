@@ -16,7 +16,7 @@ Most of this comes from you, when you enter a competition or volunteer. We colle
 - Your social media handles, and links to public profiles such as OpenPowerlifting or OpenIPF. If you give us an OpenIPF profile link, we read your public results from it, to check qualifying totals and to show your best total in the lifting order.
 - Payment information. Stripe takes payments for us. We don't store any bank or card details. Stripe shows us the last four digits of the card used.
 - Your competition results: your lifts, scores and placings.
-- For volunteers, your name and email address, and which competitions you helped at.
+- For volunteers, your name and email address, an optional mobile number, your T-shirt size, which roles you can do, and which competitions you helped at. We also keep a record of the points you earn and spend.
 - Photos and video taken at our events and in livestreams.
 - If you join a competition's waiting list, your name and email address.
 - Messages you send us, and your email address if you join our mailing list.
@@ -29,7 +29,8 @@ We don't ask for health information.
 - To run competitions, including entries, lifting orders, weigh-in, scoring and results. We need this to carry out your entry.
 - To contact you about your entry, and to chase or fix anything that's missing or wrong. This is in our legitimate interests, and yours.
 - To publish results and keep records of the sport. This is in our legitimate interests.
-- To thank volunteers and give them priority entry. This is in our legitimate interests.
+- To thank volunteers and give them priority entry, discounts and other rewards for their points. This is in our legitimate interests.
+- To organise volunteers: the rota, a WhatsApp group for the competition if you give us your mobile number, and volunteer T-shirts. This is in our legitimate interests. We only use your mobile number if you choose to give it to us.
 - To livestream and photograph events, to sell photo packages, and to promote powerlifting. This is in our legitimate interests.
 - To send you emails about competitions you may want to enter. We do this with your consent, or where you have entered with us before. You can unsubscribe at any time.
 - To keep our financial records. This is a legal duty.
@@ -43,6 +44,7 @@ We never sell your information. We don't share it with anyone else without your 
 - Franchise hosts. A small number of people at the club or training facility running a competition can view the entrant details they need to coordinate entries and chase anyone who needs chasing. They don't hold their own copies, because the Federation keeps the information. Hosts must use these details only for that competition and keep them secure.
 - White Lights Media and the member who photographs for each division. They can see who has ordered and paid for a photo package. This is only so they can deliver it on time and keep things consistent. They must not share this information or use it for anything else.
 - Referees and officials working at the event, who need to see lifting orders.
+- Everyone, for volunteers: our public volunteer rota shows names and roles, and our points list shows names and points. We never publish volunteers' email addresses or mobile numbers.
 - British Powerlifting and the IPF, who receive results when we upload them to OpenIPF. We only upload results.
 - The services we use to run the website and our entries: Stripe (payments), Supabase (our secure database and sign-in), Resend (sending our emails), Vercel (hosting the website) and Google (our email accounts and shared documents). They handle information only on our behalf.
 - Anyone the law says we must tell, such as the police or a regulator.
