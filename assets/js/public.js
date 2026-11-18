@@ -685,7 +685,40 @@
     }).catch(function (e) { fail(root, e); });
   }
 
-  var routes = { privacy: privacy, calendar: calendar, committee: committee, news: news, post: post, faqs: faqs, records: records, lifting: lifting };
+  // The volunteer rota (/rota?c=<address>): who is helping in each session. Names and roles only. With ?preview=1 a signed-in entries team
+  // member can see the saved rota before it is published.
+  function rota(root) {
+    var params = new URLSearchParams(location.search), key = params.get("c") || "", preview = params.get("preview") === "1";
+    var title = document.getElementById("page-title"), lede = document.getElementById("page-lede");
+    if (!key) { title.textContent = "Volunteer rota"; lede.textContent = ""; root.replaceChildren(el("p", null, "Choose a competition from the ", el("a", { href: "calendar.html" }, "calendar"), ".")); return; }
+    var find = preview ? Y.db().from("competitions").select("id,name,start_date,end_date").eq("slug", key).limit(1).then(function (r) { if (r.error) throw r.error; return r.data || []; })
+      : load("competitions_public", function (t) { return t.select("id,name,start_date,end_date").eq("slug", key).limit(1); });
+    find.then(function (rows) {
+      if (!rows.length) { title.textContent = preview ? "Preview" : "Rota not found"; lede.textContent = ""; root.replaceChildren(el("p", null, preview ? "Sign in to the admin area first, then reload this page to see the preview." : "We could not find that competition.")); return; }
+      var c = rows[0];
+      title.textContent = c.name + ": volunteer rota"; lede.textContent = Y.dateRange(c.start_date, c.end_date);
+      return (preview ? Y.db().rpc("rota_preview", { c: c.id }) : Y.db().from("rota_public").select("*").eq("competition_id", c.id)).then(function (r) {
+        if (r.error) throw r.error;
+        var data = r.data || [];
+        if (!data.length) { root.replaceChildren(el("p", null, preview ? "Nothing is filled in yet." : "The rota has not been published yet. Please check back later.")); return; }
+        var sessions = {}, order = [];
+        data.forEach(function (x) { var s = sessions[x.vol_session_id]; if (!s) { s = sessions[x.vol_session_id] = { label: x.label, when: x.when_text, n: x.session_order, roles: {}, ro: [] }; order.push(s); } var ro = s.roles[x.role]; if (!ro) { ro = s.roles[x.role] = { name: x.role, n: x.role_order, people: [] }; s.ro.push(ro); } ro.people.push({ n: x.position, name: x.name }); });
+        order.sort(function (a, b) { return a.n - b.n; });
+        var kids = [];
+        if (preview) kids.push(el("div", { class: "callout", role: "status" }, el("p", { class: "callout-title" }, "Preview"), el("p", { style: "margin:0" }, "This is the saved rota. It is only visible to the entries team until it is published.")));
+        order.forEach(function (s) {
+          s.ro.sort(function (a, b) { return a.n - b.n; });
+          kids.push(el("section", { class: "lo-session" }, el("h2", null, s.label), s.when ? el("p", { class: "lo-times" }, s.when) : null,
+            el("div", { class: "table-wrap" }, el("table", { class: "data" }, el("caption", { class: "visually-hidden" }, s.label),
+              el("thead", null, el("tr", null, el("th", { scope: "col" }, "Role"), el("th", { scope: "col" }, "Volunteers"))),
+              el("tbody", null, s.ro.map(function (ro) { ro.people.sort(function (a, b) { return a.n - b.n; }); return el("tr", null, el("th", { scope: "row" }, ro.name), el("td", null, ro.people.map(function (p) { return p.name; }).join(", "))); }))))));
+        });
+        root.replaceChildren.apply(root, kids);
+      });
+    }).catch(function (e) { fail(root, e); });
+  }
+
+  var routes = { rota: rota, privacy: privacy, calendar: calendar, committee: committee, news: news, post: post, faqs: faqs, records: records, lifting: lifting };
   function boot() {
     var page = document.body.getAttribute("data-view") || document.body.getAttribute("data-page");
     var root = document.getElementById("live");
