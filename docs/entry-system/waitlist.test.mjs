@@ -355,7 +355,8 @@ ok((await form()).open === false, "sign-up not switched on: closed");
 await db.exec("reset role"); await db.exec(`update public.vol_rota set signup_open = true where competition_id = '${VC}'`); await db.exec("set role anon");
 const fm = await form();
 ok(fm.open && fm.sessions.length === 2 && JSON.stringify(fm.sessions[0].roles.map((r) => r.name)) === '["Table","MC","Platform crew"]' && fm.sessions[1].roles[0].name === "Set up crew", "the form lists sessions and only the roles volunteers can choose (no referees): " + JSON.stringify(fm.sessions.map((x) => x.roles.map((r) => r.name))));
-const signup = async (o) => { try { await db.query(`select public.volunteer_signup($1::jsonb)`, [JSON.stringify({ slug: "vol-open", name: "Vic Volunteer", email: "Vic@X.com", mobile: "07700 900123", tshirt: "L", over18: true, choices: [{ session_id: s1.id, role_id: rMc }], ...o })]); return null; } catch (e) { return e.message; } };
+let lastSignup = null;
+const signup = async (o) => { const prev = await db.query("select current_user u").then((r) => r.rows[0].u); await db.exec("reset role"); try { lastSignup = (await db.query(`select public.volunteer_signup($1::jsonb) r`, [JSON.stringify({ slug: "vol-open", name: "Vic Volunteer", email: "Vic@X.com", mobile: "07700 900123", tshirt: "L", over18: true, choices: [{ session_id: s1.id, role_id: rMc }], ...o })])).rows[0].r; return null; } catch (e) { return e.message; } finally { if (prev !== "postgres" && prev !== "pglite") await db.exec("set role " + prev); } };
 ok(!(await signup({})), "a valid sign-up works");
 for (const [what, o, msg] of [["under 18 / not ticked", { over18: false }, "invalid:over18"], ["a bad email", { email: "nope" }, "invalid:email"], ["no T-shirt size", { tshirt: "" }, "invalid:tshirt"], ["a made-up size", { tshirt: "HUGE" }, "invalid:tshirt"],
   ["no roles chosen", { choices: [] }, "invalid:choices"], ["a role that is not on the form (chief referee)", { choices: [{ session_id: s1.id, role_id: rChief }] }, "invalid:choices"], ["a bad mobile", { mobile: "abc" }, "invalid:mobile"], ["a short name", { name: "V" }, "invalid:name"], ["the wrong competition", { slug: "nope" }, "closed"]]) {
@@ -365,10 +366,27 @@ await db.exec("reset role");
 let su = await q(`select s.email, s.full_name, s.mobile, s.tshirt, (select count(*)::int from public.vol_signup_roles r where r.signup_id = s.id) n from public.vol_signups s where competition_id = '${VC}'`);
 ok(su.length === 1 && su[0].email === "vic@x.com" && su[0].n === 1 && su[0].tshirt === "L", "stored with a lower case email: " + JSON.stringify(su));
 await db.exec("set role anon");
-ok(!(await signup({ name: "Vic V Changed", choices: [{ session_id: s1.id, role_id: rTable }, { session_id: s2.id, role_id: rSetupCrew }] })), "signing up again with the same email replaces the earlier answers");
+ok((await signup({ name: "Someone Else", choices: [{ session_id: s1.id, role_id: rTable }] }))?.includes("exists"), "signing up again with an email that already signed up is refused: nobody can overwrite another person's answers by typing their address");
+await db.exec("reset role");
+const vtok = (await q(`select edit_token t from public.vol_signups where competition_id = '${VC}'`))[0].t;
+ok(vtok && vtok.length >= 60, "every sign-up has a long secret link token");
+ok((await signup({ token: "wrong", name: "x y", choices: [{ session_id: s1.id, role_id: rTable }] }))?.includes("bad_token"), "a wrong token is refused");
+ok(!(await signup({ token: vtok, name: "Vic V Changed", email: "ignored@x.com", choices: [{ session_id: s1.id, role_id: rTable }, { session_id: s2.id, role_id: rSetupCrew }] })) && lastSignup.edited === true && lastSignup.email === "vic@x.com" && lastSignup.lines.length === 2, "with the token they can change their answers (the email stays theirs): " + JSON.stringify(lastSignup).slice(0, 160));
+await db.exec("set role anon");
+const fm2 = (await q(`select public.volunteer_form('vol-open', $1) f`, [vtok]))[0].f;
+ok(fm2.mine && fm2.mine.name === "Vic V Changed" && fm2.mine.choices.length === 2 && fm2.mine.tshirt === "L", "the form can be filled in with their own answers from the token");
+ok((await q(`select public.volunteer_form('vol-open', 'nope') f`))[0].f.bad_token === true && !(await q(`select public.volunteer_form('vol-open') f`))[0].f.mine, "a wrong token gives nothing, and no token shows no answers");
+ok(!(await can(`select public.volunteer_signup('{}'::jsonb)`)) && !(await can(`select public.volunteer_link('vol-open', 'vic@x.com')`)), "the public cannot call the sign-up or link functions directly (only our server can)");
+await db.exec("reset role");
+const lk = (await q(`select public.volunteer_link('vol-open', 'VIC@x.com') r`))[0].r, lk2 = (await q(`select public.volunteer_link('vol-open', 'nobody@x.com') r`))[0].r;
+ok(lk.found === true && lk.token === vtok && lk2.found === false, "the link lookup finds a sign-up by email, and says so when there is none");
 await db.exec("reset role");
 su = await q(`select s.full_name, (select count(*)::int from public.vol_signup_roles r where r.signup_id = s.id) n from public.vol_signups s where competition_id = '${VC}'`);
 ok(su.length === 1 && su[0].full_name === "Vic V Changed" && su[0].n === 2, "still one person, now with two choices");
+// referees: a roster with levels, shown on the rota
+await db.exec(`insert into public.vol_referees (name, email, level) values ('Rhea Referee', 'rhea@x.com', 'bp_national')`);
+ok(!(await q(`select 1 from public.vol_referees where lower(name) = 'rhea referee'`)).length === false, "the referee roster stores a level");
+await db.exec("set role anon"); ok(!(await can(`select * from public.vol_referees`)), "the public cannot read the referee roster"); await db.exec("reset role");
 ok((await q(`select count(*)::int n from public.vol_people where email = 'vic@x.com'`))[0].n === 1, "and in the people list");
 // the public cannot read people's details
 await db.exec("set role anon");
@@ -376,12 +394,12 @@ ok(!(await can(`select * from public.vol_signups`)) && !(await can(`select * fro
 // the rota: nothing public until published, then names only
 await db.exec("reset role");
 const [pl] = await q(`select id from public.vol_places where vol_session_id = '${s1.id}' and role_id = '${rMc}' limit 1`);
-await db.exec(`update public.vol_places set person_name = 'Mia MC', email = 'mia@x.com' where id = '${pl.id}'`);
+await db.exec(`update public.vol_places set person_name = 'Mia MC', email = 'mia@x.com', level = 'British Powerlifting National referee' where id = '${pl.id}'`);
 await db.exec("set role anon");
 ok((await db.query(`select * from public.rota_public where competition_id = '${VC}'`)).rows.length === 0, "an unpublished rota shows nothing");
 await db.exec("reset role"); await db.exec(`update public.vol_rota set status = 'published' where competition_id = '${VC}'`); await db.exec("set role anon");
 const pub = (await db.query(`select * from public.rota_public where competition_id = '${VC}'`)).rows;
-ok(pub.length === 1 && pub[0].name === "Mia MC" && pub[0].role === "MC" && !("email" in pub[0]) && !("mobile" in pub[0]), "the published rota shows names and roles, with no emails or mobile numbers");
+ok(pub.length === 1 && pub[0].name === "Mia MC" && pub[0].role === "MC" && pub[0].level === "British Powerlifting National referee" && !("email" in pub[0]) && !("mobile" in pub[0]), "the published rota shows names, roles and levels, with no emails or mobile numbers");
 await db.exec("reset role");
 const prevRows = async (who) => asUser(who, async () => { try { return (await db.query(`select * from public.rota_preview('${VC}')`)).rows; } catch (e) { return { error: e.message }; } });
 await db.exec(`update public.vol_rota set status = 'draft' where competition_id = '${VC}'`);

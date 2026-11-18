@@ -81,6 +81,11 @@ assert(es.validEntry("123e4567-e89b-12d3-a456-426614174000") && !es.validEntry("
   const pn = wl.prioritySentNotification({ competition: "March Open", sent: [{ name: "Ann Lee", email: "ann@x.com" }, { name: "", email: "bob@x.com" }], failed: [{ name: "Cy", email: "cy@x.com" }], deskUrl: "https://x/admin" });
   assert(pn.includes("Sent to 2 people") && pn.includes("- Ann Lee <ann@x.com>") && pn.includes("- <bob@x.com>") && pn.includes("Could not be sent to 1") && pn.includes("https://x/admin"), "priority sent note lists who got a link and who failed");
   assert(wl.prioritySentNotification({ competition: "X", sent: [], failed: [] }).includes("- nobody"), "an empty list says nobody");
+  const ve = wl.volunteerSignupEmail({ ...who, lines: ["Session 1: MC, Table", "Set up: Set up crew"], link: wl.volunteerLink("https://x/", "open-comp", "tok123"), edited: false });
+  assert(ve.includes("Session 1: MC, Table") && ve.includes("https://x/volunteer?c=open-comp&edit=tok123") && ve.includes("lose your volunteer points"), "volunteer confirmation lists their roles, has their link and the no-show rule");
+  assert(wl.volunteerSignupEmail({ ...who, lines: [], link: "l", edited: true }).includes("have been updated"), "an edit says updated");
+  assert(wl.volunteerLinkEmail({ ...who, link: "https://x/l" }).includes("https://x/l") && wl.volunteerNotification({ name: "Vic", email: "v@x.com", competition: "C", lines: ["S1: MC"], edited: true }).includes("changed their answers"), "link email and inbox note");
+  assert(wl.volunteerCode("ERROR: exists") === "exists" && wl.volunteerCode('{"message":"bad_token"}') === "bad_token" && wl.volunteerCode("boom") === "unknown", "errors are mapped to messages");
   const lo1 = wl.liftingOrderEmail({ ...who, link: "https://x/lifting/?c=a", kind: "provisional" }), lo2 = wl.liftingOrderEmail({ ...who, name: "", link: "https://x/lifting/?c=a", kind: "final" });
   assert(lo1.includes("provisional lifting order") && lo1.includes("may change") && lo1.includes("https://x/lifting/?c=a"), "provisional email says it may change and has the link");
   assert(lo2.includes("Hi there,") && lo2.includes("final lifting order") && !lo2.includes("may change"), "final email says it is final");

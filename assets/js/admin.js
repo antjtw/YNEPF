@@ -1392,7 +1392,7 @@
   function renderPoints(panel) {
     var state = { rows: [], q: "", open: null };
     panel.replaceChildren(panelHead("Volunteer points"), el("p", null, "Loading…"));
-    var tbody = el("tbody"), summary = el("p", { class: "panel-intro" }), history = el("div"), importBox = el("details", { class: "ol-settings", style: "margin-top:var(--space-5)" }), helpersBox = el("details", { class: "ol-settings", style: "margin-top:var(--space-3)" });
+    var tbody = el("tbody"), summary = el("p", { class: "panel-intro" }), history = el("div"), refBox = el("details", { class: "ol-settings", style: "margin-top:var(--space-5)" }), importBox = el("details", { class: "ol-settings", style: "margin-top:var(--space-3)" }), helpersBox = el("details", { class: "ol-settings", style: "margin-top:var(--space-3)" });
     function msg(e) {
       var m = String((e && e.message) || e || "").replace(/^.*?ERROR:\s*/s, "").split("\n")[0].trim();
       return ({ "invalid:name": "That is a new person: add their name too.", "invalid:email": "Check the email address.", "invalid:delta": "Enter a number of points from 1 to 100.", "invalid:reason": "Say what the points are for.", insufficient: "They do not have that many points.", forbidden: "You do not have permission to do that." })[m] || friendly(e);
@@ -1435,6 +1435,47 @@
             if (r.error) throw new Error(msg(r.error)); toast((add ? "Added" : "Taken away") + ". They now have " + (r.data && r.data.balance) + " points."); return load().then(function () { drawRows(); if (state.open) showHistory(state.rows.filter(function (x) { return x.email === state.open; })[0] || { email: state.open, name: state.open, balance: 0 }); });
           });
         } });
+    }
+
+    // ---- the referee roster: chosen from on the rota, with the level shown there
+    function drawReferees() {
+      var body = el("div");
+      function levelName(v) { var l = REF_LEVELS.filter(function (x) { return x.value === v; })[0]; return l ? l.label : v; }
+      function refresh() {
+        sb.from("vol_referees").select("*").eq("active", true).order("name").then(ok).then(function (rows) {
+          body.replaceChildren(rows.length ? el("div", { class: "table-scroll" }, el("table", { class: "admin-table" }, el("caption", { class: "visually-hidden" }, "Referee roster"),
+            el("thead", null, el("tr", null, ["Name", "Level", "Email", ""].map(function (h) { return el("th", { scope: "col" }, h); }))),
+            el("tbody", null, rows.map(function (r) { return el("tr", null, el("th", { scope: "row" }, r.name), el("td", null, levelName(r.level)), el("td", null, r.email || "–"),
+              el("td", null, el("span", { class: "actions" }, btn("Edit", function () { editRef(r); }), btn("Remove", function () { if (!window.confirm("Remove " + r.name + " from the referee roster? Rotas they are already on keep their name.")) return; sb.from("vol_referees").delete().eq("id", r.id).then(ok).then(refresh).catch(function (e) { toast(friendly(e), "error"); }); }, "btn-danger")))); })))) : el("p", { class: "empty" }, "No referees yet. Add from the committee page, or add one."));
+        }).catch(function (e) { body.replaceChildren(el("p", { class: "form-error" }, friendly(e))); });
+      }
+      function editRef(r) {
+        var isNew = !r;
+        openForm({ title: isNew ? "Add a referee" : "Edit " + r.name, saveLabel: isNew ? "Add referee" : "Save changes", values: r || {},
+          fields: [{ name: "name", label: "Name", required: true }, { name: "level", label: "Level", type: "select", required: true, options: [{ value: "", label: "Choose a level" }].concat(REF_LEVELS) }, { name: "email", label: "Email address (optional)", type: "email", help: "Needed for them to earn volunteer points." }],
+          validate: function (v) { return v.level ? null : "Choose their level."; },
+          onSave: function (v) { var row = { name: String(v.name).trim(), level: v.level, email: String(v.email || "").trim().toLowerCase() || null, active: true }; return (isNew ? sb.from("vol_referees").insert(row) : sb.from("vol_referees").update(row).eq("id", r.id)).then(ok).then(refresh); } });
+      }
+      // The committee page already lists our international and national referees. Copy them in once (people already on the roster are skipped).
+      function fromCommittee() {
+        Promise.all([sb.from("org_sections").select("id,title").then(ok), sb.from("people").select("section_id,name,role").then(ok), sb.from("vol_referees").select("name").then(ok)]).then(function (res) {
+          var secs = res[0].filter(function (x) { return /referee/i.test(x.title); }).map(function (x) { return x.id; }), have = {}; res[2].forEach(function (x) { have[x.name.trim().toLowerCase()] = 1; });
+          var add = [], skipped = [];
+          res[1].filter(function (x) { return secs.indexOf(x.section_id) >= 0; }).forEach(function (x) {
+            var role = String(x.role || ""), lv = /category\s*(i{1,2}|[12])\b/i.exec(role) ? (/ii|2/i.test(/category\s*(i{1,2}|[12])\b/i.exec(role)[1]) ? "ipf_2" : "ipf_1") : /national/i.test(role) ? "bp_national" : "";
+            if (have[x.name.trim().toLowerCase()]) return;
+            if (!lv) { skipped.push(x.name); return; }
+            add.push({ name: x.name.trim(), level: lv, source: "committee", active: true });
+          });
+          if (!add.length) { toast(skipped.length ? "Nobody to add: " + skipped.join(", ") + " had no level we could read." : "Everyone on the committee page's referee lists is already on the roster."); return; }
+          if (!window.confirm("Add " + add.length + " referees from the committee page? International referees become IPF Category 1 or 2, national referees become British Powerlifting National." + (skipped.length ? " " + skipped.length + " cannot be matched to a level and will be skipped." : ""))) return;
+          return sb.from("vol_referees").insert(add).then(ok).then(function () { toast("Added " + add.length + " referees."); refresh(); });
+        }).catch(function (e) { toast(friendly(e), "error"); });
+      }
+      refBox.replaceChildren(el("summary", null, "Referees"),
+        el("p", { class: "help" }, "Referees, the technical controller and the jury are picked from this roster on the rota, and their level is shown next to their name. Add our divisional referees here, or when you add someone on the rota."),
+        el("div", { class: "actions" }, btn("Add a referee", function () { editRef(null); }, "btn-primary"), btn("Add from the committee page", fromCommittee, "btn-ghost")), body);
+      refresh();
     }
 
     // ---- import the old sheet
@@ -1509,8 +1550,8 @@
         summary, el("div", { class: "control-row" }, search),
         el("div", { class: "table-scroll" }, el("table", { class: "admin-table" }, el("caption", { class: "visually-hidden" }, "Volunteer points"),
           el("thead", null, el("tr", null, ["Name", "Points", "Expiring soon", "Earned", "Spent", ""].map(function (h) { return el("th", { scope: "col" }, h); }))), tbody)),
-        history, importBox, helpersBox);
-      drawRows(); drawImport(); drawHelpers();
+        history, refBox, importBox, helpersBox);
+      drawRows(); drawReferees(); drawImport(); drawHelpers();
     }).catch(function (e) { panel.replaceChildren(panelHead("Volunteer points"), el("p", { class: "form-error" }, friendly(e))); });
   }
 
@@ -1518,18 +1559,20 @@
   // Referees, the technical controller, the session manager and the platform manager are filled in here by the coordinator; volunteers only
   // choose from the roles marked on_form. A place holds a person's name and (if we have it) their email, which is what points will go to.
   var SIZES = ["XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL"];
+  var REF_LEVELS = [{ value: "ipf_1", label: "IPF Category 1 referee" }, { value: "ipf_2", label: "IPF Category 2 referee" }, { value: "bp_national", label: "British Powerlifting National referee" }, { value: "bp_divisional", label: "British Powerlifting Divisional referee" }, { value: "ynepf_divisional", label: "YNEPF Divisional referee" }];
   function renderVolunteersTab(view, c) {
     view.replaceChildren(el("p", null, "Loading…"));
-    var V = { rota: null, roles: [], sessions: [], signups: [], people: [] };
+    var V = { rota: null, roles: [], sessions: [], signups: [], people: [], referees: [] };
     function load() {
       return Promise.all([
         sb.from("vol_rota").select("*").eq("competition_id", c.id).maybeSingle(),
         sb.from("vol_roles").select("*").order("sort_order"),
         sb.from("vol_sessions").select("*, vol_places(*)").eq("competition_id", c.id).order("sort_order"),
         sb.from("vol_signups").select("*, vol_signup_roles(vol_session_id, role_id)").eq("competition_id", c.id).order("created_at"),
-        sb.from("vol_people").select("email,full_name,mobile,tshirt").order("full_name")
+        sb.from("vol_people").select("email,full_name,mobile,tshirt").order("full_name"),
+        sb.from("vol_referees").select("*").eq("active", true).order("name")
       ]).then(function (r) {
-        V.rota = r[0].error ? null : r[0].data; V.roles = ok(r[1]); V.sessions = ok(r[2]); V.signups = ok(r[3]); V.people = ok(r[4]);
+        V.rota = r[0].error ? null : r[0].data; V.roles = ok(r[1]); V.sessions = ok(r[2]); V.signups = ok(r[3]); V.people = ok(r[4]); V.referees = r[5].error ? [] : ok(r[5]);
         V.sessions.forEach(function (s) { s.vol_places = (s.vol_places || []).slice().sort(function (a, b) { return a.position - b.position; }); });
       });
     }
@@ -1562,40 +1605,81 @@
     }
 
     // ---- who can be chosen for a place
-    function choosable(session, place) {
-      var ticked = {}, signed = {};
-      V.signups.forEach(function (su) { signed[su.email] = su; (su.vol_signup_roles || []).forEach(function (x) { if (x.vol_session_id === session.id && x.role_id === place.role_id) ticked[su.email] = true; }); });
-      return { yes: V.signups.filter(function (su) { return ticked[su.email]; }), others: V.signups.filter(function (su) { return !ticked[su.email]; }), pool: V.people.filter(function (pp) { return !signed[pp.email]; }) };
+    // A volunteer role lists only the people who said on the form they could do it in that session. The other roles (platform manager,
+    // session manager, ad-hoc, co-ordinators) list everyone who signed up. Referees, the technical controller and the jury come from the
+    // referee roster, with their level. "Someone else…" is the way to pick anyone outside those lists.
+    function ticked(session, role, email) {
+      return V.signups.some(function (su) { return su.email === email && (su.vol_signup_roles || []).some(function (x) { return x.vol_session_id === session.id && x.role_id === role.id; }); });
     }
+    function unavailable(session, place) {
+      var role = roleBy(place.role_id);
+      if (!role.on_form || !place.email || place.override) return false;
+      var signed = V.signups.some(function (su) { return su.email === place.email; });
+      return signed && !ticked(session, role, place.email);
+    }
+    function levelLabel(v) { var l = REF_LEVELS.filter(function (x) { return x.value === v; })[0]; return l ? l.label : ""; }
     function personSelect(session, place) {
-      var ch = choosable(session, place), sel = el("select", { "aria-label": roleBy(place.role_id).name + ", place " + place.position });
-      var group = function (label, list) { return list.length ? el("optgroup", { label: label }, list.map(function (x) { return el("option", { value: x.email }, x.full_name); })) : null; };
+      var role = roleBy(place.role_id), sel = el("select", { "aria-label": role.name + ", place " + place.position });
       sel.appendChild(el("option", { value: "" }, "Empty"));
-      [group("Said they could do this (" + ch.yes.length + ")", ch.yes), group("Other volunteers who signed up", ch.others), group("Everyone else we know", ch.pool)].forEach(function (x) { if (x) sel.appendChild(x); });
-      if (place.person_name && !place.email) sel.appendChild(el("option", { value: "__current" }, place.person_name + " (no email)"));
-      sel.appendChild(el("option", { value: "__new" }, "Someone else…"));
-      if (place.email && !Array.prototype.some.call(sel.options, function (o) { return o.value === place.email; })) sel.appendChild(el("option", { value: place.email }, place.person_name || place.email));
-      sel.value = place.email ? place.email : (place.person_name ? "__current" : "");
+      var keep = {};
+      if (role.uses_referees) {
+        REF_LEVELS.forEach(function (lv) {
+          var rs = V.referees.filter(function (r) { return r.level === lv.value; });
+          if (rs.length) sel.appendChild(el("optgroup", { label: lv.label }, rs.map(function (r) { return el("option", { value: "ref:" + r.id }, r.name); })));
+        });
+        sel.appendChild(el("option", { value: "__newref" }, "Add a referee…"));
+      } else {
+        var yes = V.signups.filter(function (su) { return role.on_form ? ticked(session, role, su.email) : true; });
+        if (yes.length) sel.appendChild(el("optgroup", { label: role.on_form ? "Said they could do this (" + yes.length + ")" : "People who signed up (" + yes.length + ")" }, yes.map(function (su) { return el("option", { value: su.email }, su.full_name); })));
+        sel.appendChild(el("option", { value: "__new" }, "Someone else…"));
+      }
+      // the person already in the place, even if they are not in the lists above (a typed name, or someone who has changed their answers)
+      var cur = "";
+      if (place.person_name) {
+        var found = role.uses_referees ? V.referees.filter(function (r) { return r.name === place.person_name; })[0] : null;
+        cur = found ? "ref:" + found.id : place.email ? place.email : "__current";
+        if (!Array.prototype.some.call(sel.options, function (o) { return o.value === cur; })) sel.insertBefore(el("option", { value: cur }, place.person_name + (place.email ? "" : " (no email)")), sel.options[1] || null);
+      }
+      sel.value = cur;
       sel.addEventListener("change", function () {
         var v = sel.value;
-        if (v === "__current") return;
-        if (v === "__new") { sel.value = place.email ? place.email : (place.person_name ? "__current" : ""); return addPerson(session, place); }
+        if (v === cur) return;
+        if (v === "__new") { sel.value = cur; return addPerson(session, place); }
+        if (v === "__newref") { sel.value = cur; return addReferee(session, place); }
+        if (v.indexOf("ref:") === 0) { var r = V.referees.filter(function (x) { return "ref:" + x.id === v; })[0]; return setPlace(place, { email: r.email || null, person_name: r.name, level: levelLabel(r.level), override: false }); }
         var who = v ? V.signups.concat(V.people).filter(function (x) { return x.email === v; })[0] : null;
-        setPlace(place, v ? { email: v, person_name: who ? who.full_name : v } : { email: null, person_name: "" });
+        setPlace(place, v ? { email: v, person_name: who ? who.full_name : v, level: "", override: false } : { email: null, person_name: "", level: "", override: false });
       });
       return sel;
     }
     function setPlace(place, patch) {
       return sb.from("vol_places").update(Object.assign({ updated_at: new Date().toISOString() }, patch)).eq("id", place.id).then(ok).then(function () { Object.assign(place, patch); draw(); }).catch(function (e) { fail(e); draw(); });
     }
+    // anyone else: choose someone we know, or add a new person (an email is optional, but it is what points go to)
     function addPerson(session, place) {
-      openForm({ title: "Add someone to the rota", intro: "For people who have not signed up, such as referees. Add an email address if you want them to earn points.", saveLabel: "Add to this place",
-        fields: [{ name: "full_name", label: "Name", required: true }, { name: "email", label: "Email address (optional)", type: "email" }, { name: "mobile", label: "Mobile number (optional)", half: true }, { name: "tshirt", label: "T-shirt size (optional)", type: "select", half: true, options: [{ value: "", label: "Not known" }].concat(SIZES.map(function (z) { return { value: z, label: z }; })) }],
-        values: {}, validate: function (v) { return v.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(v.email).trim()) ? "That email address does not look right." : null; },
+      var known = V.signups.concat(V.people.filter(function (pp) { return !V.signups.some(function (su) { return su.email === pp.email; }); }));
+      openForm({ title: "Choose someone else", intro: "For someone who did not tick this role, or has not signed up. This is your choice, so they will not be flagged as unavailable. Pick a person we know, or add a new one below.", saveLabel: "Use this person",
+        fields: [{ name: "existing", label: "Someone we know", type: "select", options: [{ value: "", label: "A new person (fill in below)" }].concat(known.map(function (x) { return { value: x.email, label: x.full_name + " (" + x.email + ")" }; })) },
+          { name: "full_name", label: "Name (for a new person)" }, { name: "email", label: "Email address (optional)", type: "email", half: true }, { name: "mobile", label: "Mobile number (optional)", half: true }],
+        values: {}, validate: function (v) { if (!v.existing && !String(v.full_name || "").trim()) return "Choose someone, or enter a name."; return v.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(v.email).trim()) ? "That email address does not look right." : null; },
         onSave: function (v) {
+          if (v.existing) { var w = known.filter(function (x) { return x.email === v.existing; })[0]; return setPlace(place, { email: v.existing, person_name: w.full_name, level: "", override: true }); }
           var email = String(v.email || "").trim().toLowerCase(), name = String(v.full_name || "").trim();
-          var make = email ? sb.from("vol_people").upsert({ email: email, full_name: name, mobile: String(v.mobile || "").trim(), tshirt: v.tshirt || "" }).then(ok).then(function () { if (!V.people.some(function (x) { return x.email === email; })) V.people.push({ email: email, full_name: name }); }) : Promise.resolve();
-          return make.then(function () { return setPlace(place, { email: email || null, person_name: name }); });
+          var make = email ? sb.from("vol_people").upsert({ email: email, full_name: name, mobile: String(v.mobile || "").trim() }).then(ok).then(function () { if (!V.people.some(function (x) { return x.email === email; })) V.people.push({ email: email, full_name: name }); }) : Promise.resolve();
+          return make.then(function () { return setPlace(place, { email: email || null, person_name: name, level: "", override: true }); });
+        } });
+    }
+    // a referee who is not on the roster yet: their level is required, so it shows on the rota
+    function addReferee(session, place) {
+      openForm({ title: "Add a referee", intro: "They join the referee roster, so they are in the list next time. Their level is shown on the rota.", saveLabel: "Add and use",
+        fields: [{ name: "name", label: "Name", required: true }, { name: "level", label: "Level", type: "select", required: true, options: [{ value: "", label: "Choose a level" }].concat(REF_LEVELS) }, { name: "email", label: "Email address (optional)", type: "email", help: "Needed for them to earn volunteer points." }],
+        values: {}, validate: function (v) { if (!v.level) return "Choose their level."; return v.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(v.email).trim()) ? "That email address does not look right." : null; },
+        onSave: function (v) {
+          var row = { name: String(v.name).trim(), email: String(v.email || "").trim().toLowerCase() || null, level: v.level, active: true };
+          return sb.from("vol_referees").insert(row).select().then(ok).then(function (rows) {
+            V.referees.push(rows[0]); V.referees.sort(function (a, b) { return a.name < b.name ? -1 : 1; });
+            return setPlace(place, { email: row.email, person_name: row.name, level: levelLabel(row.level), override: false });
+          });
         } });
     }
 
@@ -1613,7 +1697,9 @@
         var r = roleBy(rid), places = byRole[rid];
         card.appendChild(el("div", { style: "margin:var(--space-3) 0" }, el("div", { class: "lab-headrow" }, el("h3", { style: "font-size:1rem;margin:0" }, r.name + (r.on_form ? "" : " (you choose)")), el("span", { class: "lab-headacts" }, btn("Add place", function () { addPlace(s, rid, places); }))),
           places.length ? el("ul", { class: "item-list" }, places.map(function (p) {
-            return el("li", { class: "item-row" }, el("div", { class: "item-main" }, personSelect(s, p), p.email && taken[p.email] > 1 ? el("p", { class: "form-error", style: "margin:var(--space-1) 0 0" }, p.person_name + " is in more than one place in this session.") : null),
+            var gone = unavailable(s, p), sel = personSelect(s, p); if (gone) { sel.setAttribute("aria-invalid", "true"); sel.style.borderColor = "var(--error-border, #b91c1c)"; sel.style.borderWidth = "3px"; }
+            return el("li", { class: "item-row" }, el("div", { class: "item-main" }, sel, gone ? el("p", { class: "form-error", role: "alert", style: "margin:var(--space-1) 0 0" }, p.person_name + " is no longer available for this role. Please amend this.") : null,
+              p.level ? el("p", { class: "help", style: "margin:var(--space-1) 0 0" }, p.level) : null, p.email && taken[p.email] > 1 ? el("p", { class: "form-error", style: "margin:var(--space-1) 0 0" }, p.person_name + " is in more than one place in this session.") : null),
               el("span", { class: "actions" }, btn("Remove place", function () { removePlace(s, p); }, "btn-ghost")));
           })) : el("p", { class: "help" }, "No places yet.")));
       });
@@ -1712,8 +1798,11 @@
         el("div", { class: "actions" }, published ? btn("Unpublish", function () { setRota({ status: "draft", published_at: null }, "Rota unpublished."); }, "btn-ghost") : el("button", { type: "button", class: "btn btn-primary", onclick: function () { setRota({ status: "published", published_at: new Date().toISOString() }, "Rota published."); } }, "Publish"),
           el("a", { class: "btn btn-sm btn-ghost", href: rotaUrl(true), target: "_blank", rel: "noopener" }, "Preview ", el("span", { class: "visually-hidden" }, "(opens in a new tab)")),
           published ? btn("Copy the rota link", function () { copyText(rotaUrl(false)); }, "btn-ghost") : null));
-      var dayBox = onTheDay();
+      var dayBox = onTheDay(), needs = [];
+      V.sessions.forEach(function (s) { s.vol_places.forEach(function (p) { if (unavailable(s, p)) needs.push(p.person_name + " (" + s.label + ", " + roleBy(p.role_id).name + ")"); }); });
+      var needBox = needs.length ? el("div", { class: "callout", role: "alert" }, el("p", { class: "callout-title" }, needs.length + (needs.length === 1 ? " place needs" : " places need") + " attention"), el("p", { style: "margin:0" }, "These people have changed their answers and are no longer available for the role they were given: " + needs.join("; ") + ". Please choose someone else.")) : null;
       var kids = [el("p", { class: "panel-intro" }, "Open sign-up, choose who does what in each session, and publish the rota. Referees, the technical controller, the session manager and the platform manager are not on the form: you fill those in."), signupBox];
+      if (needBox) kids.push(needBox);
       if (dayBox) kids.push(dayBox);
       V.sessions.forEach(function (s) { kids.push(sessionCard(s)); });
       kids.push(el("div", { class: "actions", style: "margin-top:var(--space-4)" }, btn("Add session", addSession)));

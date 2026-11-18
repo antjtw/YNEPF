@@ -2071,20 +2071,58 @@ create or replace function public.server_time() returns timestamptz language sql
 grant execute on function public.server_time() to anon, authenticated;
 
 -- ---------------------------------------------------------------------------
--- 17. Volunteers: the sign-up form and the published rota (stage 1)
+-- 17. Volunteers: the sign-up form, changing your answers, referees, and the published rota (stage 1)
 -- ---------------------------------------------------------------------------
--- What the public sign-up form needs: the competition, and each session with only the roles volunteers can choose from.
--- Nothing personal is returned. A signed-in entries team member can also open the form for an unpublished (test) competition.
-create or replace function public.volunteer_form(slug text) returns jsonb
+-- Referees (and the technical controller and jury) are chosen from a roster, each with a level that is shown on the rota.
+create table if not exists public.vol_referees (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  email text check (email is null or email = lower(email)),
+  level text not null check (level in ('ipf_1', 'ipf_2', 'bp_national', 'bp_divisional', 'ynepf_divisional')),
+  active boolean not null default true,
+  source text not null default 'manual' check (source in ('manual', 'committee')),
+  created_at timestamptz not null default now()
+);
+create unique index if not exists vol_referees_name on public.vol_referees (lower(btrim(name)));
+alter table public.vol_referees enable row level security;
+drop policy if exists "entries team" on public.vol_referees;
+create policy "entries team" on public.vol_referees for all to authenticated using (public.is_entries()) with check (public.is_entries());
+grant select, insert, update, delete on public.vol_referees to authenticated;
+
+alter table public.vol_roles add column if not exists uses_referees boolean not null default false;
+update public.vol_roles set uses_referees = true where name in ('Chief referee', 'Side referee', 'Technical controller', 'Jury');
+-- level: the referee's level as shown on the rota ("British Powerlifting National referee"); override: the coordinator chose this person
+-- for a role they did not tick on the form, so they are not flagged as unavailable.
+alter table public.vol_places add column if not exists level text not null default '';
+alter table public.vol_places add column if not exists override boolean not null default false;
+-- Each sign-up has a secret link for changing its answers (emailed to the volunteer, never shown to the public).
+alter table public.vol_signups add column if not exists edit_token text;
+update public.vol_signups set edit_token = replace(gen_random_uuid()::text, '-', '') || replace(gen_random_uuid()::text, '-', '') where edit_token is null;
+alter table public.vol_signups alter column edit_token set default (replace(gen_random_uuid()::text, '-', '') || replace(gen_random_uuid()::text, '-', ''));
+alter table public.vol_signups alter column edit_token set not null;
+create unique index if not exists vol_signups_token on public.vol_signups (edit_token);
+alter table public.vol_signups add column if not exists updated_at timestamptz not null default now();
+
+-- What the public sign-up form needs: the competition, and each session with only the roles volunteers can choose from. With a valid
+-- edit token it also returns that person's own answers, to fill the form in. Nothing else personal is ever returned. A signed-in
+-- entries team member can also open the form for an unpublished (test) competition.
+drop function if exists public.volunteer_form(text);
+create or replace function public.volunteer_form(slug text, token text default null) returns jsonb
 language plpgsql stable security definer set search_path = public
 as $$
-declare c public.competitions%rowtype; v public.vol_rota%rowtype;
+declare c public.competitions%rowtype; v public.vol_rota%rowtype; su public.vol_signups%rowtype; mine jsonb := null;
 begin
   select * into c from public.competitions where competitions.slug = volunteer_form.slug;
   if not found or not (c.published or public.is_entries()) then return jsonb_build_object('open', false); end if;
   select * into v from public.vol_rota where competition_id = c.id;
   if not found or not v.signup_open then return jsonb_build_object('open', false, 'name', c.name); end if;
-  return jsonb_build_object('open', true, 'name', c.name, 'slug', c.slug, 'start_date', c.start_date, 'offer_tshirts', v.offer_tshirts, 'intro', v.intro,
+  if token is not null and btrim(token) <> '' then
+    select * into su from public.vol_signups where competition_id = c.id and edit_token = token;
+    if not found then return jsonb_build_object('open', true, 'name', c.name, 'slug', c.slug, 'bad_token', true); end if;
+    mine := jsonb_build_object('name', su.full_name, 'email', su.email, 'mobile', su.mobile, 'tshirt', su.tshirt, 'note', su.note,
+      'choices', coalesce((select jsonb_agg(jsonb_build_object('session_id', r.vol_session_id, 'role_id', r.role_id)) from public.vol_signup_roles r where r.signup_id = su.id), '[]'::jsonb));
+  end if;
+  return jsonb_build_object('open', true, 'name', c.name, 'slug', c.slug, 'start_date', c.start_date, 'offer_tshirts', v.offer_tshirts, 'intro', v.intro, 'mine', mine,
     'sessions', coalesce((
       select jsonb_agg(jsonb_build_object('id', s.id, 'area', s.area, 'label', s.label, 'when_text', s.when_text,
         'roles', (select jsonb_agg(jsonb_build_object('id', r.id, 'name', r.name) order by r.sort_order)
@@ -2093,22 +2131,30 @@ begin
       from public.vol_sessions s
       where s.competition_id = c.id and exists (select 1 from public.vol_places p join public.vol_roles r on r.id = p.role_id where p.vol_session_id = s.id and r.on_form)), '[]'::jsonb));
 end $$;
-revoke all on function public.volunteer_form(text) from public;
-grant execute on function public.volunteer_form(text) to anon, authenticated;
+revoke all on function public.volunteer_form(text, text) from public;
+grant execute on function public.volunteer_form(text, text) to anon, authenticated;
 
--- A volunteer signs up (or changes their answers: the same email replaces the earlier ones).
---   p = { slug, name, email, mobile, tshirt, over18, note, choices: [ { session_id, role_id } ] }
-create or replace function public.volunteer_signup(p jsonb) returns void
+-- A volunteer signs up, or (with their edit token) changes their answers. Called only by the Edge Function, which then emails them.
+--   p = { slug, name, email, mobile, tshirt, over18, note, token, choices: [ { session_id, role_id } ] }
+-- Signing up again with an email that already has a sign-up is refused ("exists"): they use the emailed link to change it instead, so
+-- nobody can overwrite someone else's answers by typing their address.
+drop function if exists public.volunteer_signup(jsonb);
+create or replace function public.volunteer_signup(p jsonb) returns jsonb
 language plpgsql security definer set search_path = public
 as $$
-declare c public.competitions%rowtype; v public.vol_rota%rowtype; v_name text; v_email text; v_mobile text; v_shirt text; v_note text; v_id uuid; ch jsonb; n integer := 0;
+declare c public.competitions%rowtype; v public.vol_rota%rowtype; su public.vol_signups%rowtype; v_name text; v_email text; v_mobile text; v_shirt text; v_note text; v_token text := btrim(coalesce(p->>'token', '')); ch jsonb; v_edit boolean := false; v_lines jsonb;
 begin
   select * into c from public.competitions where slug = p->>'slug';
-  if not found or not (c.published or public.is_entries()) then raise exception 'closed'; end if;
+  if not found then raise exception 'closed'; end if;
   select * into v from public.vol_rota where competition_id = c.id;
   if not found or not v.signup_open then raise exception 'closed'; end if;
   v_name := btrim(coalesce(p->>'name', '')); v_email := lower(btrim(coalesce(p->>'email', '')));
   v_mobile := btrim(coalesce(p->>'mobile', '')); v_shirt := btrim(coalesce(p->>'tshirt', '')); v_note := left(btrim(coalesce(p->>'note', '')), 500);
+  if v_token <> '' then
+    select * into su from public.vol_signups where competition_id = c.id and edit_token = v_token;
+    if not found then raise exception 'bad_token'; end if;
+    v_edit := true; v_email := su.email;
+  end if;
   if length(v_name) < 2 or length(v_name) > 120 then raise exception 'invalid:name'; end if;
   if v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' or length(v_email) > 200 then raise exception 'invalid:email'; end if;
   if not coalesce((p->>'over18')::boolean, false) then raise exception 'invalid:over18'; end if;
@@ -2120,24 +2166,48 @@ begin
     if not exists (select 1 from public.vol_sessions s join public.vol_places pl on pl.vol_session_id = s.id join public.vol_roles r on r.id = pl.role_id
                     where s.id = (ch->>'session_id')::uuid and s.competition_id = c.id and r.id = (ch->>'role_id')::uuid and r.on_form) then raise exception 'invalid:choices'; end if;
   end loop;
-  insert into public.vol_signups (competition_id, email, full_name, mobile, tshirt, note) values (c.id, v_email, v_name, v_mobile, v_shirt, v_note)
-    on conflict (competition_id, email) do update set full_name = excluded.full_name, mobile = excluded.mobile, tshirt = excluded.tshirt, note = excluded.note
-    returning id into v_id;
-  delete from public.vol_signup_roles where signup_id = v_id;
+  if not v_edit then
+    if exists (select 1 from public.vol_signups where competition_id = c.id and email = v_email) then raise exception 'exists'; end if;
+    insert into public.vol_signups (competition_id, email, full_name, mobile, tshirt, note) values (c.id, v_email, v_name, v_mobile, v_shirt, v_note) returning * into su;
+  else
+    update public.vol_signups set full_name = v_name, mobile = v_mobile, tshirt = v_shirt, note = v_note, updated_at = now() where id = su.id returning * into su;
+  end if;
+  delete from public.vol_signup_roles where signup_id = su.id;
   for ch in select * from jsonb_array_elements(p->'choices') loop
-    insert into public.vol_signup_roles (signup_id, vol_session_id, role_id) values (v_id, (ch->>'session_id')::uuid, (ch->>'role_id')::uuid) on conflict do nothing;
+    insert into public.vol_signup_roles (signup_id, vol_session_id, role_id) values (su.id, (ch->>'session_id')::uuid, (ch->>'role_id')::uuid) on conflict do nothing;
   end loop;
   insert into public.vol_people (email, full_name, mobile, tshirt) values (v_email, v_name, v_mobile, v_shirt)
     on conflict (email) do update set full_name = excluded.full_name, mobile = case when excluded.mobile <> '' then excluded.mobile else public.vol_people.mobile end,
       tshirt = case when excluded.tshirt <> '' then excluded.tshirt else public.vol_people.tshirt end, updated_at = now();
+  select coalesce(jsonb_agg(x.line order by x.so), '[]'::jsonb) into v_lines from (
+    select s.sort_order as so, s.label || ': ' || string_agg(r.name, ', ' order by r.sort_order) as line
+      from public.vol_signup_roles sr join public.vol_sessions s on s.id = sr.vol_session_id join public.vol_roles r on r.id = sr.role_id
+     where sr.signup_id = su.id group by s.id, s.label, s.sort_order) x;
+  return jsonb_build_object('token', su.edit_token, 'name', su.full_name, 'email', su.email, 'competition', c.name, 'slug', c.slug, 'edited', v_edit, 'lines', v_lines);
 end $$;
-revoke all on function public.volunteer_signup(jsonb) from public;
-grant execute on function public.volunteer_signup(jsonb) to anon, authenticated;
+revoke all on function public.volunteer_signup(jsonb) from public, anon, authenticated;
+do $$ begin if exists (select 1 from pg_roles where rolname = 'service_role') then grant execute on function public.volunteer_signup(jsonb) to service_role; end if; end $$;
 
--- The published rota: names and roles only (never emails or mobile numbers).
+-- "Email me my link": the Edge Function asks whether this email has signed up, and gets the secret link to send them.
+create or replace function public.volunteer_link(p_slug text, p_email text) returns jsonb
+language plpgsql stable security definer set search_path = public
+as $$
+declare c public.competitions%rowtype; su public.vol_signups%rowtype;
+begin
+  select * into c from public.competitions where slug = p_slug;
+  if not found then return jsonb_build_object('found', false); end if;
+  select * into su from public.vol_signups where competition_id = c.id and email = lower(btrim(coalesce(p_email, '')));
+  if not found then return jsonb_build_object('found', false); end if;
+  return jsonb_build_object('found', true, 'token', su.edit_token, 'name', su.full_name, 'email', su.email, 'competition', c.name, 'slug', c.slug);
+end $$;
+revoke all on function public.volunteer_link(text, text) from public, anon, authenticated;
+do $$ begin if exists (select 1 from pg_roles where rolname = 'service_role') then grant execute on function public.volunteer_link(text, text) to service_role; end if; end $$;
+
+-- The published rota: names, roles and referee levels only (never emails or mobile numbers).
+drop function if exists public.rota_preview(uuid);
 create or replace view public.rota_public as
 select s.competition_id, s.id as vol_session_id, s.area, s.label, s.when_text, s.sort_order as session_order,
-       r.name as role, r.sort_order as role_order, p.position, p.person_name as name
+       r.name as role, r.sort_order as role_order, p.position, p.person_name as name, p.level
 from public.vol_rota v
 join public.competitions c on c.id = v.competition_id and c.published
 join public.vol_sessions s on s.competition_id = v.competition_id
@@ -2153,7 +2223,7 @@ as $$
 begin
   if not public.is_entries() then raise exception 'forbidden'; end if;
   return query
-  select s.competition_id, s.id, s.area, s.label, s.when_text, s.sort_order, r.name, r.sort_order, p.position, p.person_name
+  select s.competition_id, s.id, s.area, s.label, s.when_text, s.sort_order, r.name, r.sort_order, p.position, p.person_name, p.level
     from public.vol_sessions s
     join public.vol_places p on p.vol_session_id = s.id and p.person_name <> '' and p.status <> 'cancelled'
     join public.vol_roles r on r.id = p.role_id

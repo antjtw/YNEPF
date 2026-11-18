@@ -90,6 +90,35 @@ export function priorityEmail(o: Who & { link: string; windowStart: string; open
   ]);
 }
 
+// ---- Volunteers: the sign-up confirmation, the "change your answers" link, and a note for the inbox -------------------------------
+export const VOLUNTEER_MESSAGES: Record<string, string> = {
+  closed: "Volunteer sign-up for this competition is closed.",
+  exists: "You have already signed up. Use “Change your answers” at the bottom of the form and we will email you a link.",
+  bad_token: "That link has expired or is not right. Ask for a new one at the bottom of the form.",
+  "invalid:over18": "Volunteers must be 18 or over.", "invalid:email": "Please check your email address.", "invalid:name": "Please enter your first and last name.",
+  "invalid:mobile": "Please check your mobile number, or leave it empty.", "invalid:tshirt": "Please choose a T-shirt size.", "invalid:choices": "Please tick at least one role you could do.",
+};
+export function volunteerCode(message: string): string {
+  const m = String(message ?? ""); for (const k of Object.keys(VOLUNTEER_MESSAGES)) if (m.includes(k)) return k; return "unknown";
+}
+export const volunteerLink = (siteUrl: string, slug: string, token: string) => `${siteUrl.replace(/\/$/, "")}/volunteer?c=${encodeURIComponent(slug)}&edit=${encodeURIComponent(token)}`;
+export function volunteerSignupEmail(o: Who & { lines: string[]; link: string; edited: boolean }) {
+  return sign(o, [
+    `Hi ${o.name || "there"},`, "",
+    o.edited ? `Your volunteer answers for ${o.competition} have been updated. You said you could help with:` : `Thank you for signing up to volunteer at ${o.competition}${o.date ? ` (${o.date})` : ""}. You said you could help with:`,
+    ...o.lines.map((l) => `- ${l}`), "",
+    "We will be in touch about the rota. If you have been given a role and your plans change, please tell us in advance: if you do not turn up and have not told us, you lose your volunteer points.", "",
+    "To change what you said you can do, use your personal link (keep it to yourself):", o.link,
+  ]);
+}
+export function volunteerLinkEmail(o: Who & { link: string }) {
+  return sign(o, [`Hi ${o.name || "there"},`, "", `Here is your personal link to see and change your volunteer answers for ${o.competition}:`, o.link, "", "If you did not ask for this, you can ignore this email."]);
+}
+export function volunteerNotification(o: { name: string; email: string; competition: string; lines: string[]; edited: boolean; deskUrl?: string }) {
+  return [`${o.edited ? "A volunteer changed their answers" : "A new volunteer has signed up"} for ${o.competition}.`, "", `${o.name} (${o.email})`, ...o.lines.map((l) => `- ${l}`),
+    ...(o.edited ? ["", "If they are already in a role they no longer ticked, the rota builder flags it so you can change it."] : []), ...(o.deskUrl ? ["", `Open the rota: ${o.deskUrl}`] : [])].join("\n");
+}
+
 // An internal note to the competitions inbox when priority entry links go out, so the team can see who was sent one.
 export function prioritySentNotification(o: { competition: string; sent: { name: string; email: string }[]; failed: { name: string; email: string }[]; deskUrl?: string }) {
   const who = (p: { name: string; email: string }) => `- ${p.name ? p.name + " " : ""}<${p.email}>`;
@@ -365,6 +394,29 @@ if (typeof Deno !== "undefined") {
       const people: { id: string; email: string; name: string }[] = await (await rpc("priority_pending", { c: c.id, only_id: only, include_sent: !!only })).json().catch(() => []);
       const r = await sendPriority(c, Array.isArray(people) ? people : [], !!only);
       return reply(200, { ok: true, ...r });
+    }
+
+    // ---- a volunteer signs up, or changes their answers with their personal link ------------------------------------
+    if (action === "volunteer_signup") {
+      if (!allowTry(ip + "|vol", Date.now(), 12)) return reply(429, { ok: false, message: "Too many tries. Please wait a few minutes and try again." });
+      const r = await rpc("volunteer_signup", { p: { slug: body.slug, name: body.name, email: body.email, mobile: body.mobile, tshirt: body.tshirt, over18: body.over18, note: body.note, choices: body.choices, token: body.token } });
+      const out = await r.json().catch(() => null);
+      if (!r.ok || !out) { const code = volunteerCode(JSON.stringify(out ?? {})); if (code === "unknown") { console.error("volunteer_signup failed", JSON.stringify(out)); return reply(500, { ok: false, error: "failed", message: "We could not save your sign-up. Please try again in a moment." }); } return reply(422, { ok: false, error: code, message: VOLUNTEER_MESSAGES[code] }); }
+      const c = { id: "", name: out.competition as string, slug: out.slug as string };
+      const who = { name: out.name as string, competition: c.name, entriesEmail: copy };
+      await send(out.email, `${out.edited ? "Your volunteer answers" : "You are signed up to volunteer"}: ${c.name}`, volunteerSignupEmail({ ...who, lines: out.lines, link: volunteerLink(siteUrl, c.slug, out.token), edited: !!out.edited }));
+      await send(copy, `${out.edited ? "Volunteer changed their answers" : "New volunteer"}: ${out.name}, ${c.name}`, volunteerNotification({ name: out.name, email: out.email, competition: c.name, lines: out.lines, edited: !!out.edited, deskUrl: `${siteUrl}/admin/` }));
+      return reply(200, { ok: true, edited: !!out.edited });
+    }
+    // "Email me my link": says plainly when there is no sign-up for that email (a volunteer list is not secret), and is limited per address.
+    if (action === "volunteer_link") {
+      if (!allowTry(ip + "|vollink", Date.now(), 8)) return reply(429, { ok: false, message: "Too many tries. Please wait a few minutes and try again." });
+      const r = await rpc("volunteer_link", { p_slug: body.slug, p_email: body.email });
+      const out = await r.json().catch(() => null);
+      if (!r.ok || !out) return reply(500, { ok: false, message: "We could not do that just now. Please try again in a moment." });
+      if (!out.found) return reply(200, { ok: true, found: false });
+      const sent = await send(out.email, `Your volunteer link: ${out.competition}`, volunteerLinkEmail({ name: out.name, competition: out.competition, entriesEmail: copy, link: volunteerLink(siteUrl, out.slug, out.token) }));
+      return reply(200, { ok: true, found: true, sent });
     }
 
     // ---- the entries team shares the published lifting order with everyone in it ------------------------------------

@@ -717,7 +717,7 @@
         var data = r.data || [];
         if (!data.length) { root.replaceChildren(el("p", null, preview ? "Nothing is filled in yet." : "The rota has not been published yet. Please check back later.")); return; }
         var sessions = {}, order = [];
-        data.forEach(function (x) { var s = sessions[x.vol_session_id]; if (!s) { s = sessions[x.vol_session_id] = { label: x.label, when: x.when_text, n: x.session_order, roles: {}, ro: [] }; order.push(s); } var ro = s.roles[x.role]; if (!ro) { ro = s.roles[x.role] = { name: x.role, n: x.role_order, people: [] }; s.ro.push(ro); } ro.people.push({ n: x.position, name: x.name }); });
+        data.forEach(function (x) { var s = sessions[x.vol_session_id]; if (!s) { s = sessions[x.vol_session_id] = { label: x.label, when: x.when_text, n: x.session_order, roles: {}, ro: [] }; order.push(s); } var ro = s.roles[x.role]; if (!ro) { ro = s.roles[x.role] = { name: x.role, n: x.role_order, people: [] }; s.ro.push(ro); } ro.people.push({ n: x.position, name: x.name, level: x.level }); });
         order.sort(function (a, b) { return a.n - b.n; });
         var kids = [];
         if (preview) kids.push(el("div", { class: "callout", role: "status" }, el("p", { class: "callout-title" }, "Preview"), el("p", { style: "margin:0" }, "This is the saved rota. It is only visible to the entries team until it is published.")));
@@ -726,7 +726,7 @@
           kids.push(el("section", { class: "lo-session" }, el("h2", null, s.label), s.when ? el("p", { class: "lo-times" }, s.when) : null,
             el("div", { class: "table-wrap" }, el("table", { class: "data" }, el("caption", { class: "visually-hidden" }, s.label),
               el("thead", null, el("tr", null, el("th", { scope: "col" }, "Role"), el("th", { scope: "col" }, "Volunteers"))),
-              el("tbody", null, s.ro.map(function (ro) { ro.people.sort(function (a, b) { return a.n - b.n; }); return el("tr", null, el("th", { scope: "row" }, ro.name), el("td", null, ro.people.map(function (p) { return p.name; }).join(", "))); }))))));
+              el("tbody", null, s.ro.map(function (ro) { ro.people.sort(function (a, b) { return a.n - b.n; }); return el("tr", null, el("th", { scope: "row" }, ro.name), el("td", null, ro.people.map(function (p) { return p.name + (p.level ? " (" + p.level + ")" : ""); }).join(", "))); }))))));
         });
         root.replaceChildren.apply(root, kids);
       });
