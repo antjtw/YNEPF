@@ -291,7 +291,7 @@ fieldset.field-set > legend { padding: 0; font-weight: 600; color: var(--text-he
 .vol-card { padding: var(--space-5); }
 .vol-card + .vol-card { margin-top: var(--space-4); }
 .vol-card-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-4); flex-wrap: wrap; }
-.vol-card-head h3 { margin: 0; display: flex; align-items: center; gap: var(--space-2); }
+.vol-card-head h2, .vol-card-head h3 { margin: 0; font-size: 1.25rem; display: flex; align-items: center; gap: var(--space-2); }
 .vol-card .help { margin: var(--space-2) 0 0; }
 .vol-card .actions { margin-top: var(--space-3); }
 .copy-row { display: flex; gap: var(--space-2); align-items: stretch; flex-wrap: wrap; margin-top: var(--space-3); }

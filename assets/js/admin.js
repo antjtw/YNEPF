@@ -1435,7 +1435,7 @@
       var node = el("div", { "aria-live": "polite" }, el("p", { class: "help" }, "Loading…"));
       state.hist = { email: r.email, node: node }; drawRows();
       sb.from("points_ledger").select("*").eq("email", r.email).order("earned_at", { ascending: false }).order("id", { ascending: false }).then(ok).then(function (rows) {
-        node.replaceChildren(el("h3", { id: "pts-history-h", tabindex: "-1", style: "margin:0 0 var(--space-1)" }, "History: " + r.name), el("p", { class: "help", style: "margin:0 0 var(--space-3)" }, r.email + ". " + r.balance + " points now."),
+        node.replaceChildren(el("h2", { id: "pts-history-h", tabindex: "-1", style: "margin:0 0 var(--space-1);font-size:1.15rem" }, "History: " + r.name), el("p", { class: "help", style: "margin:0 0 var(--space-3)" }, r.email + ". " + r.balance + " points now."),
           rows.length ? el("div", { class: "table-scroll" }, el("table", { class: "admin-table" },
             el("thead", null, el("tr", null, ["When", "What", "Points", "By"].map(function (h) { return el("th", { scope: "col", class: h === "Points" ? "num" : null }, h); }))),
             el("tbody", null, rows.map(function (x) { return el("tr", null, el("td", { class: "nowrap" }, when(x.earned_at)), el("td", null, x.reason), el("td", { class: "num" }, x.delta === 0 ? "–" : (x.delta > 0 ? "+" : "") + x.delta), el("td", null, x.created_by || "")); })))) : el("p", { class: "empty" }, "Nothing yet."),
@@ -1569,7 +1569,7 @@
       panel.replaceChildren(panelHead("Volunteer points", el("span", { class: "actions" }, btn("Add points", function () { adjust(1); }, "btn-primary"), btn("Take points away", function () { adjust(-1); }, "btn-ghost"), btn("Add a person", function () { addVolunteer(function () { load().then(function () { drawRows(); }); }); }, "btn-ghost"))),
         summary, el("div", { class: "control-row" }, search),
         el("div", { class: "table-scroll" }, el("table", { class: "admin-table" }, el("caption", { class: "visually-hidden" }, "Volunteer points"),
-          el("thead", null, el("tr", null, ["Name", "Points", "Expiring soon", "Earned", "Spent", ""].map(function (h, i) { return el("th", { scope: "col", class: i === 1 || i === 3 || i === 4 ? "num" : i === 5 ? "col-actions" : null }, h); }))), tbody)),
+          el("thead", null, el("tr", null, ["Name", "Points", "Expiring soon", "Earned", "Spent", ""].map(function (h, i) { return el("th", { scope: "col", class: i === 1 || i === 3 || i === 4 ? "num" : i === 5 ? "col-actions" : null }, h || el("span", { class: "visually-hidden" }, "Actions")); }))), tbody)),
         history, refBox, importBox, helpersBox);
       drawRows(); drawReferees(); drawImport(); drawHelpers();
     }).catch(function (e) { panel.replaceChildren(panelHead("Volunteer points"), el("p", { class: "form-error" }, friendly(e))); });
@@ -1882,7 +1882,7 @@
       // The status of both halves, at a glance, under the heading.
       var statusRow = el("p", { class: "status-row", role: "status" }, el("span", null, "Sign-up", el("span", { class: "tag " + (open ? "tag-open" : "tag-closed") }, open ? "Open" : "Closed")), el("span", null, "Rota", el("span", { class: "tag " + (published ? "tag-open" : "tag-position") }, published ? "Published" : "Draft")), el("span", null, people));
       var signupBox = el("section", { class: "card vol-card", "aria-labelledby": "vol-signup-h" },
-        el("div", { class: "vol-card-head" }, el("h3", { id: "vol-signup-h" }, "Sign-up"),
+        el("div", { class: "vol-card-head" }, el("h2", { id: "vol-signup-h" }, "Sign-up"),
           open ? btn("Close sign-up", function () { setRota({ signup_open: false }, "Sign-up closed."); }, "btn-secondary") : el("button", { type: "button", class: "btn btn-sm btn-primary", onclick: function () { if (!V.sessions.length) return toast("Add a session first.", "error"); setRota(lapsed ? { signup_open: true, signup_closes_at: null } : { signup_open: true }, "Sign-up is open."); } }, "Open sign-up")),
         el("p", { class: "help", id: "vol-signup-note" }, (open ? "Sign-up is open. Anyone with the link can sign up" + (closesAt ? " until " + stamp(closesAt) : "") + ". It shows on the calendar as a Volunteer button." : lapsed && V.rota.signup_open ? "Sign-up closed by itself on " + stamp(closesAt) + "." : "Sign-up is closed. Open it when you are ready, usually a couple of weeks after entry opens.")),
         el("div", { class: "copy-row" }, link, btn("Copy the link", function () { copyText(formUrl()); }, "btn-secondary"), V.signups.length ? btn("Download sign-ups (CSV)", downloadSignups, "btn-ghost") : null),
@@ -1891,7 +1891,7 @@
           el("div", { class: "field", style: "max-width:22rem;margin:0" }, el("label", { for: "vol-closes" }, "Close sign-up automatically (optional)"), el("p", { class: "help", id: "vol-closes-help" }, "UK time. Leave empty to close it yourself."), when),
           el("div", { class: "field field-check", style: "margin:0" }, shirts, el("div", null, el("label", { for: "vol-shirts" }, "Ask for a T-shirt size"), el("p", { class: "help" }, "Unisex sizes XS to 5XL. Turn it off for competitions where we are not providing T-shirts.")))));
       var shareBox = el("section", { class: "card vol-card", "aria-labelledby": "vol-pub-h" },
-        el("div", { class: "vol-card-head" }, el("h3", { id: "vol-pub-h" }, "Publishing"), published ? btn("Unpublish", function () { setRota({ status: "draft", published_at: null }, "Rota unpublished."); }, "btn-secondary") : el("button", { type: "button", class: "btn btn-sm btn-primary", onclick: function () { setRota({ status: "published", published_at: new Date().toISOString() }, "Rota published."); } }, "Publish")),
+        el("div", { class: "vol-card-head" }, el("h2", { id: "vol-pub-h" }, "Publishing"), published ? btn("Unpublish", function () { setRota({ status: "draft", published_at: null }, "Rota unpublished."); }, "btn-secondary") : el("button", { type: "button", class: "btn btn-sm btn-primary", onclick: function () { setRota({ status: "published", published_at: new Date().toISOString() }, "Rota published."); } }, "Publish")),
         el("p", { class: "help", id: "vol-pub-note" }, published ? "The rota is published: anyone can see who is helping, by name and role. Changes show straight away." : "The rota is not published. Publishing puts names and roles on a public page (no emails or mobile numbers). Preview shows it to the entries team first."),
         el("div", { class: "actions" }, el("a", { class: "btn btn-sm btn-ghost", href: rotaUrl(true), target: "_blank", rel: "noopener" }, "Preview ", el("span", { class: "visually-hidden" }, "(opens in a new tab)")),
           published ? btn("Copy the rota link", function () { copyText(rotaUrl(false)); }, "btn-ghost") : null));
