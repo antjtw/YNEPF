@@ -1427,7 +1427,7 @@
         history.replaceChildren(el("h2", { id: "pts-history-h", tabindex: "-1" }, "History: " + r.name), el("p", { class: "help" }, r.email + ". " + r.balance + " points now."),
           rows.length ? el("div", { class: "table-scroll" }, el("table", { class: "admin-table" },
             el("thead", null, el("tr", null, ["When", "What", "Points", "By"].map(function (h) { return el("th", { scope: "col" }, h); }))),
-            el("tbody", null, rows.map(function (x) { return el("tr", null, el("td", null, when(x.earned_at)), el("td", null, x.reason), el("td", null, (x.delta > 0 ? "+" : "") + x.delta), el("td", null, x.created_by || "")); })))) : el("p", { class: "empty" }, "Nothing yet."),
+            el("tbody", null, rows.map(function (x) { return el("tr", null, el("td", null, when(x.earned_at)), el("td", null, x.reason), el("td", null, x.delta === 0 ? "–" : (x.delta > 0 ? "+" : "") + x.delta), el("td", null, x.created_by || "")); })))) : el("p", { class: "empty" }, "Nothing yet."),
           el("p", null, btn("Close", function () { state.open = null; history.replaceChildren(); })));
         var h = document.getElementById("pts-history-h"); if (h) { h.scrollIntoView({ block: "nearest" }); h.focus(); }
       }).catch(function (e) { history.replaceChildren(el("p", { class: "form-error" }, friendly(e))); });

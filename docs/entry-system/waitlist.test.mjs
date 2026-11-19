@@ -624,6 +624,17 @@ for (const [em, nm] of [["tick@x.com", "Tick Box"], ["free@x.com", "Free Link"]]
   await q(`select public.confirm_entry_payment('${en.entry_id}')`);
 }
 ok((await bal("tick@x.com")) === 1 && (await bal("free@x.com")) === 2, "after confirming, the ticked link took one point and the free one took none");
+
+// ---- the history tells the whole story of a points code
+const hist = async (em) => (await q(`select kind, delta, reason from public.points_ledger where email = $1 and kind in ('note', 'spent') and (reason like 'Discount%') order by id`, [em]));
+const h_rel = await hist("rel@x.com");
+ok(h_rel.some((x) => x.kind === "note" && x.delta === 0 && /^Discount code made: RELEASE-20OFF-/.test(x.reason) && /4 points held for Discount Open/.test(x.reason)), "making a code leaves a note in the history: " + JSON.stringify(h_rel.map((x) => x.reason)));
+ok(h_rel.some((x) => x.kind === "note" && /^Discount code released: /.test(x.reason)), "giving a code back leaves a 'released' note");
+ok(h_rel.some((x) => x.kind === "spent" && x.delta === -4 && /^Discount used: RELEASE-20OFF-.* \(Discount Open\)$/.test(x.reason)), "spending it when the entry is confirmed leaves the deduction, naming the code");
+ok((await bal("rel@x.com")) === 4 && (await q(`select count(*)::int n from public.points_ledger where email = 'rel@x.com' and kind = 'note' and delta <> 0`))[0].n === 0, "notes never move the balance");
+await db.exec(`select public.points_insert('del@x.com', 4, 'Volunteered: test', 'earned', now(), null, null, 'n23:a'); insert into public.discount_codes (code, recipient_email, kind, value, points_cost) values ('DEL-20OFF-AAAAAA', 'del@x.com', 'amount', 2000, 4);`);
+await db.exec(`delete from public.discount_codes where code = 'DEL-20OFF-AAAAAA'`);
+ok((await hist("del@x.com")).some((x) => x.kind === "note" && /^Discount code released: DEL-20OFF-AAAAAA/.test(x.reason)), "deleting an unused points code on the Codes tab leaves a 'released' note too");
 // who may do what
 await db.exec("set role anon");
 ok(!(await can(`select public.waitlist_join('{}'::jsonb)`)) && !(await can(`select public.waitlist_sweep('${W}')`)) && !(await can(`select public.waitlist_make_offer('${W}'::uuid, 'x')`)), "the public cannot call the waiting list functions (only our server can)");

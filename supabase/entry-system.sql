@@ -2513,12 +2513,12 @@ begin
       perform public.points_insert(r.email, -1, 'Priority entry: ' || coalesce(v_name, 'a competition'), 'spent', now(), r.competition_id, null, 'priority:' || r.id);
     end if;
   end loop;
-  for r in select d.id, d.points_cost, d.recipient_email, d.competition_id from public.entries en join public.discount_codes d on d.id = en.discount_code_id
+  for r in select d.id, d.code, d.points_cost, d.recipient_email, d.competition_id from public.entries en join public.discount_codes d on d.id = en.discount_code_id
             where en.id = e and d.points_cost > 0 and d.points_spent_at is null and d.recipient_email <> '' loop
     select name into v_name from public.competitions where id = r.competition_id;
     amt := least(r.points_cost, public.points_balance(r.recipient_email));
     if amt > 0 then
-      perform public.points_insert(r.recipient_email, -amt, 'Discount: ' || coalesce(v_name, 'a competition'), 'spent', now(), r.competition_id, null, 'discount:' || r.id);
+      perform public.points_insert(r.recipient_email, -amt, 'Discount used: ' || r.code || ' (' || coalesce(v_name, 'a competition') || ')', 'spent', now(), r.competition_id, null, 'discount:' || r.id);
     end if;
     update public.discount_codes set points_spent_at = now() where id = r.id;
   end loop;
@@ -2622,6 +2622,7 @@ begin
     values (c.id, v_code, v_name, v_email, 'amount', v_pence, 1, coalesce(c.entry_closes, (c.start_date + 1)::timestamptz), 'Volunteer points: ' || v_cost || ' points for £' || (v_pence / 100), 'self-service', v_cost)
     returning * into v_row;
   update public.points_login set used_at = now() where email = v_email and code_hash = th and used_at is null;
+  perform public.points_insert(v_email, 0, 'Discount code made: ' || v_row.code || ' (' || v_cost || ' points held for ' || c.name || ')', 'note', now(), c.id, null, 'code:' || v_row.id);
   return jsonb_build_object('ok', true, 'code', v_row.code, 'discount_pence', v_pence, 'points', v_cost, 'competition', c.name, 'name', v_name, 'slug', c.slug, 'expires_at', v_row.expires_at,
     'available_after', (o->>'available')::int - v_cost);
 end $$;
@@ -2752,3 +2753,25 @@ do $$ begin
     grant execute on function public.points_release(text, text, uuid) to service_role;
   end if;
 end $$;
+
+
+-- ---------------------------------------------------------------------------
+-- 23. The points history tells the whole story of a discount code: made (points held), then spent when the entry is confirmed, or released
+-- ---------------------------------------------------------------------------
+-- A note is a ledger line that moves no points (0), so it never changes a balance. A code being made, and later spent or released, each leave a line.
+alter table public.points_ledger drop constraint if exists points_ledger_kind_check;
+alter table public.points_ledger add constraint points_ledger_kind_check
+  check (kind in ('earned', 'spent', 'adjustment', 'forfeit', 'reversal', 'restore', 'import', 'note'));
+
+-- An unused points code that is switched off or deleted (by the volunteer giving it back, or by you on the Codes tab) leaves a "released" note.
+create or replace function public.discount_points_released() returns trigger
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if old.points_cost > 0 and old.points_spent_at is null and old.recipient_email <> '' and old.active and (tg_op = 'DELETE' or not new.active) then
+    perform public.points_insert(old.recipient_email, 0, 'Discount code released: ' || old.code || ' (' || old.points_cost || ' points no longer held)', 'note', now(), old.competition_id, null, 'codeoff:' || old.id);
+  end if;
+  return case when tg_op = 'DELETE' then old else new end;
+end $$;
+drop trigger if exists discount_points_released on public.discount_codes;
+create trigger discount_points_released after update or delete on public.discount_codes for each row execute function public.discount_points_released();
