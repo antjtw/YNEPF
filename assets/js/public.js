@@ -692,12 +692,22 @@
       var rows = (r.data || []).slice().sort(function (a, b) { return b.points - a.points || (a.name < b.name ? -1 : 1); });
       if (!rows.length) { root.replaceChildren(el("p", null, "Nobody has any points yet.")); return; }
       var q = el("input", { type: "search", id: "points-q", placeholder: "Search by name", "aria-label": "Search by name", style: "max-width:22rem" }), tbody = el("tbody");
-      function draw() { var t = q.value.trim().toLowerCase(); tbody.replaceChildren.apply(tbody, rows.filter(function (x) { return !t || x.name.toLowerCase().indexOf(t) >= 0; }).map(function (x) { return el("tr", null, el("th", { scope: "row" }, x.name), el("td", null, String(x.points))); })); }
-      q.addEventListener("input", draw); draw();
+      // The list is long, so it stays hidden until someone searches: it shows only the people who match.
+      var hint = el("p", { class: "help", role: "status", "aria-live": "polite" }), tableWrap;
+      function draw() {
+        var t = q.value.trim().toLowerCase();
+        if (!t) { tbody.replaceChildren(); tableWrap.hidden = true; hint.textContent = rows.length + (rows.length === 1 ? " person has" : " people have") + " points. Type a name above to see someone's points."; return; }
+        var hits = rows.filter(function (x) { return x.name.toLowerCase().indexOf(t) >= 0; });
+        tbody.replaceChildren.apply(tbody, hits.map(function (x) { return el("tr", null, el("th", { scope: "row" }, x.name), el("td", null, String(x.points))); }));
+        tableWrap.hidden = !hits.length; hint.textContent = hits.length ? hits.length + (hits.length === 1 ? " match." : " matches.") : "Nobody with that name has points yet.";
+      }
+      q.addEventListener("input", draw);
       root.replaceChildren(el("p", null, "Volunteers earn points for every session or set up and tear down they help with. Points can be spent on priority entry and discounts, and last 24 months. ", el("a", { href: "faqs#how-do-i-earn-points" }, "How points work"), "."),
         el("div", { class: "field" }, el("label", { for: "points-q" }, "Find a name"), q),
-        el("div", { class: "table-wrap" }, el("table", { class: "data" }, el("caption", { class: "visually-hidden" }, "Volunteer points"), el("thead", null, el("tr", null, el("th", { scope: "col" }, "Name"), el("th", { scope: "col" }, "Points"))), tbody)),
+        hint,
+        (tableWrap = el("div", { class: "table-wrap", hidden: "" }, el("table", { class: "data" }, el("caption", { class: "visually-hidden" }, "Volunteer points"), el("thead", null, el("tr", null, el("th", { scope: "col" }, "Name"), el("th", { scope: "col" }, "Points"))), tbody))),
         spendPoints());
+      draw();
     }).catch(function (e) { fail(root, e); });
   }
 
