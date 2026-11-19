@@ -608,6 +608,22 @@ const rl_c = await q(`select public.points_redeem('rel@x.com', $1, '${PC}'::uuid
 await db.exec(`update public.discount_codes set expires_at = now() - interval '1 minute' where code = '${rl_c.code}'`);
 await db.exec("delete from public.points_login"); await rl_lg("565656");
 ok((await q(`select public.points_options('rel@x.com', $1) r`, [await hash("565656")]).then((r) => r[0].r)).available === 4, "an expired unused code holds nothing: the points are free again");
+
+// ---- a hand-added priority link can be marked "costs 1 point"
+await db.exec(`select public.points_insert('tick@x.com', 2, 'Volunteered: test', 'earned', now(), null, null, 'pa:a'); select public.points_insert('free@x.com', 2, 'Volunteered: test', 'earned', now(), null, null, 'pa:b');`);
+await db.exec(`update public.competitions set entry_opens = now() + interval '5 hours' where id = '${PC}'`);
+await asUser(U.entries, async () => {
+  await db.query(`select public.priority_add('${PC}'::uuid, $1::jsonb)`, [JSON.stringify([{ email: "tick@x.com", name: "Tick Box", from_points: true }, { email: "free@x.com", name: "Free Link" }])]);
+});
+const pa = (await q(`select email, from_points from public.invites where competition_id = '${PC}' and email in ('tick@x.com','free@x.com') order by email`));
+ok(pa[0].email === "free@x.com" && pa[0].from_points === false && pa[1].from_points === true, "Add people: only the ticked link costs a point");
+for (const [em, nm] of [["tick@x.com", "Tick Box"], ["free@x.com", "Free Link"]]) {
+  const iid = (await q(`select id from public.invites where competition_id = '${PC}' and email = $1`, [em]))[0].id;
+  await q(`select public.priority_issue('${iid}', $1)`, [await hash("tok-" + em)]);
+  const en = await s3_sp({ email: em, full_name: nm, invite: "tok-" + em, date_of_birth: "1994-04-04" });
+  await q(`select public.confirm_entry_payment('${en.entry_id}')`);
+}
+ok((await bal("tick@x.com")) === 1 && (await bal("free@x.com")) === 2, "after confirming, the ticked link took one point and the free one took none");
 // who may do what
 await db.exec("set role anon");
 ok(!(await can(`select public.waitlist_join('{}'::jsonb)`)) && !(await can(`select public.waitlist_sweep('${W}')`)) && !(await can(`select public.waitlist_make_offer('${W}'::uuid, 'x')`)), "the public cannot call the waiting list functions (only our server can)");

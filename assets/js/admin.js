@@ -2456,9 +2456,11 @@
     openForm({
       title: "Add people to the priority list", saveLabel: "Add to the list",
       intro: "Their links are emailed to them automatically when priority entry opens. You can add people at any time before then, and again later.",
-      fields: [{ name: "people", label: "People, one per line", type: "textarea", rows: 10, required: true, help: "Email addresses. A name can come before the address, for example Sam Smith, sam@example.com. Pasting two columns from a spreadsheet works too." }],
+      fields: [{ name: "people", label: "People, one per line", type: "textarea", rows: 10, required: true, help: "Email addresses. A name can come before the address, for example Sam Smith, sam@example.com. Pasting two columns from a spreadsheet works too." },
+        { name: "from_points", label: "Costs 1 volunteer point", type: "checkbox", help: "Tick this to give these people a priority link that costs 1 of their volunteer points, taken only once their entry is confirmed. Leave it unticked for a free link (a guest, a sponsor, a test). Everyone with points is added with a points link automatically when the priority window opens." }],
       onSave: function (v) {
         var r = parsePeople(v.people);
+        if (v.from_points) r.people = r.people.map(function (x) { return Object.assign({}, x, { from_points: true }); });
         if (r.bad.length) return Promise.reject(new Error("There is no email address on this line: " + r.bad[0]));
         if (!r.people.length) return Promise.reject(new Error("Add at least one email address."));
         return sb.rpc("priority_add", { c: c.id, people: r.people }).then(function (res) {

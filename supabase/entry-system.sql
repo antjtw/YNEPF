@@ -1776,7 +1776,7 @@ begin
     if e !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then raise exception 'invalid:email:%', e; end if;
     if exists (select 1 from public.invites i where i.competition_id = c and i.email = e and i.used_at is not null) then continue; end if;   -- already entered with a link
     delete from public.invites i where i.competition_id = c and i.email = e and i.used_at is null;
-    insert into public.invites (competition_id, email, full_name) values (c, e, left(n, 120));
+    insert into public.invites (competition_id, email, full_name, from_points) values (c, e, left(n, 120), coalesce((p->>'from_points')::boolean, false));      -- from_points: this link costs 1 volunteer point when the entry is confirmed
     if not (e = any (seen)) then cnt := cnt + 1; seen := seen || e; end if;
   end loop;
   return cnt;
