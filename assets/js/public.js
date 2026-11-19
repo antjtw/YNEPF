@@ -733,6 +733,20 @@
       var go = el("button", { type: "button", class: "btn btn-primary" }, "Get my discount code");
       var lines = [el("p", null, (o.name ? o.name + ", you" : "You") + " have ", el("strong", null, o.balance + (o.balance === 1 ? " point" : " points")), o.reserved ? ", and " + o.reserved + " " + (o.reserved === 1 ? "is" : "are") + " already set aside (a priority link or a discount code you have not used yet). That leaves " : ". That leaves ", o.reserved ? el("strong", null, o.available + " to spend") : el("strong", null, o.available + " to spend"), "."),
         el("p", { class: "help" }, "Priority entry (1 point) needs nothing from you: the link arrives by email before entry opens, and the point is only taken when your entry is confirmed. A discount costs 4 points for every £20 off the entry fee, and the points are taken when your entry is confirmed.")];
+      if ((o.codes || []).length) {
+        lines.push(el("h3", null, "Your unused discount codes"), el("p", { class: "help" }, "Changed your mind? Give a code back and its points are free to spend again. A code that is never used frees its points by itself when entry closes."),
+          el("ul", { class: "item-list" }, o.codes.map(function (c) {
+            var give = el("button", { type: "button", class: "btn btn-secondary btn-sm", "aria-label": "Give back " + c.code }, "Give the points back");
+            give.addEventListener("click", function () {
+              give.disabled = true; say("Giving the points back…");
+              post("points_release", { code: code.value, code_id: c.id }).then(function (b) {
+                give.disabled = false; if (!b.ok) return say(b.message || "We could not do that.", true);
+                post("points_options", { code: code.value }).then(function (o2) { say("Done: " + b.points + " points are free again."); if (o2.ok) drawOptions(o2); });
+              });
+            });
+            return el("li", { class: "item-row" }, el("div", { class: "item-main" }, el("p", { class: "item-title" }, c.code), el("p", { class: "item-sub" }, "£" + (c.pence / 100) + " off " + (c.competition || "a competition") + ", holding " + c.points + " points")), give);
+          })));
+      }
       if (!o.competitions.length) lines.push(el("p", null, "No competition is open for entry right now. Come back when entry opens."));
       else if (max < 1) lines.push(el("p", null, "You need at least 4 free points for a £20 discount."));
       else {

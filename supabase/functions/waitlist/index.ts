@@ -136,6 +136,10 @@ export function committeePointsNotification(o: { people: { name: string; email: 
     ...[...by.entries()].flatMap(([q, who]) => [`${q}: ${who.length} ${who.length === 1 ? "person" : "people"}`, ...who.map((w) => `- ${w}`), ""]),
     ...(o.deskUrl ? [`The points list: ${o.deskUrl}`] : [])].join("\n");
 }
+export function pointsReleasedNotification(o: { name: string; email: string; competition: string; points: number; code: string; deskUrl?: string }) {
+  return [`${o.name} (${o.email}) gave back an unused discount code for ${o.competition}, so its ${o.points} points are free to spend again.`, "", `Code switched off: ${o.code}`, "No points were spent or added: an unused code only holds its points.",
+    ...(o.deskUrl ? ["", `Discount codes: ${o.deskUrl}`] : [])].join("\n");
+}
 export function volunteerNotification(o: { name: string; email: string; competition: string; lines: string[]; edited: boolean; deskUrl?: string }) {
   return [`${o.edited ? "A volunteer changed their answers" : "A new volunteer has signed up"} for ${o.competition}.`, "", `${o.name} (${o.email})`, ...o.lines.map((l) => `- ${l}`),
     ...(o.edited ? ["", "If they are already in a role they no longer ticked, the rota builder flags it so you can change it."] : []), ...(o.deskUrl ? ["", `Open the rota: ${o.deskUrl}`] : [])].join("\n");
@@ -449,7 +453,7 @@ if (typeof Deno !== "undefined") {
     }
 
     // ---- spend your volunteer points: ask for a one-time code, look at the options, turn points into a discount code ----------------
-    if (action === "points_start" || action === "points_options" || action === "points_redeem") {
+    if (action === "points_start" || action === "points_options" || action === "points_redeem" || action === "points_release") {
       if (!allowTry(ip + "|points", Date.now(), 20)) return reply(429, { ok: false, message: "Too many tries. Please wait a few minutes and try again." });
       const email = String(body.email ?? "").trim().toLowerCase();
       if (action === "points_start") {
@@ -468,6 +472,14 @@ if (typeof Deno !== "undefined") {
         const out = await r.json().catch(() => null);
         if (!r.ok || !out) return reply(500, { ok: false, message: "We could not do that just now. Please try again in a moment." });
         return reply(200, out.ok ? out : { ok: false, message: "That code did not work. It may have run out, or been used. You can ask for a new one." });
+      }
+      if (action === "points_release") {
+        const rr = await rpc("points_release", { p_email: email, th, p_code: String(body.code_id ?? "") });
+        const ro = await rr.json().catch(() => null);
+        if (!rr.ok || !ro) return reply(500, { ok: false, message: "We could not do that just now. Please try again in a moment." });
+        if (!ro.ok) return reply(200, { ok: false, message: ({ code: "That code did not work. It may have run out. You can ask for a new one.", not_found: "That discount code is not there any more.", in_use: "That code is already being used for an entry, so it cannot be given back." } as Record<string, string>)[ro.error] ?? "We could not do that." });
+        await send(copy, `Discount code given back: ${email}`, pointsReleasedNotification({ name: email, email, competition: ro.competition, points: ro.points, code: ro.code, deskUrl: `${siteUrl}/admin/#competitions` }));
+        return reply(200, { ok: true, code: ro.code, points: ro.points, available: ro.available, balance: ro.balance });
       }
       const r = await rpc("points_redeem", { p_email: email, th, comp: String(body.competition_id ?? ""), steps: Number(body.steps ?? 0) });
       const out = await r.json().catch(() => null);

@@ -579,6 +579,35 @@ const nm = await vu(U.entries, { email: "brand.new@x.com", full_name: "Brand New
 ok(nm.email === "brand.new@x.com" && (await q(`select committee from public.vol_people where email = 'brand.new@x.com'`))[0].committee === true, "a committee member who has never volunteered can be added");
 ok((await vu(U.entries, { email: "ghost2@x.com", full_name: "Ghost Two" })).error?.includes("not_found"), "without the create flag an unknown person is still refused");
 await db.exec("set role anon"); ok(!(await can(`select public.committee_points_award('2027-01-01')`)), "the public cannot award points"); await db.exec("reset role");
+
+// ---- give an unused code's points back
+await db.exec(`select public.points_insert('rel@x.com', 8, 'Volunteered: test', 'earned', now(), null, null, 'r22:a'); insert into public.vol_people (email, full_name) values ('rel@x.com', 'Rel Ease') on conflict do nothing;`);
+const rl_lg = async (c) => q(`select public.points_login_start('rel@x.com', $1) r`, [await hash(c)]);
+await rl_lg("888888");
+const rl_a = await q(`select public.points_redeem('rel@x.com', $1, '${PD}'::uuid, 1) r`, [await hash("888888")]).then((r) => r[0].r);
+await rl_lg("888888b");
+const rl_o = await q(`select public.points_options('rel@x.com', $1) r`, [await hash("888888b")]).then((r) => r[0].r);
+ok(rl_a.ok && rl_o.available === 4 && rl_o.reserved === 4 && rl_o.codes.length === 1 && rl_o.codes[0].code === rl_a.code && rl_o.codes[0].points === 4 && rl_o.codes[0].competition === "Discount Open", "an unused code is listed with the points it holds: " + JSON.stringify(rl_o.codes));
+const release = async (id, c) => q(`select public.points_release('rel@x.com', $1, $2::uuid) r`, [await hash(c), id]).then((r) => r[0].r);
+ok((await release(rl_o.codes[0].id, "000000")).error === "code", "releasing needs the emailed code");
+const rl_done = await release(rl_o.codes[0].id, "888888b");
+ok(rl_done.ok && rl_done.points === 4 && rl_done.available === 8 && rl_done.balance === 8, "releasing frees the points, nothing is spent: " + JSON.stringify(rl_done));
+ok((await release(rl_o.codes[0].id, "888888b")).error === "not_found", "and it cannot be done twice");
+ok((await q(`select active from public.discount_codes where code = $1`, [rl_a.code]))[0].active === false && (await bal("rel@x.com")) === 8, "the code is off and the balance is untouched");
+await rl_lg("999999");
+const rl_b = await q(`select public.points_redeem('rel@x.com', $1, '${PD}'::uuid, 1) r`, [await hash("999999")]).then((r) => r[0].r);
+const rl_e = await s3_sp({ competition_id: PD, email: "rel@x.com", full_name: "Rel Ease", discount_code: rl_b.code, date_of_birth: "1993-05-05" });
+await rl_lg("121212");
+const rl_o2 = await q(`select public.points_options('rel@x.com', $1) r`, [await hash("121212")]).then((r) => r[0].r);
+ok(rl_e.entry_id && rl_o2.codes.length === 0 && (await release((await q(`select id from public.discount_codes where code = $1`, [rl_b.code]))[0].id, "121212")).error === "in_use", "a code that is on an entry cannot be released");
+await q(`select public.confirm_entry_payment('${rl_e.entry_id}')`);
+ok((await bal("rel@x.com")) === 4, "once the entry is confirmed the points are spent and stay spent");
+// a code nobody uses gives its points back by itself when it expires
+await rl_lg("343434");
+const rl_c = await q(`select public.points_redeem('rel@x.com', $1, '${PC}'::uuid, 1) r`, [await hash("343434")]).then((r) => r[0].r);
+await db.exec(`update public.discount_codes set expires_at = now() - interval '1 minute' where code = '${rl_c.code}'`);
+await db.exec("delete from public.points_login"); await rl_lg("565656");
+ok((await q(`select public.points_options('rel@x.com', $1) r`, [await hash("565656")]).then((r) => r[0].r)).available === 4, "an expired unused code holds nothing: the points are free again");
 // who may do what
 await db.exec("set role anon");
 ok(!(await can(`select public.waitlist_join('{}'::jsonb)`)) && !(await can(`select public.waitlist_sweep('${W}')`)) && !(await can(`select public.waitlist_make_offer('${W}'::uuid, 'x')`)), "the public cannot call the waiting list functions (only our server can)");

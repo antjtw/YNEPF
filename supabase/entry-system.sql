@@ -2569,6 +2569,10 @@ begin
   select full_name into v_name from public.vol_people where email = v_email;
   return jsonb_build_object('ok', true, 'name', coalesce(v_name, ''), 'balance', v_bal, 'reserved', v_res, 'available', greatest(v_bal - v_res, 0),
     'points_per_step', 4, 'step_pence', 2000,
+    'codes', coalesce((select jsonb_agg(jsonb_build_object('id', d.id, 'code', d.code, 'competition', c.name, 'points', d.points_cost, 'pence', d.value, 'expires_at', d.expires_at) order by d.created_at)
+        from public.discount_codes d left join public.competitions c on c.id = d.competition_id
+       where d.recipient_email = v_email and d.points_cost > 0 and d.points_spent_at is null and d.active and (d.expires_at is null or d.expires_at > now())
+         and not exists (select 1 from public.entries e where e.discount_code_id = d.id and (e.status in ('paid', 'comped') or (e.status = 'held' and e.hold_expires_at > now())))), '[]'::jsonb),
     'competitions', coalesce((select jsonb_agg(jsonb_build_object('id', c.id, 'name', c.name, 'slug', c.slug, 'start_date', c.start_date) order by c.start_date)
         from public.competitions c where c.published and c.entry_method = 'yne' and not c.entries_closed_manually and coalesce(c.entry_closes, 'infinity') > now() and c.start_date >= current_date), '[]'::jsonb));
 end $$;
@@ -2701,5 +2705,33 @@ revoke all on function public.committee_points_award(date) from public, anon, au
 do $$ begin
   if exists (select 1 from pg_roles where rolname = 'service_role') then
     grant execute on function public.committee_points_award(date) to service_role;
+  end if;
+end $$;
+
+
+-- ---- Give the points of an unused discount code back --------------------------------------------------------------------------------
+-- An unused code only holds its points (they come off when an entry using it is confirmed), so giving them back is just switching the code off. A code that
+-- is already on an entry (paid, or held while someone pays) cannot be released, and one that has been spent is never given back. Codes that nobody uses also
+-- free their points by themselves when entry closes (they expire), with no ledger change needed. Uses the emailed code, which stays good for more releases.
+create or replace function public.points_release(p_email text, th text, p_code uuid) returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare v_email text := lower(btrim(coalesce(p_email, ''))); d public.discount_codes%rowtype; o jsonb; v_comp text;
+begin
+  if public.points_login_ok(v_email, th) is null then return jsonb_build_object('ok', false, 'error', 'code'); end if;
+  select * into d from public.discount_codes where id = p_code and recipient_email = v_email and points_cost > 0 and points_spent_at is null and active for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'not_found'); end if;
+  if exists (select 1 from public.entries e where e.discount_code_id = d.id and (e.status in ('paid', 'comped') or (e.status = 'held' and e.hold_expires_at > now()))) then
+    return jsonb_build_object('ok', false, 'error', 'in_use');
+  end if;
+  update public.discount_codes set active = false, reason = left(reason || ' (released by the volunteer)', 300) where id = d.id;
+  select name into v_comp from public.competitions where id = d.competition_id;
+  o := public.points_options(v_email, th);
+  return jsonb_build_object('ok', true, 'code', d.code, 'points', d.points_cost, 'competition', coalesce(v_comp, ''), 'available', (o->>'available')::int, 'balance', (o->>'balance')::int);
+end $$;
+revoke all on function public.points_release(text, text, uuid) from public, anon, authenticated;
+do $$ begin
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    grant execute on function public.points_release(text, text, uuid) to service_role;
   end if;
 end $$;

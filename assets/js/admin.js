@@ -2203,7 +2203,7 @@
               var st = state(d), n = uses(d);
               return el("tr", null,
                 el("th", { scope: "row" }, el("code", { class: "code-text" }, d.code),
-                  el("small", null, [d.recipient_name, d.recipient_email && "only " + d.recipient_email, d.competition_id === null && "any competition", d.reason].filter(Boolean).join(" · "))),
+                  el("small", null, [d.recipient_name, d.recipient_email && "only " + d.recipient_email, d.competition_id === null && "any competition", d.reason, d.points_cost > 0 && d.active && !d.points_spent_at ? "holding " + d.points_cost + " points until used (Delete gives them back)" : d.points_cost > 0 && d.points_spent_at ? d.points_cost + " points spent" : ""].filter(Boolean).join(" · "))),
                 el("td", null, discountWords(d)), el("td", null, n + " of " + d.max_uses),
                 el("td", null, d.expires_at ? new Date(d.expires_at).toLocaleDateString("en-GB", { timeZone: Y.TZ, dateStyle: "medium" }) : "No end date"),
                 el("td", null, el("span", { class: st[1] }, st[0])),
