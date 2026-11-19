@@ -2083,6 +2083,23 @@ select g.id, 'Privacy policy', 'privacy', 10
  where g.placement = 'bottom' and not exists (select 1 from public.footer_links where url = 'privacy')
  order by g.sort_order limit 1;
 
+-- The footer's Explore column gets a "Volunteer tracker" link (the points page) straight after "Competition calendar". Added once; rename, move or remove it
+-- under Footer in the site editor like any other link.
+do $$
+declare g uuid; cal integer;
+begin
+  select id into g from public.footer_groups where lower(btrim(title)) = 'explore' order by sort_order limit 1;
+  if g is not null and not exists (select 1 from public.footer_links where url in ('points', 'points.html')) then
+    select sort_order into cal from public.footer_links where group_id = g and url in ('calendar.html', 'calendar') order by sort_order limit 1;
+    if cal is null then
+      insert into public.footer_links (group_id, label, url, sort_order) values (g, 'Volunteer tracker', 'points', coalesce((select max(sort_order) from public.footer_links where group_id = g), 0) + 10);
+    else
+      update public.footer_links set sort_order = sort_order + 1 where group_id = g and sort_order > cal;
+      insert into public.footer_links (group_id, label, url, sort_order) values (g, 'Volunteer tracker', 'points', cal + 1);
+    end if;
+  end if;
+end $$;
+
 -- The entry page asks the database for the time, so a phone with the wrong clock is not told entry is closed when it is not.
 create or replace function public.server_time() returns timestamptz language sql stable as $$ select now() $$;
 grant execute on function public.server_time() to anon, authenticated;
