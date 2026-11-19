@@ -1400,14 +1400,22 @@
     }
     function when(iso) { return new Date(iso).toLocaleDateString("en-GB", { timeZone: Y.TZ, dateStyle: "medium" }); }
     function load() {
-      return sb.rpc("points_overview").then(function (r) { if (r.error) throw r.error; state.rows = r.data || []; });
+      return Promise.all([sb.rpc("points_overview"), sb.from("vol_people").select("email,full_name,committee")]).then(function (res) {
+        if (res[0].error) throw res[0].error; state.rows = res[0].data || [];
+        state.committee = {};
+        (res[1].data || []).forEach(function (x) {
+          if (!x.committee) return; state.committee[x.email] = true;
+          if (!state.rows.some(function (r) { return r.email === x.email; })) state.rows.push({ email: x.email, name: x.full_name || x.email, balance: 0, earned: 0, spent: 0, expiring: 0, next_expiry: null });      // on the committee but nothing earned yet
+        });
+        state.rows.sort(function (a, b) { return a.name < b.name ? -1 : 1; });
+      });
     }
     function drawRows() {
       var q = state.q.trim().toLowerCase(), list = state.rows.filter(function (r) { return !q || r.name.toLowerCase().indexOf(q) >= 0 || r.email.toLowerCase().indexOf(q) >= 0; });
       var withPts = state.rows.filter(function (r) { return r.balance > 0; }), total = withPts.reduce(function (t, r) { return t + r.balance; }, 0), soon = state.rows.reduce(function (t, r) { return t + (r.expiring || 0); }, 0);
-      summary.textContent = withPts.length + (withPts.length === 1 ? " person has" : " people have") + " points, " + total + " points in all." + (soon ? " " + soon + (soon === 1 ? " point expires" : " points expire") + " in the next 60 days." : "");
+      summary.textContent = withPts.length + (withPts.length === 1 ? " person has" : " people have") + " points, " + total + " points in all." + (Object.keys(state.committee || {}).length ? " " + Object.keys(state.committee).length + " committee members earn 3 points each at the end of every quarter (next: " + nextQuarterEnd() + ")." : "") + (soon ? " " + soon + (soon === 1 ? " point expires" : " points expire") + " in the next 60 days." : "");
       tbody.replaceChildren.apply(tbody, list.map(function (r) {
-        return el("tr", null, el("th", { scope: "row" }, r.name, el("small", null, r.email)), el("td", null, String(r.balance)), el("td", null, r.expiring ? r.expiring + " by " + when(r.next_expiry) : "–"), el("td", null, String(r.earned)), el("td", null, String(r.spent)),
+        return el("tr", null, el("th", { scope: "row" }, r.name, state.committee && state.committee[r.email] ? el("span", { class: "tag tag-position", style: "margin-left:var(--space-2)" }, "Committee") : null, el("small", null, r.email)), el("td", null, String(r.balance)), el("td", null, r.expiring ? r.expiring + " by " + when(r.next_expiry) : "–"), el("td", null, String(r.earned)), el("td", null, String(r.spent)),
           el("td", null, el("span", { class: "actions" }, btn("History", function () { showHistory(r); }), btn("Edit", function () { editVolunteer({ email: r.email, name: r.name }, function () { load().then(function () { drawRows(); }); }); }, "btn-ghost", { "aria-label": "Edit " + r.name }))));
       }));
       if (!list.length) tbody.appendChild(el("tr", null, el("td", { colspan: "6" }, el("p", { class: "empty", style: "margin:0" }, "Nobody matches."))));
@@ -1547,7 +1555,7 @@
     load().then(function () {
       var search = el("input", { class: "control", type: "search", id: "pts-q", placeholder: "Search by name or email", "aria-label": "Search by name or email", style: "max-width:22rem" });
       search.addEventListener("input", function () { state.q = search.value; drawRows(); });
-      panel.replaceChildren(panelHead("Volunteer points", el("span", { class: "actions" }, btn("Add points", function () { adjust(1); }, "btn-primary"), btn("Take points away", function () { adjust(-1); }, "btn-ghost"))),
+      panel.replaceChildren(panelHead("Volunteer points", el("span", { class: "actions" }, btn("Add points", function () { adjust(1); }, "btn-primary"), btn("Take points away", function () { adjust(-1); }, "btn-ghost"), btn("Add a person", function () { addVolunteer(function () { load().then(function () { drawRows(); }); }); }, "btn-ghost"))),
         summary, el("div", { class: "control-row" }, search),
         el("div", { class: "table-scroll" }, el("table", { class: "admin-table" }, el("caption", { class: "visually-hidden" }, "Volunteer points"),
           el("thead", null, el("tr", null, ["Name", "Points", "Expiring soon", "Earned", "Spent", ""].map(function (h) { return el("th", { scope: "col" }, h); }))), tbody)),
@@ -1562,17 +1570,39 @@
   var SIZES = ["XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL"];
   // Edit a volunteer: their name, email, mobile and T-shirt size. A new name shows everywhere; a new email takes their sign-ups, rota places and
   // points (history included) with it. person = { email, name }; done runs after it is saved.
+  // The next quarter end on or after today, never before the first committee award (31 December 2026), for example "31 December 2026".
+  function nextQuarterEnd() {
+    var t = new Date(), today = Date.UTC(t.getFullYear(), t.getMonth(), t.getDate()), first = Date.UTC(2026, 11, 31), ends = [[2, 31], [5, 30], [8, 30], [11, 31]];
+    for (var y = t.getFullYear(); y <= t.getFullYear() + 1; y++) for (var i = 0; i < 4; i++) { var d = Date.UTC(y, ends[i][0], ends[i][1]); if (d >= today && d >= first) return new Date(d).toLocaleDateString("en-GB", { timeZone: "UTC", day: "numeric", month: "long", year: "numeric" }); }
+    return "";
+  }
+  // Add someone who is not in the system yet (for example a committee member who has never volunteered).
+  function addVolunteer(done) {
+    openForm({ title: "Add a person", saveLabel: "Add person", values: { committee: true },
+      intro: "For someone who is not in the points list yet. Tick the box if they are part of the committee or executive.",
+      fields: [{ name: "full_name", label: "Name", required: true }, { name: "email", label: "Email address", type: "email", required: true, help: "Points are tied to this address." }, { name: "mobile", label: "Mobile number (optional)" },
+        { name: "committee", label: "Part of the committee", type: "checkbox", help: "They earn 3 points at the end of every quarter, starting 31 December 2026, while part of it. Not for referees." }],
+      validate: function (v) { return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(v.email || "").trim()) ? null : "That email address does not look right."; },
+      onSave: function (v) {
+        var email = String(v.email).trim().toLowerCase();
+        return sb.rpc("vol_person_update", { p: { email: email, full_name: String(v.full_name).trim(), mobile: String(v.mobile || "").trim(), committee: !!v.committee, create: true } }).then(function (res) {
+          if (res.error) throw new Error(/exists/.test(String(res.error.message)) ? "That person is already in the system. Find them in the list and press Edit." : friendly(res.error));
+          toast("Added."); if (done) done();
+        });
+      } });
+  }
   function editVolunteer(person, done) {
-    sb.from("vol_people").select("email,full_name,mobile,tshirt").eq("email", person.email).maybeSingle().then(function (r) {
+    sb.from("vol_people").select("email,full_name,mobile,tshirt,committee").eq("email", person.email).maybeSingle().then(function (r) {
       var row = (r && r.data) || {};
       openForm({ title: "Edit " + (person.name || person.email), saveLabel: "Save changes",
         intro: "A new name shows on the points list, sign-ups and rota. A new email address keeps their points, sign-ups and rota places, and any unused priority link or discount code moves to it. Each change is recorded with your name.",
-        values: { full_name: row.full_name || person.name || "", email: person.email, mobile: row.mobile || "", tshirt: row.tshirt || "" },
+        values: { full_name: row.full_name || person.name || "", email: person.email, mobile: row.mobile || "", tshirt: row.tshirt || "", committee: !!row.committee },
         fields: [{ name: "full_name", label: "Name", required: true }, { name: "email", label: "Email address", type: "email", required: true, help: "Points are tied to this address, and it is where their emails go." },
-          { name: "mobile", label: "Mobile number (optional)", half: true }, { name: "tshirt", label: "T-shirt size (optional)", type: "select", half: true, options: [{ value: "", label: "Not given" }].concat(SIZES.map(function (z) { return { value: z, label: z }; })) }],
+          { name: "mobile", label: "Mobile number (optional)", half: true }, { name: "tshirt", label: "T-shirt size (optional)", type: "select", half: true, options: [{ value: "", label: "Not given" }].concat(SIZES.map(function (z) { return { value: z, label: z }; })) },
+          { name: "committee", label: "Part of the committee", type: "checkbox", help: "Executive and supporting committee members earn 3 points at the end of every quarter (31 March, 30 June, 30 September, 31 December), starting 31 December 2026, if they are part of it on that day. Not for referees. Untick when they step down." }],
         validate: function (v) { return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(v.email || "").trim()) ? null : "That email address does not look right."; },
         onSave: function (v) {
-          return sb.rpc("vol_person_update", { p: { email: person.email, new_email: String(v.email).trim().toLowerCase(), full_name: String(v.full_name).trim(), mobile: String(v.mobile || "").trim(), tshirt: v.tshirt || "" } }).then(function (res) {
+          return sb.rpc("vol_person_update", { p: { email: person.email, new_email: String(v.email).trim().toLowerCase(), full_name: String(v.full_name).trim(), mobile: String(v.mobile || "").trim(), tshirt: v.tshirt || "", committee: !!v.committee } }).then(function (res) {
             if (res.error) {
               var m = String(res.error.message || "");
               throw new Error(/exists/.test(m) ? "Someone else already has that email address. If it is the same person twice, tell us and we will merge them." : /invalid:name/.test(m) ? "Enter a name." : /invalid:email/.test(m) ? "That email address does not look right." : /forbidden/.test(m) ? "You do not have permission to do that." : friendly(res.error));

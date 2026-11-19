@@ -558,6 +558,27 @@ ok(vr.email === "edd.new@x.com" && vr.email_changed && vr.balance === 3, "a new 
 ok((await q(`select count(*)::int n from public.points_ledger where email = 'edit@x.com'`))[0].n === 0 && (await q(`select count(*)::int n from public.points_ledger where email = 'edd.new@x.com'`))[0].n === 1, "the history moves with them");
 ok((await q(`select mobile, tshirt from public.vol_signups where email = 'edd.new@x.com'`))[0].tshirt === "L" && (await q(`select recipient_email from public.discount_codes where code = 'EDD-20OFF-AAAAAA'`))[0].recipient_email === "edd.new@x.com", "sign-ups and an unused discount code follow the new address");
 ok((await q(`select count(*)::int n from public.audit_log where table_name = 'vol_people' and row_id = 'edit@x.com' and actor_email = 'entries@example.com'`))[0].n >= 2, "each change is in the audit log with who made it");
+
+// ---- committee points: tick the box, 3 points at each quarter end from 31 Dec 2026, once, only if in post on the last day
+await db.exec(`insert into public.vol_people (email, full_name) values ('cm1@x.com', 'Cam One'), ('cm2@x.com', 'Cam Two'), ('cm3@x.com', 'Cam Three') on conflict do nothing;`);
+const cp = (d) => q(`select public.committee_points_award($1::date) r`, [d]).then((r) => r[0].r);
+ok((await vu(U.entries, { email: "cm1@x.com", full_name: "Cam One", committee: true })).email === "cm1@x.com" && (await q(`select committee, committee_from is not null f, committee_until from public.vol_people where email = 'cm1@x.com'`))[0].f, "ticking the box starts committee service today");
+await vu(U.entries, { email: "cm2@x.com", full_name: "Cam Two", committee: true });
+ok((await cp("2026-12-30")).awarded === 0, "nothing before the end of this quarter (31 December 2026)");
+await db.exec(`update public.vol_people set committee_from = '2026-11-01' where email in ('cm1@x.com', 'cm2@x.com')`);
+let cr1 = await cp("2026-12-31");
+ok(cr1.awarded === 2 && (await bal("cm1@x.com")) === 3 && (await q(`select reason, earned_at::date d from public.points_ledger where email = 'cm1@x.com' and import_key like 'committee:%'`))[0].reason === "Committee service: Q4 2026", "on 31 December each ticked member gets 3 points: " + JSON.stringify(cr1));
+ok((await cp("2027-01-15")).awarded === 0 && (await bal("cm1@x.com")) === 3, "running it again awards nothing twice");
+await vu(U.entries, { email: "cm2@x.com", full_name: "Cam Two", committee: false });
+await vu(U.entries, { email: "cm3@x.com", full_name: "Cam Three", committee: true });
+await db.exec(`update public.vol_people set committee_from = '2027-04-02' where email = 'cm3@x.com'; update public.vol_people set committee_until = '2027-03-30' where email = 'cm2@x.com'`);
+let cr2 = await cp("2027-06-30");
+ok(cr2.people.map((x) => x.email + x.quarter).sort().join() === "cm1@x.comQ1 2027,cm1@x.comQ2 2027,cm3@x.comQ2 2027", "a missed quarter is caught up, someone who left before the quarter end gets nothing, a new member starts at the next quarter end: " + JSON.stringify(cr2.people));
+ok((await bal("cm2@x.com")) === 3 && (await bal("cm1@x.com")) === 9, "balances add up");
+const nm = await vu(U.entries, { email: "brand.new@x.com", full_name: "Brand New", committee: true, create: true });
+ok(nm.email === "brand.new@x.com" && (await q(`select committee from public.vol_people where email = 'brand.new@x.com'`))[0].committee === true, "a committee member who has never volunteered can be added");
+ok((await vu(U.entries, { email: "ghost2@x.com", full_name: "Ghost Two" })).error?.includes("not_found"), "without the create flag an unknown person is still refused");
+await db.exec("set role anon"); ok(!(await can(`select public.committee_points_award('2027-01-01')`)), "the public cannot award points"); await db.exec("reset role");
 // who may do what
 await db.exec("set role anon");
 ok(!(await can(`select public.waitlist_join('{}'::jsonb)`)) && !(await can(`select public.waitlist_sweep('${W}')`)) && !(await can(`select public.waitlist_make_offer('${W}'::uuid, 'x')`)), "the public cannot call the waiting list functions (only our server can)");

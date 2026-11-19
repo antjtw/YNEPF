@@ -910,8 +910,14 @@ create table if not exists public.vol_people (
   mobile text not null default '',
   tshirt text not null default '' check (tshirt in ('', 'XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL')),
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  committee boolean not null default false,                 -- part of the committee or executive: earns points each quarter
+  committee_from date,                                      -- the day they were ticked
+  committee_until date                                      -- the last day they were part of it (when unticked)
 );
+alter table public.vol_people add column if not exists committee boolean not null default false;
+alter table public.vol_people add column if not exists committee_from date;
+alter table public.vol_people add column if not exists committee_until date;
 -- The roles. on_form: volunteers can say they are happy to do it. The others (referees, technical controller, session manager,
 -- platform manager, jury, co-ordinators) are filled in by the coordinator, who picks from the pool.
 create table if not exists public.vol_roles (
@@ -2608,7 +2614,7 @@ end $$;
 -- ---------------------------------------------------------------------------
 -- 21. Edit a volunteer: their name, mobile, T-shirt size or email address (entries team only)
 -- ---------------------------------------------------------------------------
--- p = { email (who they are now), full_name, new_email (optional), mobile (optional), tshirt (optional) }
+-- p = { email (who they are now), full_name, new_email (optional), mobile (optional), tshirt (optional), committee (optional true/false), create (optional: add them if new) }
 -- A new name shows everywhere (points list, sign-ups, the rota, the referee roster). A new email moves everything that belongs to the old one: sign-ups,
 -- rota places, points (including the history, so nothing is lost), unused priority links and unused discount codes, so they still work. The change is
 -- written to the audit log with who made it. If the new address already belongs to someone else it is refused: that is two people to merge, not a rename.
@@ -2617,13 +2623,16 @@ language plpgsql security definer set search_path = public, auth
 as $$
 declare
   v_old text := lower(btrim(coalesce(p->>'email', ''))); v_new text := lower(btrim(coalesce(nullif(p->>'new_email', ''), p->>'email', '')));
-  v_name text := btrim(coalesce(p->>'full_name', '')); had public.vol_people%rowtype; v_mobile text; v_shirt text; who text; n_pts integer;
+  v_name text := btrim(coalesce(p->>'full_name', '')); had public.vol_people%rowtype; v_mobile text; v_shirt text; who text; n_pts integer; v_committee boolean; v_create boolean := coalesce((p->>'create')::boolean, false); v_had boolean;
 begin
   if not public.is_entries() then raise exception 'forbidden'; end if;
   if length(v_name) < 2 or length(v_name) > 120 then raise exception 'invalid:name'; end if;
   if v_new !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' or length(v_new) > 200 then raise exception 'invalid:email'; end if;
   select * into had from public.vol_people where email = v_old;
-  if not found and not exists (select 1 from public.points_ledger where email = v_old) and not exists (select 1 from public.vol_signups where email = v_old) then raise exception 'not_found'; end if;
+  v_had := found;
+  if not v_had and not v_create and not exists (select 1 from public.points_ledger where email = v_old) and not exists (select 1 from public.vol_signups where email = v_old) then raise exception 'not_found'; end if;
+  if not v_had and v_create and v_new <> v_old then raise exception 'invalid:email'; end if;
+  if not v_had and v_create and (exists (select 1 from public.points_ledger where email = v_old) or exists (select 1 from public.vol_signups where email = v_old)) then raise exception 'exists'; end if;
   v_mobile := left(case when p ? 'mobile' then btrim(coalesce(p->>'mobile', '')) else coalesce(had.mobile, '') end, 40);
   v_shirt := case when p ? 'tshirt' then btrim(coalesce(p->>'tshirt', '')) else coalesce(had.tshirt, '') end;
   if v_shirt not in ('', 'XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL') then raise exception 'invalid:tshirt'; end if;
@@ -2631,10 +2640,16 @@ begin
   if v_new <> v_old and (exists (select 1 from public.vol_people where email = v_new) or exists (select 1 from public.points_ledger where email = v_new) or exists (select 1 from public.vol_signups where email = v_new)) then
     raise exception 'exists';
   end if;
-  if not found then
+  if not v_had then
     insert into public.vol_people (email, full_name, mobile, tshirt) values (v_old, v_name, v_mobile, v_shirt) on conflict (email) do nothing;
   end if;
   update public.vol_people set full_name = v_name, mobile = v_mobile, tshirt = v_shirt, updated_at = now() where email = v_old;
+  -- the committee box: ticking starts it today, unticking ends it yesterday (so they count only if they were part of it on a quarter's last day)
+  if p ? 'committee' then
+    v_committee := coalesce((p->>'committee')::boolean, false);
+    if v_committee and not coalesce(had.committee, false) then update public.vol_people set committee = true, committee_from = current_date, committee_until = null where email = v_old;
+    elsif not v_committee and coalesce(had.committee, false) then update public.vol_people set committee = false, committee_until = current_date - 1 where email = v_old; end if;
+  end if;
   update public.vol_signups set full_name = v_name, mobile = v_mobile, tshirt = v_shirt where email = v_old;
   update public.vol_places set person_name = v_name where email = v_old;
   update public.vol_referees set name = v_name where email = v_old;
@@ -2650,10 +2665,41 @@ begin
   end if;
   insert into public.audit_log (actor_id, actor_email, table_name, row_id, action, before, after)
     values (auth.uid(), coalesce(who, 'system'), 'vol_people', v_old, 'update',
-            jsonb_build_object('email', v_old, 'full_name', coalesce(had.full_name, ''), 'mobile', coalesce(had.mobile, ''), 'tshirt', coalesce(had.tshirt, '')),
-            jsonb_build_object('email', v_new, 'full_name', v_name, 'mobile', v_mobile, 'tshirt', v_shirt));
+            jsonb_build_object('email', v_old, 'full_name', coalesce(had.full_name, ''), 'mobile', coalesce(had.mobile, ''), 'tshirt', coalesce(had.tshirt, ''), 'committee', coalesce(had.committee, false)),
+            jsonb_build_object('email', v_new, 'full_name', v_name, 'mobile', v_mobile, 'tshirt', v_shirt, 'committee', case when p ? 'committee' then coalesce((p->>'committee')::boolean, false) else coalesce(had.committee, false) end));
   select public.points_balance(v_new) into n_pts;
   return jsonb_build_object('email', v_new, 'name', v_name, 'balance', n_pts, 'email_changed', v_new <> v_old);
 end $$;
 revoke all on function public.vol_person_update(jsonb) from public, anon;
 grant execute on function public.vol_person_update(jsonb) to authenticated;
+
+
+-- ---------------------------------------------------------------------------
+-- 22. Committee and executive points: 3 points at the end of every quarter for everyone ticked "part of the committee"
+-- ---------------------------------------------------------------------------
+-- Tick the box when editing a volunteer (see vol_person_update). Awards start with the quarter ending 31 December 2026. Someone earns a quarter if they were
+-- part of the committee on its last day (31 March, 30 June, 30 September, 31 December). Each person and quarter is awarded once, however often this runs, and
+-- anything missed is caught up. The waitlist function's timer calls it and emails competitions@ when it awards anything.
+create or replace function public.committee_points_award(p_today date default current_date) returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare q date; r record; ins boolean; done jsonb := '[]'::jsonb; d date := date '2026-12-31';
+begin
+  while d <= p_today loop
+    q := d;
+    for r in select email, full_name from public.vol_people
+              where committee and committee_from is not null and committee_from <= q and (committee_until is null or committee_until >= q) loop
+      ins := public.points_insert(r.email, 3, 'Committee service: Q' || extract(quarter from q)::int || ' ' || extract(year from q)::int, 'earned',
+                                  ((q::timestamp + interval '12 hours') at time zone 'Europe/London'), null, null, 'committee:' || r.email || ':' || q);
+      if ins then done := done || jsonb_build_array(jsonb_build_object('name', r.full_name, 'email', r.email, 'quarter', 'Q' || extract(quarter from q)::int || ' ' || extract(year from q)::int)); end if;
+    end loop;
+    d := (date_trunc('month', (d + 1)::timestamp) + interval '3 months - 1 day')::date;
+  end loop;
+  return jsonb_build_object('awarded', jsonb_array_length(done), 'people', done);
+end $$;
+revoke all on function public.committee_points_award(date) from public, anon, authenticated;
+do $$ begin
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    grant execute on function public.committee_points_award(date) to service_role;
+  end if;
+end $$;

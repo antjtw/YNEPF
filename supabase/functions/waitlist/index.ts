@@ -129,6 +129,13 @@ export function pointsRedeemedNotification(o: { name: string; email: string; com
   return [`${o.name} (${o.email}) turned ${o.points} volunteer points into a £${o.pounds} discount code for ${o.competition}.`, "", `Code: ${o.code}`, "The points come off their balance when an entry using the code is confirmed.",
     ...(o.deskUrl ? ["", `Discount codes and who has used them: ${o.deskUrl}`] : [])].join("\n");
 }
+// An internal note when the quarterly committee points are awarded.
+export function committeePointsNotification(o: { people: { name: string; email: string; quarter: string }[]; deskUrl?: string }) {
+  const by = new Map<string, string[]>(); for (const p of o.people) by.set(p.quarter, [...(by.get(p.quarter) ?? []), `${p.name} <${p.email}>`]);
+  return ["Committee and executive points have been awarded (3 points each, for being part of the committee on the last day of the quarter).", "",
+    ...[...by.entries()].flatMap(([q, who]) => [`${q}: ${who.length} ${who.length === 1 ? "person" : "people"}`, ...who.map((w) => `- ${w}`), ""]),
+    ...(o.deskUrl ? [`The points list: ${o.deskUrl}`] : [])].join("\n");
+}
 export function volunteerNotification(o: { name: string; email: string; competition: string; lines: string[]; edited: boolean; deskUrl?: string }) {
   return [`${o.edited ? "A volunteer changed their answers" : "A new volunteer has signed up"} for ${o.competition}.`, "", `${o.name} (${o.email})`, ...o.lines.map((l) => `- ${l}`),
     ...(o.edited ? ["", "If they are already in a role they no longer ticked, the rota builder flags it so you can change it."] : []), ...(o.deskUrl ? ["", `Open the rota: ${o.deskUrl}`] : [])].join("\n");
@@ -379,7 +386,13 @@ if (typeof Deno !== "undefined") {
           done.priority += r.sent; done.failed += r.failed;
         }
       }
-      if (!body.competition_id) done.openipf = await processOpenipf(10);
+      if (!body.competition_id) {
+        // committee and executive points, once a quarter has ended
+        const cres = await rpc("committee_points_award", {});
+        const cp = await cres.json().catch(() => null) as { awarded: number; people: { name: string; email: string; quarter: string }[] } | null;
+        if (cres.ok && cp && cp.awarded > 0) await send(copy, "Committee points awarded", committeePointsNotification({ people: cp.people, deskUrl: `${siteUrl}/admin/#points` }));
+        done.openipf = await processOpenipf(10);
+      }
       return reply(200, { ok: true, ...done });
     }
 
