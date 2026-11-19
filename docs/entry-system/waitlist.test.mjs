@@ -541,6 +541,23 @@ await db.exec("set role anon");
 ok(!(await can(`select public.priority_fill()`)) && !(await can(`select public.points_options('pat@x.com', 'x')`)) && !(await can(`select public.points_redeem('pat@x.com', 'x', '${PC}', 1)`)) && !(await can(`select public.points_login_start('pat@x.com', 'x')`)) && !(await can(`select * from public.points_login`)), "the public cannot call any of these, or read the codes");
 await db.exec("reset role");
 
+
+// ---- edit a volunteer: name, mobile, T-shirt, email
+const vu = (who, arg) => pe("vol_person_update", who, arg);
+await db.exec(`insert into public.vol_people (email, full_name, mobile) values ('edit@x.com', 'Edd Old', '07000') on conflict do nothing;
+ select public.points_insert('edit@x.com', 3, 'Volunteered: test', 'earned', now(), null, null, 'v21:a');
+ insert into public.vol_signups (competition_id, email, full_name, mobile) values ('${VC}', 'edit@x.com', 'Edd Old', '07000');
+ insert into public.discount_codes (code, recipient_email, kind, value, points_cost) values ('EDD-20OFF-AAAAAA', 'edit@x.com', 'amount', 2000, 4);`);
+ok((await vu(U.editor, { email: "edit@x.com", full_name: "X" })).error?.includes("forbidden"), "only the entries team can edit a volunteer");
+let vr = await vu(U.entries, { email: "edit@x.com", full_name: "Edd New" });
+ok(vr.name === "Edd New" && !vr.email_changed && (await q(`select full_name from public.vol_signups where email = 'edit@x.com'`))[0].full_name === "Edd New" && (await q(`select full_name from public.vol_people where email = 'edit@x.com'`))[0].full_name === "Edd New", "a new name shows on the person and their sign-ups: " + JSON.stringify(vr));
+ok((await vu(U.entries, { email: "edit@x.com", full_name: "E" })).error?.includes("invalid:name") && (await vu(U.entries, { email: "edit@x.com", new_email: "nope", full_name: "Edd New" })).error?.includes("invalid:email") && (await vu(U.entries, { email: "ghost@x.com", full_name: "Ghost Person" })).error?.includes("not_found"), "names and emails are checked, and an unknown person is refused");
+ok((await vu(U.entries, { email: "edit@x.com", new_email: "pat@x.com", full_name: "Edd New" })).error?.includes("exists"), "an email that already belongs to someone else is refused");
+vr = await vu(U.entries, { email: "edit@x.com", new_email: " Edd.New@X.com ", full_name: "Edd New", mobile: "07111", tshirt: "L" });
+ok(vr.email === "edd.new@x.com" && vr.email_changed && vr.balance === 3, "a new email keeps the points: " + JSON.stringify(vr));
+ok((await q(`select count(*)::int n from public.points_ledger where email = 'edit@x.com'`))[0].n === 0 && (await q(`select count(*)::int n from public.points_ledger where email = 'edd.new@x.com'`))[0].n === 1, "the history moves with them");
+ok((await q(`select mobile, tshirt from public.vol_signups where email = 'edd.new@x.com'`))[0].tshirt === "L" && (await q(`select recipient_email from public.discount_codes where code = 'EDD-20OFF-AAAAAA'`))[0].recipient_email === "edd.new@x.com", "sign-ups and an unused discount code follow the new address");
+ok((await q(`select count(*)::int n from public.audit_log where table_name = 'vol_people' and row_id = 'edit@x.com' and actor_email = 'entries@example.com'`))[0].n >= 2, "each change is in the audit log with who made it");
 // who may do what
 await db.exec("set role anon");
 ok(!(await can(`select public.waitlist_join('{}'::jsonb)`)) && !(await can(`select public.waitlist_sweep('${W}')`)) && !(await can(`select public.waitlist_make_offer('${W}'::uuid, 'x')`)), "the public cannot call the waiting list functions (only our server can)");

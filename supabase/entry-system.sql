@@ -2604,3 +2604,56 @@ do $$ begin
     grant execute on function public.points_login_start(text, text), public.points_login_ok(text, text), public.points_options(text, text), public.points_redeem(text, text, uuid, integer) to service_role;
   end if;
 end $$;
+
+-- ---------------------------------------------------------------------------
+-- 21. Edit a volunteer: their name, mobile, T-shirt size or email address (entries team only)
+-- ---------------------------------------------------------------------------
+-- p = { email (who they are now), full_name, new_email (optional), mobile (optional), tshirt (optional) }
+-- A new name shows everywhere (points list, sign-ups, the rota, the referee roster). A new email moves everything that belongs to the old one: sign-ups,
+-- rota places, points (including the history, so nothing is lost), unused priority links and unused discount codes, so they still work. The change is
+-- written to the audit log with who made it. If the new address already belongs to someone else it is refused: that is two people to merge, not a rename.
+create or replace function public.vol_person_update(p jsonb) returns jsonb
+language plpgsql security definer set search_path = public, auth
+as $$
+declare
+  v_old text := lower(btrim(coalesce(p->>'email', ''))); v_new text := lower(btrim(coalesce(nullif(p->>'new_email', ''), p->>'email', '')));
+  v_name text := btrim(coalesce(p->>'full_name', '')); had public.vol_people%rowtype; v_mobile text; v_shirt text; who text; n_pts integer;
+begin
+  if not public.is_entries() then raise exception 'forbidden'; end if;
+  if length(v_name) < 2 or length(v_name) > 120 then raise exception 'invalid:name'; end if;
+  if v_new !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' or length(v_new) > 200 then raise exception 'invalid:email'; end if;
+  select * into had from public.vol_people where email = v_old;
+  if not found and not exists (select 1 from public.points_ledger where email = v_old) and not exists (select 1 from public.vol_signups where email = v_old) then raise exception 'not_found'; end if;
+  v_mobile := left(case when p ? 'mobile' then btrim(coalesce(p->>'mobile', '')) else coalesce(had.mobile, '') end, 40);
+  v_shirt := case when p ? 'tshirt' then btrim(coalesce(p->>'tshirt', '')) else coalesce(had.tshirt, '') end;
+  if v_shirt not in ('', 'XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL') then raise exception 'invalid:tshirt'; end if;
+  select coalesce(email, 'unknown') into who from auth.users where id = auth.uid();
+  if v_new <> v_old and (exists (select 1 from public.vol_people where email = v_new) or exists (select 1 from public.points_ledger where email = v_new) or exists (select 1 from public.vol_signups where email = v_new)) then
+    raise exception 'exists';
+  end if;
+  if not found then
+    insert into public.vol_people (email, full_name, mobile, tshirt) values (v_old, v_name, v_mobile, v_shirt) on conflict (email) do nothing;
+  end if;
+  update public.vol_people set full_name = v_name, mobile = v_mobile, tshirt = v_shirt, updated_at = now() where email = v_old;
+  update public.vol_signups set full_name = v_name, mobile = v_mobile, tshirt = v_shirt where email = v_old;
+  update public.vol_places set person_name = v_name where email = v_old;
+  update public.vol_referees set name = v_name where email = v_old;
+  if v_new <> v_old then
+    update public.vol_people set email = v_new where email = v_old;
+    update public.vol_signups set email = v_new where email = v_old;
+    update public.vol_places set email = v_new where email = v_old;
+    update public.vol_referees set email = v_new where email = v_old;
+    update public.points_ledger set email = v_new where email = v_old;
+    update public.invites set email = v_new where email = v_old and used_at is null;
+    update public.discount_codes set recipient_email = v_new where recipient_email = v_old and points_spent_at is null and active;
+    delete from public.points_login where email = v_old;
+  end if;
+  insert into public.audit_log (actor_id, actor_email, table_name, row_id, action, before, after)
+    values (auth.uid(), coalesce(who, 'system'), 'vol_people', v_old, 'update',
+            jsonb_build_object('email', v_old, 'full_name', coalesce(had.full_name, ''), 'mobile', coalesce(had.mobile, ''), 'tshirt', coalesce(had.tshirt, '')),
+            jsonb_build_object('email', v_new, 'full_name', v_name, 'mobile', v_mobile, 'tshirt', v_shirt));
+  select public.points_balance(v_new) into n_pts;
+  return jsonb_build_object('email', v_new, 'name', v_name, 'balance', n_pts, 'email_changed', v_new <> v_old);
+end $$;
+revoke all on function public.vol_person_update(jsonb) from public, anon;
+grant execute on function public.vol_person_update(jsonb) to authenticated;

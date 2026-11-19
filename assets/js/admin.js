@@ -1408,7 +1408,7 @@
       summary.textContent = withPts.length + (withPts.length === 1 ? " person has" : " people have") + " points, " + total + " points in all." + (soon ? " " + soon + (soon === 1 ? " point expires" : " points expire") + " in the next 60 days." : "");
       tbody.replaceChildren.apply(tbody, list.map(function (r) {
         return el("tr", null, el("th", { scope: "row" }, r.name, el("small", null, r.email)), el("td", null, String(r.balance)), el("td", null, r.expiring ? r.expiring + " by " + when(r.next_expiry) : "–"), el("td", null, String(r.earned)), el("td", null, String(r.spent)),
-          el("td", null, btn("History", function () { showHistory(r); })));
+          el("td", null, el("span", { class: "actions" }, btn("History", function () { showHistory(r); }), btn("Edit", function () { editVolunteer({ email: r.email, name: r.name }, function () { load().then(function () { drawRows(); }); }); }, "btn-ghost", { "aria-label": "Edit " + r.name }))));
       }));
       if (!list.length) tbody.appendChild(el("tr", null, el("td", { colspan: "6" }, el("p", { class: "empty", style: "margin:0" }, "Nobody matches."))));
     }
@@ -1560,6 +1560,29 @@
   // Referees, the technical controller, the session manager and the platform manager are filled in here by the coordinator; volunteers only
   // choose from the roles marked on_form. A place holds a person's name and (if we have it) their email, which is what points will go to.
   var SIZES = ["XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL"];
+  // Edit a volunteer: their name, email, mobile and T-shirt size. A new name shows everywhere; a new email takes their sign-ups, rota places and
+  // points (history included) with it. person = { email, name }; done runs after it is saved.
+  function editVolunteer(person, done) {
+    sb.from("vol_people").select("email,full_name,mobile,tshirt").eq("email", person.email).maybeSingle().then(function (r) {
+      var row = (r && r.data) || {};
+      openForm({ title: "Edit " + (person.name || person.email), saveLabel: "Save changes",
+        intro: "A new name shows on the points list, sign-ups and rota. A new email address keeps their points, sign-ups and rota places, and any unused priority link or discount code moves to it. Each change is recorded with your name.",
+        values: { full_name: row.full_name || person.name || "", email: person.email, mobile: row.mobile || "", tshirt: row.tshirt || "" },
+        fields: [{ name: "full_name", label: "Name", required: true }, { name: "email", label: "Email address", type: "email", required: true, help: "Points are tied to this address, and it is where their emails go." },
+          { name: "mobile", label: "Mobile number (optional)", half: true }, { name: "tshirt", label: "T-shirt size (optional)", type: "select", half: true, options: [{ value: "", label: "Not given" }].concat(SIZES.map(function (z) { return { value: z, label: z }; })) }],
+        validate: function (v) { return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(v.email || "").trim()) ? null : "That email address does not look right."; },
+        onSave: function (v) {
+          return sb.rpc("vol_person_update", { p: { email: person.email, new_email: String(v.email).trim().toLowerCase(), full_name: String(v.full_name).trim(), mobile: String(v.mobile || "").trim(), tshirt: v.tshirt || "" } }).then(function (res) {
+            if (res.error) {
+              var m = String(res.error.message || "");
+              throw new Error(/exists/.test(m) ? "Someone else already has that email address. If it is the same person twice, tell us and we will merge them." : /invalid:name/.test(m) ? "Enter a name." : /invalid:email/.test(m) ? "That email address does not look right." : /forbidden/.test(m) ? "You do not have permission to do that." : friendly(res.error));
+            }
+            toast(res.data && res.data.email_changed ? "Saved. Their points and sign-ups have moved to the new address." : "Saved.");
+            if (done) done();
+          });
+        } });
+    });
+  }
   var REF_LEVELS = [{ value: "ipf_1", label: "IPF Category 1 referee" }, { value: "ipf_2", label: "IPF Category 2 referee" }, { value: "bp_national", label: "British Powerlifting National referee" }, { value: "bp_divisional", label: "British Powerlifting Divisional referee" }, { value: "ynepf_divisional", label: "YNEPF Divisional referee" }];
   function renderVolunteersTab(view, c) {
     view.replaceChildren(el("p", null, "Loading…"));
@@ -1823,7 +1846,14 @@
       var needs = [];
       V.sessions.forEach(function (s) { s.vol_places.forEach(function (p) { if (unavailable(s, p)) needs.push(p.person_name + " (" + s.label + ", " + roleBy(p.role_id).name + ")"); }); });
       var needBox = needs.length ? el("div", { class: "callout", role: "alert" }, el("p", { class: "callout-title" }, needs.length + (needs.length === 1 ? " place needs" : " places need") + " attention"), el("p", { style: "margin:0" }, "These people have changed their answers and are no longer available for the role they were given: " + needs.join("; ") + ". Please choose someone else.")) : null;
+      var peopleBox = V.signups.length ? el("details", { class: "ol-settings", style: "margin:var(--space-3) 0" }, el("summary", null, "Who has signed up (" + V.signups.length + ")"),
+        el("ul", { class: "item-list" }, V.signups.map(function (su) {
+          var n = (su.vol_signup_roles || []).length;
+          return el("li", { class: "item-row" }, el("div", { class: "item-main" }, el("p", { class: "item-title" }, su.full_name), el("p", { class: "item-sub" }, su.email + (su.mobile ? " · " + su.mobile : "") + (su.tshirt ? " · " + su.tshirt : "") + " · " + n + (n === 1 ? " role ticked" : " roles ticked"))),
+            el("span", { class: "actions" }, btn("Edit", function () { editVolunteer({ email: su.email, name: su.full_name }, function () { load().then(draw); }); }, "btn-ghost", { "aria-label": "Edit " + su.full_name })));
+        }))) : null;
       var kids = [el("p", { class: "panel-intro" }, "Open sign-up, choose who does what in each session, and publish the rota. Referees, the technical controller, the session manager and the platform manager are not on the form: you fill those in. On the day, press Arrived beside each name to give them the role\u2019s points. No show, for someone who did not turn up and did not tell us, removes all their points. Told us is for someone who let us know in advance, and costs them nothing."), signupBox];
+      if (peopleBox) kids.push(peopleBox);
       if (needBox) kids.push(needBox);
       V.sessions.forEach(function (s) { kids.push(sessionCard(s)); });
       kids.push(el("div", { class: "actions", style: "margin-top:var(--space-4)" }, btn("Add session", addSession)));
