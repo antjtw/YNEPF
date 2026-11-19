@@ -390,8 +390,8 @@
   }
 
   function compTable(rows, taken) {
-    return el("div", { class: "table-scroll" }, el("table", { class: "admin-table" },
-      el("thead", null, el("tr", null, ["Name", "Date", "Entry", "Actions"].map(function (h) { return el("th", { scope: "col" }, h); }))),
+    return el("div", { class: "table-scroll" }, el("table", { class: "admin-table cal-table" },
+      el("thead", null, el("tr", null, ["Name", "Date", "Entry", "Actions"].map(function (h) { return el("th", { scope: "col", class: h === "Actions" ? "col-actions" : null }, h); }))),
       el("tbody", null, rows.map(function (c) {
         var st = Y.compState(c), online = c.entry_method === "yne";
         var actions = el("span", { class: "actions" }, el("a", { class: "btn btn-ghost btn-sm", href: "#competitions/" + c.id }, "Edit", el("span", { class: "visually-hidden" }, " " + c.name)));
@@ -402,7 +402,7 @@
           el("td", null, c.kind === "event" ? "—" : STATE_LABEL[st],
             Y.entryWindow(c) ? el("small", null, Y.entryWindow(c)) : null,
             online ? el("small", null, taken(c) + " of " + (c.capacity || "?") + " places taken (online entry)") : null),
-          el("td", null, actions));
+          el("td", { class: "col-actions" }, actions));
       }))));
   }
 
@@ -455,6 +455,7 @@
     var controls = {}, editors = [], wrap = el("div"), grid = null, rules = [];
     fields.forEach(function (f) {
       if (f.heading) { grid = null; wrap.appendChild(el("h2", { class: "form-section" }, f.heading)); if (f.note) wrap.appendChild(el("p", { class: "help" }, f.note)); return; }
+      if (f.sub) { grid = null; var subNode = el("h3", { class: "form-sub" }, f.sub); wrap.appendChild(subNode); if (f.show) rules.push({ f: f, node: subNode }); return; }
       var node;
       if (f.info) {
         node = el("p", { class: "help", role: "status" });
@@ -597,13 +598,17 @@
       ], windowFields("open", "opening"), windowFields("close", "closing"), [
         C({ name: "entry_url", label: "Entry link", type: "url", placeholder: "https://…", show: function (v) { return v.method === "link"; }, help: "Goes live on the website when entry opens and is hidden when entry closes." }),
         { heading: "Online entry", note: "Only for entry taken on this website.", show: isOnline },
+        { sub: "Events", show: isOnline },
         E({ name: "ev_full", label: "Offer full power", type: "checkbox", half: true, show: isOnline }),
         E({ name: "ev_bench", label: "Offer bench only", type: "checkbox", half: true, show: isOnline }),
+        { sub: "Equipment", show: isOnline },
         E({ name: "eq_classic", label: "Offer classic", type: "checkbox", half: true, show: isOnline }),
         E({ name: "eq_equipped", label: "Offer equipped", type: "checkbox", half: true, show: isOnline }),
+        { sub: "Prices", show: isOnline },
         E({ name: "p_full", label: "Full power price (£)", type: "number", min: "0", half: true, show: isOnline }),
         E({ name: "p_bench", label: "Bench only price (£)", type: "number", min: "0", half: true, show: isOnline }),
         E({ name: "p_sj", label: "Sub-junior price, any event (£, optional)", type: "number", min: "0", show: isOnline, help: "If set, sub-juniors pay this whatever they lift." }),
+        { sub: "Franchise and qualifying", show: isOnline },
         E({ name: "is_franchise", label: "This is a franchise competition (run by a host)", type: "checkbox", show: isOnline, help: "Tick it when a host runs the competition: they receive the entry fee less the federation's fixed amount for each entry. Leave it unticked for a competition the federation runs itself: the federation keeps the whole entry fee." }),
         E({ name: "qualification", label: "Qualifying standard", type: "select", show: isOnline, options: [
           { value: "none", label: "None: the OpenIPF link is optional" }, { value: "link", label: "OpenIPF link required, nothing checked" },
@@ -612,11 +617,13 @@
         E({ name: "qualification_glp", label: "Minimum GL points", type: "number", min: "1", show: function (v) { return isOnline(v) && v.qualification === "glp"; } }),
         E({ name: "qualifying_totals_text", label: "Qualifying totals", type: "textarea", rows: 8, show: function (v) { return isOnline(v) && v.qualification === "totals"; },
           help: "One per line: M or F, the weight class, then the total in kg. For example M 83: 450 or F 63: 300. Classes you leave out are not checked." }),
+        { sub: "Entry rules", show: isOnline },
         E({ name: "hold_minutes", label: "Minutes a place is held while paying", type: "number", min: "5", show: isOnline, help: "Between 5 and 30. A short hold stops places being parked." }),
+        E({ name: "guest_delay_days", label: "Guests can enter this many days after entry opens", type: "number", min: "0", show: isOnline, help: "A guest is anyone outside the Yorkshire & North East division. Usually 14 (two weeks). They are told the date on the entry form." }),
+        { sub: "Priority and the waiting list", show: isOnline },
         E({ name: "priority_hours", label: "Priority entry starts this many hours before general entry", type: "number", min: "1", show: isOnline, help: "People on the Codes and links priority list are emailed their personal link when this window opens, and can enter from then until general entry opens. 24 is one day." }),
         E({ name: "priority_from_points", label: "Priority links for volunteers", type: "checkbox", show: isOnline, help: "Everyone with at least one volunteer point is emailed a personal priority link when the priority window opens. Using it costs 1 point, taken only once their entry is confirmed. Untick for a competition where volunteers should not get priority." }),
         E({ name: "offer_window_hours", label: "Hours an offered place is held for the waiting list", type: "number", min: "1", show: isOnline, help: "When the competition is full, the waiting list opens by itself. When a place frees up, the person who has waited longest is emailed a personal link and has this long to use it (up to 168 hours). Then it passes to the next person." }),
-        E({ name: "guest_delay_days", label: "Guests can enter this many days after entry opens", type: "number", min: "0", show: isOnline, help: "A guest is anyone outside the Yorkshire & North East division. Usually 14 (two weeks). They are told the date on the entry form." }),
         { heading: "Full, closed and waiting list" },
         C({ name: "entries_full", label: "Entries full", type: "checkbox", show: function (v) { return v.method !== "online"; }, help: "Tick when a competition that is entered somewhere else fills up. Online entry marks itself full when the places run out, and the waiting list opens by itself." }),
         E({ name: "entries_closed_manually", label: "Close entries now", type: "checkbox", show: isOnline, help: "Stops new online entries straight away. Untick to reopen." }),
@@ -1300,7 +1307,7 @@
         el("h4", { class: "lo-sub" }, "OpenLifter"),
         el("p", { class: "help" }, "A CSV to import into OpenLifter."),
         el("div", { class: "actions" }, iconBtn("OpenLifter file", ICON_DOWNLOAD, olFile)),
-        el("details", { class: "ol-settings", style: "margin-top:var(--space-3)" }, el("summary", null, "OpenLifter settings"),
+        el("details", { class: "ol-settings" }, el("summary", null, "OpenLifter settings"),
           el("div", { class: "field" }, el("label", { for: "ol-divisions" }, "Division codes"), el("p", { class: "help", id: "ol-div-help" }, "One per line, the code after the equals sign. Each must match a division set up in the OpenLifter meet exactly, or the import fails."), divText),
           el("div", { class: "field half" }, el("label", { for: "ol-classic" }, "Classic equipment"), classicBox),
           el("div", { class: "field half" }, el("label", { for: "ol-equipped" }, "Equipped equipment"), equippedBox),
@@ -1354,7 +1361,7 @@
       var shareBtn = iconBtn("Share with lifters", ICON_MAIL, share);
       function previewUrl() { return "../lifting/?c=" + encodeURIComponent(c.slug || c.id) + "&preview=1"; }        // the plain address: it does not depend on the /lifting-order rewrite
       var previewLink = el("a", { class: "btn btn-sm btn-ghost", href: previewUrl(), target: "_blank", rel: "noopener" }, "Preview ", el("span", { class: "visually-hidden" }, "(opens in a new tab)"));
-      var sortBtn = btn("Sort the entries", runSort, "btn-primary"), clearBtn = btn("Clear the order", clearOrder, "btn-ghost"), saveBtn = btn("Save", function () { save(saveBtn); }, "btn-secondary");
+      var sortBtn = btn("Sort the entries", runSort, "btn-primary"), clearBtn = btn("Clear the order", clearOrder, "btn-danger"), saveBtn = btn("Save", function () { save(saveBtn); }, "btn-secondary");
       // Lot numbers: again only the buttons that apply. No lots yet: Draw. Drawn: a note, Show lot numbers, Redraw and Remove.
       var lotsBox = el("section", { "aria-labelledby": "lo-lots-h", style: "margin:var(--space-5) 0" });
       function renderLots() {
@@ -1393,7 +1400,7 @@
   function renderPoints(panel) {
     var state = { rows: [], q: "", open: null };
     panel.replaceChildren(panelHead("Volunteer points"), el("p", null, "Loading…"));
-    var tbody = el("tbody"), summary = el("p", { class: "panel-intro" }), history = el("div"), refBox = el("details", { class: "ol-settings", style: "margin-top:var(--space-5)" }), importBox = el("details", { class: "ol-settings", style: "margin-top:var(--space-3)" }), helpersBox = el("details", { class: "ol-settings", style: "margin-top:var(--space-3)" });
+    var tbody = el("tbody"), summary = el("p", { class: "panel-intro" }), history = el("div"), refBox = el("details", { class: "ol-settings" }), importBox = el("details", { class: "ol-settings" }), helpersBox = el("details", { class: "ol-settings" });
     function msg(e) {
       var m = String((e && e.message) || e || "").replace(/^.*?ERROR:\s*/s, "").split("\n")[0].trim();
       return ({ "invalid:name": "That is a new person: add their name too.", "invalid:email": "Check the email address.", "invalid:delta": "Enter a number of points from 1 to 100.", "invalid:reason": "Say what the points are for.", insufficient: "They do not have that many points.", forbidden: "You do not have permission to do that." })[m] || friendly(e);
@@ -1413,24 +1420,28 @@
     function drawRows() {
       var q = state.q.trim().toLowerCase(), list = state.rows.filter(function (r) { return !q || r.name.toLowerCase().indexOf(q) >= 0 || r.email.toLowerCase().indexOf(q) >= 0; });
       var withPts = state.rows.filter(function (r) { return r.balance > 0; }), total = withPts.reduce(function (t, r) { return t + r.balance; }, 0), soon = state.rows.reduce(function (t, r) { return t + (r.expiring || 0); }, 0);
-      summary.textContent = withPts.length + (withPts.length === 1 ? " person has" : " people have") + " points, " + total + " points in all." + (Object.keys(state.committee || {}).length ? " " + Object.keys(state.committee).length + " committee members earn 3 points each at the end of every quarter (next: " + nextQuarterEnd() + ")." : "") + (soon ? " " + soon + (soon === 1 ? " point expires" : " points expire") + " in the next 60 days." : "");
-      tbody.replaceChildren.apply(tbody, list.map(function (r) {
-        return el("tr", null, el("th", { scope: "row" }, r.name, state.committee && state.committee[r.email] ? el("span", { class: "tag tag-position", style: "margin-left:var(--space-2)" }, "Committee") : null, el("small", null, r.email)), el("td", null, String(r.balance)), el("td", null, r.expiring ? r.expiring + " by " + when(r.next_expiry) : "–"), el("td", null, String(r.earned)), el("td", null, String(r.spent)),
-          el("td", null, el("span", { class: "actions" }, btn("History", function () { showHistory(r); }), btn("Edit", function () { editVolunteer({ email: r.email, name: r.name }, function () { load().then(function () { drawRows(); }); }); }, "btn-ghost", { "aria-label": "Edit " + r.name }))));
-      }));
+      summary.textContent = withPts.length + (withPts.length === 1 ? " person has" : " people have") + " points, " + total + " points in all." + (Object.keys(state.committee || {}).length ? " " + (function (n) { return n + (n === 1 ? " committee member earns" : " committee members earn"); })(Object.keys(state.committee).length) + " 3 points at the end of every quarter (next: " + nextQuarterEnd() + ")." : "") + (soon ? " " + soon + (soon === 1 ? " point expires" : " points expire") + " in the next 60 days." : "");
+      var out = [];
+      list.forEach(function (r) {
+        out.push(el("tr", null, el("th", { scope: "row" }, r.name, state.committee && state.committee[r.email] ? el("span", { class: "tag tag-position", style: "margin-left:var(--space-2)" }, "Committee") : null, el("small", null, r.email)), el("td", { class: "num" }, String(r.balance)), el("td", { class: "nowrap" }, r.expiring ? r.expiring + " by " + when(r.next_expiry) : "–"), el("td", { class: "num" }, String(r.earned)), el("td", { class: "num" }, String(r.spent)),
+          el("td", { class: "col-actions" }, el("span", { class: "actions" }, btn("History", function () { showHistory(r); }), btn("Edit", function () { editVolunteer({ email: r.email, name: r.name }, function () { load().then(function () { drawRows(); }); }); }, "btn-ghost", { "aria-label": "Edit " + r.name })))));
+        if (state.hist && state.hist.email === r.email) out.push(el("tr", { class: "row-detail" }, el("td", { colspan: "6" }, el("div", { class: "row-detail-inner" }, state.hist.node))));
+      });
+      tbody.replaceChildren.apply(tbody, out);
       if (!list.length) tbody.appendChild(el("tr", null, el("td", { colspan: "6" }, el("p", { class: "empty", style: "margin:0" }, "Nobody matches."))));
     }
     function showHistory(r) {
       state.open = r.email;
-      history.replaceChildren(el("p", null, "Loading…"));
+      var node = el("div", { "aria-live": "polite" }, el("p", { class: "help" }, "Loading…"));
+      state.hist = { email: r.email, node: node }; drawRows();
       sb.from("points_ledger").select("*").eq("email", r.email).order("earned_at", { ascending: false }).order("id", { ascending: false }).then(ok).then(function (rows) {
-        history.replaceChildren(el("h2", { id: "pts-history-h", tabindex: "-1" }, "History: " + r.name), el("p", { class: "help" }, r.email + ". " + r.balance + " points now."),
+        node.replaceChildren(el("h3", { id: "pts-history-h", tabindex: "-1", style: "margin:0 0 var(--space-1)" }, "History: " + r.name), el("p", { class: "help", style: "margin:0 0 var(--space-3)" }, r.email + ". " + r.balance + " points now."),
           rows.length ? el("div", { class: "table-scroll" }, el("table", { class: "admin-table" },
-            el("thead", null, el("tr", null, ["When", "What", "Points", "By"].map(function (h) { return el("th", { scope: "col" }, h); }))),
-            el("tbody", null, rows.map(function (x) { return el("tr", null, el("td", null, when(x.earned_at)), el("td", null, x.reason), el("td", null, x.delta === 0 ? "–" : (x.delta > 0 ? "+" : "") + x.delta), el("td", null, x.created_by || "")); })))) : el("p", { class: "empty" }, "Nothing yet."),
-          el("p", null, btn("Close", function () { state.open = null; history.replaceChildren(); })));
+            el("thead", null, el("tr", null, ["When", "What", "Points", "By"].map(function (h) { return el("th", { scope: "col", class: h === "Points" ? "num" : null }, h); }))),
+            el("tbody", null, rows.map(function (x) { return el("tr", null, el("td", { class: "nowrap" }, when(x.earned_at)), el("td", null, x.reason), el("td", { class: "num" }, x.delta === 0 ? "–" : (x.delta > 0 ? "+" : "") + x.delta), el("td", null, x.created_by || "")); })))) : el("p", { class: "empty" }, "Nothing yet."),
+          el("p", { style: "margin:var(--space-3) 0 0" }, btn("Close history", function () { state.open = null; state.hist = null; drawRows(); })));
         var h = document.getElementById("pts-history-h"); if (h) { h.scrollIntoView({ block: "nearest" }); h.focus(); }
-      }).catch(function (e) { history.replaceChildren(el("p", { class: "form-error" }, friendly(e))); });
+      }).catch(function (e) { node.replaceChildren(el("p", { class: "form-error" }, friendly(e))); });
     }
     function adjust(sign) {
       var add = sign > 0;
@@ -1558,7 +1569,7 @@
       panel.replaceChildren(panelHead("Volunteer points", el("span", { class: "actions" }, btn("Add points", function () { adjust(1); }, "btn-primary"), btn("Take points away", function () { adjust(-1); }, "btn-ghost"), btn("Add a person", function () { addVolunteer(function () { load().then(function () { drawRows(); }); }); }, "btn-ghost"))),
         summary, el("div", { class: "control-row" }, search),
         el("div", { class: "table-scroll" }, el("table", { class: "admin-table" }, el("caption", { class: "visually-hidden" }, "Volunteer points"),
-          el("thead", null, el("tr", null, ["Name", "Points", "Expiring soon", "Earned", "Spent", ""].map(function (h) { return el("th", { scope: "col" }, h); }))), tbody)),
+          el("thead", null, el("tr", null, ["Name", "Points", "Expiring soon", "Earned", "Spent", ""].map(function (h, i) { return el("th", { scope: "col", class: i === 1 || i === 3 || i === 4 ? "num" : i === 5 ? "col-actions" : null }, h); }))), tbody)),
         history, refBox, importBox, helpersBox);
       drawRows(); drawReferees(); drawImport(); drawHelpers();
     }).catch(function (e) { panel.replaceChildren(panelHead("Volunteer points"), el("p", { class: "form-error" }, friendly(e))); });
@@ -1753,14 +1764,20 @@
       V.roles.forEach(function (r) { if (r.area === s.area && !byRole[r.id] && (r.name !== "Jury" || s.jury)) { byRole[r.id] = []; order.push(r.id); } });
       order.sort(function (a, b) { return roleBy(a).sort_order - roleBy(b).sort_order; });
       var filled = s.vol_places.filter(function (p) { return p.person_name; }).length;
-      var card = el("section", { class: "card", "aria-label": s.label },
+      var card = el("section", { class: "card rota-session", "aria-label": s.label },
         el("div", { class: "card-head" }, el("div", null, el("h2", null, s.label + (s.jury ? " (with a jury)" : "")), el("p", null, (s.when_text ? s.when_text + " · " : "") + filled + " of " + s.vol_places.length + " places filled")),
-          el("span", { class: "actions" }, btn("Edit session", function () { editSession(s); }))));
+          el("span", { class: "actions" }, btn("Edit session", function () { editSession(s); }, "btn-secondary"))));
+      var roles = el("div", { class: "rota-roles" }), empty = [];
       order.forEach(function (rid) {
         var r = roleBy(rid), places = byRole[rid];
-        card.appendChild(el("div", { style: "margin:var(--space-3) 0" }, el("div", { class: "lab-headrow" }, el("h3", { style: "font-size:1rem;margin:0" }, r.name + (r.on_form ? "" : " (you choose)"), places.length ? null : el("span", { class: "help", style: "font-weight:400;margin-left:var(--space-2)" }, "No places yet")), el("span", { class: "lab-headacts" }, btn("Add place", function () { addPlace(s, rid, places); }))),
-          places.length ? el("ul", { class: "item-list" }, places.map(function (p) { return placeRow(s, p, taken); })) : null));
+        if (!places.length) { empty.push(rid); return; }          // roles with nobody yet are one compact line below, not a row each
+        roles.appendChild(el("div", { class: "rota-role" }, el("div", { class: "rota-role-head" }, el("h3", { class: "rota-role-name" }, r.name, r.on_form ? null : el("small", null, "you choose")),
+          btn("Add place", function () { addPlace(s, rid, places); }, "btn-ghost btn-sm", { "aria-label": "Add a " + r.name + " place" })),
+          el("ul", { class: "rota-people" }, places.map(function (p) { return placeRow(s, p, taken); }))));
       });
+      if (roles.children.length) card.appendChild(roles);
+      if (empty.length) card.appendChild(el("div", { class: "rota-empty-roles" }, el("p", null, roles.children.length ? "Roles with nobody yet. Add a place for:" : "Nobody is placed yet. Add a place for:"),
+        el("div", { class: "chip-row" }, empty.map(function (rid) { var r = roleBy(rid); return el("button", { type: "button", class: "chip", "aria-label": "Add a " + r.name + " place", onclick: function () { addPlace(s, rid, []); } }, "+ " + r.name); }))));
       return card;
     }
     // one place: a dropdown while it is empty or being edited; once someone is in it, their name with the on-the-day buttons beside it
@@ -1768,18 +1785,18 @@
     var DAY_TAG = { arrived: ["Arrived", "tag tag-open"], no_show: ["No show", "tag tag-full"], cancelled: ["Told us in advance", "tag tag-position"] };
     function placeRow(s, p, taken) {
       var gone = unavailable(s, p), r = roleBy(p.role_id), st = DAY_TAG[p.status], filled = !!p.person_name, edit = !filled || editing[p.id];
-      var notes = [gone ? el("p", { class: "form-error", role: "alert", style: "margin:var(--space-1) 0 0" }, p.person_name + " is no longer available for this role. Please amend this.") : null,
-        p.email && taken[p.email] > 1 ? el("p", { class: "form-error", style: "margin:var(--space-1) 0 0" }, p.person_name + " is in more than one place in this session.") : null];
+      var notes = [gone ? el("p", { class: "rota-warn", role: "alert" }, p.person_name + " is no longer available for this role. Please amend this.") : null,
+        p.email && taken[p.email] > 1 ? el("p", { class: "rota-warn" }, p.person_name + " is in more than one place in this session.") : null];
       var main, acts = [];
       if (edit) {
         var sel = personSelect(s, p); sel.classList.add("control");
         if (gone) { sel.setAttribute("aria-invalid", "true"); sel.style.borderColor = "var(--error-border, #b91c1c)"; sel.style.borderWidth = "3px"; }
         main = el("div", { class: "item-main" }, sel, notes);
         if (filled) acts.push(btn("Done", function () { delete editing[p.id]; draw(); }, "btn-secondary", { "aria-label": "Done editing " + p.person_name }));
-        acts.push(btn("Remove place", function () { removePlace(s, p); }, "btn-ghost"));
+        acts.push(btn("Remove place", function () { removePlace(s, p); }, "btn-ghost", { "aria-label": "Remove " + r.name + " place " + p.position }));
       } else {
         main = el("div", { class: "item-main" }, el("p", { class: "item-title" }, p.person_name, st ? el("span", { class: st[1], style: "margin-left:var(--space-2)" }, st[0]) : null),
-          el("p", { class: "item-sub" }, [p.level, p.email ? "" : "No email, so no points"].filter(Boolean).join(". ")), notes);
+          [p.level, p.email ? "" : "No email, so no points"].filter(Boolean).length ? el("p", { class: "item-sub" }, [p.level, p.email ? "" : "No email, so no points"].filter(Boolean).join(". ")) : null, notes);
         if (st) acts.push(btn("Undo", function () { mark(p, "planned"); }, "btn-ghost", { "aria-label": "Undo for " + p.person_name }));
         else {
           acts.push(btn("Arrived", function () { mark(p, "arrived"); }, "btn-secondary", { "aria-label": "Arrived: " + p.person_name }),
@@ -1789,7 +1806,7 @@
         }
         acts.push(btn("Remove place", function () { removePlace(s, p); }, "btn-danger", { "aria-label": "Remove " + r.name + " place for " + p.person_name }));
       }
-      return el("li", { class: "item-row" }, main, el("span", { class: "actions" }, acts));
+      return el("li", { class: "rota-place" + (gone ? " is-warn" : "") }, main, el("div", { class: "rota-actions" }, acts));
     }
     function addPlace(s, rid, places) {
       var next = places.reduce(function (m, p) { return Math.max(m, p.position); }, 0) + 1;
@@ -1855,38 +1872,51 @@
       }).catch(function (e) { toast(friendly(e), "error"); });
     }
     function draw() {
-      var closesAt = V.rota.signup_closes_at ? new Date(V.rota.signup_closes_at) : null, lapsed = !!(closesAt && closesAt <= new Date()), open = !!V.rota.signup_open && !lapsed, published = V.rota.status === "published", people = V.signups.length + (V.signups.length === 1 ? " person has" : " people have") + " signed up so far.";
+      var closesAt = V.rota.signup_closes_at ? new Date(V.rota.signup_closes_at) : null, lapsed = !!(closesAt && closesAt <= new Date()), open = !!V.rota.signup_open && !lapsed, published = V.rota.status === "published";
+      var people = V.signups.length + (V.signups.length === 1 ? " person has" : " people have") + " signed up so far.";
+      function stamp(d) { return d.toLocaleString("en-GB", { timeZone: Y.TZ, dateStyle: "medium", timeStyle: "short" }); }
       var shirts = el("input", { type: "checkbox", id: "vol-shirts" }); shirts.checked = !!V.rota.offer_tshirts; shirts.addEventListener("change", function () { setRota({ offer_tshirts: shirts.checked }); });
-      var signupBox = el("section", { "aria-labelledby": "vol-signup-h", style: "margin:var(--space-4) 0" }, el("h3", { id: "vol-signup-h" }, "Sign-up"),
-        el("p", { class: "help", role: "status" }, (open ? "Sign-up is open. Anyone with the link can sign up" + (closesAt ? " until " + closesAt.toLocaleString("en-GB", { timeZone: Y.TZ, dateStyle: "medium", timeStyle: "short" }) : "") + ". It shows on the calendar as a Volunteer button. " : lapsed && V.rota.signup_open ? "Sign-up closed by itself on " + closesAt.toLocaleString("en-GB", { timeZone: Y.TZ, dateStyle: "medium", timeStyle: "short" }) + ". " : "Sign-up is closed. Open it when you are ready, usually a couple of weeks after entry opens. ") + people),
-        el("p", { class: "help" }, "The link to share: ", el("code", null, formUrl())),
-        el("div", { class: "actions" }, open ? btn("Close sign-up", function () { setRota({ signup_open: false }, "Sign-up closed."); }, "btn-ghost") : el("button", { type: "button", class: "btn btn-primary", onclick: function () { if (!V.sessions.length) return toast("Add a session first.", "error"); setRota(lapsed ? { signup_open: true, signup_closes_at: null } : { signup_open: true }, "Sign-up is open."); } }, "Open sign-up"),
-          btn("Copy the link", function () { copyText(formUrl()); }, "btn-ghost"), V.signups.length ? btn("Download sign-ups (CSV)", downloadSignups, "btn-ghost") : null),
-        (function () {
-          var when = el("input", { type: "datetime-local", id: "vol-closes", value: Y.toLondonInput(V.rota.signup_closes_at) });
-          when.addEventListener("change", function () { setRota({ signup_closes_at: Y.fromLondonInput(when.value) }, when.value ? "Sign-up will close then." : "Sign-up will stay open until you close it."); });
-          return el("div", { class: "field", style: "margin-top:var(--space-3);max-width:22rem" }, el("label", { for: "vol-closes" }, "Close sign-up automatically (optional)"), el("p", { class: "help", id: "vol-closes-help" }, "UK time. Leave empty to close it yourself."), when);
-        })(),
-        el("div", { class: "field field-check", style: "margin-top:var(--space-3)" }, shirts, el("div", null, el("label", { for: "vol-shirts" }, "Ask for a T-shirt size"), el("p", { class: "help" }, "Unisex sizes XS to 5XL. Turn it off for competitions where we are not providing T-shirts."))));
-      var shareBox = el("section", { "aria-labelledby": "vol-pub-h", style: "margin:var(--space-5) 0" }, el("h3", { id: "vol-pub-h" }, "Publishing"),
-        el("p", { class: "help", id: "vol-pub-note", role: "status" }, published ? "The rota is published: anyone can see who is helping, by name and role. Changes show straight away." : "The rota is not published. Publishing puts names and roles on a public page (no emails or mobile numbers). Preview shows it to the entries team first."),
-        el("div", { class: "actions" }, published ? btn("Unpublish", function () { setRota({ status: "draft", published_at: null }, "Rota unpublished."); }, "btn-ghost") : el("button", { type: "button", class: "btn btn-primary", onclick: function () { setRota({ status: "published", published_at: new Date().toISOString() }, "Rota published."); } }, "Publish"),
-          el("a", { class: "btn btn-sm btn-ghost", href: rotaUrl(true), target: "_blank", rel: "noopener" }, "Preview ", el("span", { class: "visually-hidden" }, "(opens in a new tab)")),
+      var when = el("input", { type: "datetime-local", id: "vol-closes", value: Y.toLondonInput(V.rota.signup_closes_at) });
+      when.addEventListener("change", function () { setRota({ signup_closes_at: Y.fromLondonInput(when.value) }, when.value ? "Sign-up will close then." : "Sign-up will stay open until you close it."); });
+      var link = el("input", { type: "text", readonly: "", value: formUrl(), "aria-label": "The sign-up link to share", onfocus: function (ev) { ev.target.select(); } });
+      // The status of both halves, at a glance, under the heading.
+      var statusRow = el("p", { class: "status-row", role: "status" }, el("span", null, "Sign-up", el("span", { class: "tag " + (open ? "tag-open" : "tag-closed") }, open ? "Open" : "Closed")), el("span", null, "Rota", el("span", { class: "tag " + (published ? "tag-open" : "tag-position") }, published ? "Published" : "Draft")), el("span", null, people));
+      var signupBox = el("section", { class: "card vol-card", "aria-labelledby": "vol-signup-h" },
+        el("div", { class: "vol-card-head" }, el("h3", { id: "vol-signup-h" }, "Sign-up"),
+          open ? btn("Close sign-up", function () { setRota({ signup_open: false }, "Sign-up closed."); }, "btn-secondary") : el("button", { type: "button", class: "btn btn-sm btn-primary", onclick: function () { if (!V.sessions.length) return toast("Add a session first.", "error"); setRota(lapsed ? { signup_open: true, signup_closes_at: null } : { signup_open: true }, "Sign-up is open."); } }, "Open sign-up")),
+        el("p", { class: "help", id: "vol-signup-note" }, (open ? "Sign-up is open. Anyone with the link can sign up" + (closesAt ? " until " + stamp(closesAt) : "") + ". It shows on the calendar as a Volunteer button." : lapsed && V.rota.signup_open ? "Sign-up closed by itself on " + stamp(closesAt) + "." : "Sign-up is closed. Open it when you are ready, usually a couple of weeks after entry opens.")),
+        el("div", { class: "copy-row" }, link, btn("Copy the link", function () { copyText(formUrl()); }, "btn-secondary"), V.signups.length ? btn("Download sign-ups (CSV)", downloadSignups, "btn-ghost") : null),
+        el("hr"),
+        el("div", { class: "vol-settings" },
+          el("div", { class: "field", style: "max-width:22rem;margin:0" }, el("label", { for: "vol-closes" }, "Close sign-up automatically (optional)"), el("p", { class: "help", id: "vol-closes-help" }, "UK time. Leave empty to close it yourself."), when),
+          el("div", { class: "field field-check", style: "margin:0" }, shirts, el("div", null, el("label", { for: "vol-shirts" }, "Ask for a T-shirt size"), el("p", { class: "help" }, "Unisex sizes XS to 5XL. Turn it off for competitions where we are not providing T-shirts.")))));
+      var shareBox = el("section", { class: "card vol-card", "aria-labelledby": "vol-pub-h" },
+        el("div", { class: "vol-card-head" }, el("h3", { id: "vol-pub-h" }, "Publishing"), published ? btn("Unpublish", function () { setRota({ status: "draft", published_at: null }, "Rota unpublished."); }, "btn-secondary") : el("button", { type: "button", class: "btn btn-sm btn-primary", onclick: function () { setRota({ status: "published", published_at: new Date().toISOString() }, "Rota published."); } }, "Publish")),
+        el("p", { class: "help", id: "vol-pub-note" }, published ? "The rota is published: anyone can see who is helping, by name and role. Changes show straight away." : "The rota is not published. Publishing puts names and roles on a public page (no emails or mobile numbers). Preview shows it to the entries team first."),
+        el("div", { class: "actions" }, el("a", { class: "btn btn-sm btn-ghost", href: rotaUrl(true), target: "_blank", rel: "noopener" }, "Preview ", el("span", { class: "visually-hidden" }, "(opens in a new tab)")),
           published ? btn("Copy the rota link", function () { copyText(rotaUrl(false)); }, "btn-ghost") : null));
       var needs = [];
       V.sessions.forEach(function (s) { s.vol_places.forEach(function (p) { if (unavailable(s, p)) needs.push(p.person_name + " (" + s.label + ", " + roleBy(p.role_id).name + ")"); }); });
-      var needBox = needs.length ? el("div", { class: "callout", role: "alert" }, el("p", { class: "callout-title" }, needs.length + (needs.length === 1 ? " place needs" : " places need") + " attention"), el("p", { style: "margin:0" }, "These people have changed their answers and are no longer available for the role they were given: " + needs.join("; ") + ". Please choose someone else.")) : null;
-      var peopleBox = V.signups.length ? el("details", { class: "ol-settings", style: "margin:var(--space-3) 0" }, el("summary", null, "Who has signed up (" + V.signups.length + ")"),
+      var needBox = needs.length ? el("div", { class: "callout", role: "alert" }, el("p", { class: "callout-title" }, needs.length + (needs.length === 1 ? " place needs" : " places need") + " attention"), el("p", { style: "margin:0" }, "Changed their answers and no longer available for the role they were given: " + needs.join("; ") + ".")) : null;
+      var peopleBox = V.signups.length ? el("details", { class: "ol-settings" }, el("summary", null, "Who has signed up (" + V.signups.length + ")"),
         el("ul", { class: "item-list" }, V.signups.map(function (su) {
           var n = (su.vol_signup_roles || []).length;
           return el("li", { class: "item-row" }, el("div", { class: "item-main" }, el("p", { class: "item-title" }, su.full_name), el("p", { class: "item-sub" }, su.email + (su.mobile ? " · " + su.mobile : "") + (su.tshirt ? " · " + su.tshirt : "") + " · " + n + (n === 1 ? " role ticked" : " roles ticked"))),
             el("span", { class: "actions" }, btn("Edit", function () { editVolunteer({ email: su.email, name: su.full_name }, function () { load().then(draw); }); }, "btn-ghost", { "aria-label": "Edit " + su.full_name })));
         }))) : null;
-      var kids = [el("p", { class: "panel-intro" }, "Open sign-up, choose who does what in each session, and publish the rota. Referees, the technical controller, the session manager and the platform manager are not on the form: you fill those in. On the day, press Arrived beside each name to give them the role\u2019s points. No show, for someone who did not turn up and did not tell us, removes all their points. Told us is for someone who let us know in advance, and costs them nothing."), signupBox];
+      var dayBox = el("details", { class: "ol-settings" }, el("summary", null, "How the day works"),
+        el("div", { class: "stack" },
+          el("p", null, "Press ", el("strong", null, "Arrived"), " beside a name to give them the role’s points straight away."),
+          el("p", null, el("strong", null, "No show"), " is for someone who did not turn up and did not tell us. It removes all their points."),
+          el("p", null, el("strong", null, "Told us"), " is for someone who let us know in advance. It costs them nothing."),
+          el("p", null, "Referees, the technical controller, the session manager and the platform manager are not on the sign-up form: you fill those in.")));
+      var kids = [statusRow, el("p", { class: "panel-intro" }, "Open sign-up, choose who does what in each session, and publish the rota."), signupBox];
       if (peopleBox) kids.push(peopleBox);
+      kids.push(dayBox);
       if (needBox) kids.push(needBox);
+      kids.push(el("div", { class: "section-head" }, el("h2", null, "Sessions"), btn("Add session", addSession, "btn-secondary")));
       V.sessions.forEach(function (s) { kids.push(sessionCard(s)); });
-      kids.push(el("div", { class: "actions", style: "margin-top:var(--space-4)" }, btn("Add session", addSession)));
+      if (!V.sessions.length) kids.push(el("div", { class: "empty-state" }, el("p", null, "No sessions yet. Add a session to start building the rota.")));
       kids.push(shareBox);
       view.replaceChildren.apply(view, kids);
     }
@@ -1955,18 +1985,18 @@
       var taken = (res[1].error ? [] : res[1].data || []).filter(function (x) { var e = x.entries; return e && (e.status === "paid" || e.status === "comped" || (e.status === "held" && new Date(e.hold_expires_at) > now)); });
       function count(id) { return taken.filter(function (x) { return x.addon_id === id; }).reduce(function (n, x) { return n + x.quantity; }, 0); }
       view.replaceChildren(
-        el("div", { class: "actions", style: "margin-bottom:var(--space-3)" }, btn("Add an extra", function () { editExtra(c, null, function () { renderExtrasTab(view, c); }); }, "btn-primary")),
+        el("div", { class: "section-head is-first" }, el("h2", null, "Extras"), btn("Add an extra", function () { editExtra(c, null, function () { renderExtrasTab(view, c); }); }, "btn-primary")),
         el("p", { class: "panel-intro" }, "Extras are offered on the entry form, after the lifting questions, and added to what the lifter pays. Discount codes take money off the entry only, never the extras. A photo package is paid to the photographer you name on the Money tab, merchandise is shared with the host by the percentage you set there, and anything marked as paid to the federation is kept by the federation."),
         items.length ? el("div", { class: "table-scroll" }, el("table", { class: "admin-table" },
-          el("thead", null, el("tr", null, ["Extra", "Type", "Price", "Taken", "Actions"].map(function (h) { return el("th", { scope: "col" }, h); }))),
+          el("thead", null, el("tr", null, ["Extra", "Type", "Price", "Taken", "Actions"].map(function (h) { return el("th", { scope: "col", class: h === "Price" || h === "Taken" ? "num" : h === "Actions" ? "col-actions" : null }, h); }))),
           el("tbody", null, items.map(function (x) {
             var sizes = (x.addon_options || []).slice().sort(function (p, q) { return p.sort_order - q.sort_order; }).map(function (o) { return o.label; });
             var n = count(x.id);
             return el("tr", null,
               el("th", { scope: "row" }, x.name, el("small", null, [x.description, sizes.length && "Sizes: " + sizes.join(", ")].filter(Boolean).join(" · "))),
-              el("td", null, EXTRA_KINDS[x.kind] || x.kind), el("td", null, money(x.price_pence)),
-              el("td", null, n + (x.stock === null ? "" : " of " + x.stock)),
-              el("td", null, el("span", { class: "actions" },
+              el("td", null, EXTRA_KINDS[x.kind] || x.kind), el("td", { class: "num" }, money(x.price_pence)),
+              el("td", { class: "num" }, n + (x.stock === null ? "" : " of " + x.stock)),
+              el("td", { class: "col-actions" }, el("span", { class: "actions" },
                 btn("Edit", function () { editExtra(c, x, function () { renderExtrasTab(view, c); }); }),
                 n === 0 ? btn("Delete", function () { if (!window.confirm("Delete " + x.name + "?")) return; sb.from("addons").delete().eq("id", x.id).then(ok).then(function () { toast("Deleted."); renderExtrasTab(view, c); }).catch(function (e) { toast(friendly(e), "error"); }); }, "btn-danger") : null)));
           })))) : el("p", { class: "empty" }, "No extras yet. Add the photo package, or anything else you sell with entries."));
@@ -2044,13 +2074,13 @@
         el("h2", null, "Money to send"),
         el("p", { class: "panel-intro" }, "Taken so far: " + money(gross) + ". Stripe fees: " + money(fees) + ". To send to others: " + money(toSend) + ". The federation's share after fees: " + money(fed.reduce(function (n, r) { return n + r.net_pence; }, 0)) + ". Figures update as entries come in."),
         rows.length ? el("div", { class: "table-scroll" }, el("table", { class: "admin-table" },
-          el("thead", null, el("tr", null, ["Who", "Entry money", "Merchandise", "Photos", "Share", "Stripe fees", "To send", "Sent", "Still to send"].map(function (h) { return el("th", { scope: "col" }, h); }))),
+          el("thead", null, el("tr", null, ["Who", "Entry money", "Merchandise", "Photos", "Share", "Stripe fees", "To send", "Sent", "Still to send"].map(function (h, i) { return el("th", { scope: "col", class: i ? "num" : null }, h); }))),
           el("tbody", null, rows.map(function (r) {
             var isFed = r.payee_kind === "federation", got = sentTo(r);
             return el("tr", null, el("th", { scope: "row" }, r.payee_name, el("small", null, isFed ? "Federation" : r.payee_kind === "host" ? "Host" : "Photographer")),
-              el("td", null, money(r.entry_pence)), el("td", null, money(r.merch_pence)), el("td", null, money(r.photo_pence)), el("td", null, money(r.gross_pence)),
-              el("td", null, r.fee_pence ? "−" + money(r.fee_pence) : money(0)), el("td", null, el("strong", null, money(r.net_pence))),
-              el("td", null, isFed ? "Keeps" : money(got)), el("td", null, isFed ? "" : el("strong", null, money(Math.max(r.net_pence - got, 0)))));
+              el("td", { class: "num" }, money(r.entry_pence)), el("td", { class: "num" }, money(r.merch_pence)), el("td", { class: "num" }, money(r.photo_pence)), el("td", { class: "num" }, money(r.gross_pence)),
+              el("td", { class: "num" }, r.fee_pence ? "−" + money(r.fee_pence) : money(0)), el("td", { class: "num" }, el("strong", null, money(r.net_pence))),
+              el("td", { class: "num" }, isFed ? "Keeps" : money(got)), el("td", { class: "num" }, isFed ? "" : el("strong", null, money(Math.max(r.net_pence - got, 0)))));
           }))) ) : el("p", { class: "empty" }, "Nothing to show yet: set who gets paid, and the figures appear once there are entries."),
         sent.length ? el("div", null, el("h2", null, "Payments sent"), el("ul", { class: "history-list" }, sent.map(function (s) {
           return el("li", null, el("strong", null, money(s.amount_pence)), " to " + (s.payees ? s.payees.name : "?") + " · " + s.paid_on + (s.reference ? " · " + s.reference : "") + (s.created_by ? " · " + s.created_by : ""));
@@ -2175,7 +2205,7 @@
           var byId = {}; codes.forEach(function (d) { byId[d.id] = d; });
           var rows = used.filter(function (e) { return byId[e.discount_code_id] && !(e.status === "held" && new Date(e.hold_expires_at) <= now); });
           var label = { paid: "Paid", comped: "Free entry", held: "Paying now", cancelled: "Cancelled", refunded: "Refunded" };
-          return el("div", { style: "margin-top:var(--space-6)" }, el("h2", null, "Who has used a code"),
+          return el("div", null, el("div", { class: "section-head" }, el("h2", null, "Who has used a code")),
             el("p", { class: "panel-intro" }, "Every entry that used a code, newest first. The competitions inbox also gets an email each time a code is used."),
             rows.length ? el("div", { class: "table-scroll" }, el("table", { class: "admin-table" },
               el("thead", null, el("tr", null, ["When", "Code", "Used by", "Discount", "Entry"].map(function (h) { return el("th", { scope: "col" }, h); }))),
@@ -2185,7 +2215,7 @@
                   el("th", { scope: "row" }, e.full_name, el("small", null, e.email)),
                   el("td", null, e.discount_pence ? entryMoney(e.discount_pence) + " off" + (e.price_pence ? ", paid " + entryMoney(e.price_pence) : ", free") : "–"),
                   el("td", null, label[e.status] || e.status));
-              })))) : el("p", { class: "empty" }, "No code has been used yet."));
+              })))) : el("div", { class: "empty-state" }, el("p", null, "No code has been used yet.")));
         }
         function state(d) {
           if (!d.active) return ["Switched off", "tag tag-full"];
@@ -2194,20 +2224,19 @@
           return ["Live", "tag tag-open"];
         }
         view.replaceChildren(
-          el("h2", { style: "margin-top:0" }, "Discount codes"),
-          el("div", { class: "actions", style: "margin-bottom:var(--space-3)" }, btn("Make a discount code", function () { makeDiscount(c, function () { renderDiscountsTab(view, c); }); }, "btn-primary")),
+          el("div", { class: "section-head is-first" }, el("h2", null, "Discount codes"), btn("Make a discount code", function () { makeDiscount(c, function () { renderDiscountsTab(view, c); }); }, "btn-primary")),
           el("p", { class: "panel-intro" }, "Give someone a code and they enter it on the last step of the entry form. A code can take pounds or a percentage off, and one that takes everything off makes the entry free. Tie a code to someone's email address and only they can use it."),
           codes.length ? el("div", { class: "table-scroll" }, el("table", { class: "admin-table" },
-            el("thead", null, el("tr", null, ["Code", "Discount", "Used", "Valid until", "Status", "Actions"].map(function (h) { return el("th", { scope: "col" }, h); }))),
+            el("thead", null, el("tr", null, ["Code", "Discount", "Used", "Valid until", "Status", "Actions"].map(function (h) { return el("th", { scope: "col", class: h === "Actions" ? "col-actions" : h === "Valid until" || h === "Used" || h === "Discount" ? "nowrap" : null }, h); }))),
             el("tbody", null, codes.map(function (d) {
               var st = state(d), n = uses(d);
               return el("tr", null,
                 el("th", { scope: "row" }, el("code", { class: "code-text" }, d.code),
                   el("small", null, [d.recipient_name, d.recipient_email && "only " + d.recipient_email, d.competition_id === null && "any competition", d.reason, d.points_cost > 0 && d.active && !d.points_spent_at ? "holding " + d.points_cost + " points until used (Delete gives them back)" : d.points_cost > 0 && d.points_spent_at ? d.points_cost + " points spent" : ""].filter(Boolean).join(" · "))),
-                el("td", null, discountWords(d)), el("td", null, n + " of " + d.max_uses),
-                el("td", null, d.expires_at ? new Date(d.expires_at).toLocaleDateString("en-GB", { timeZone: Y.TZ, dateStyle: "medium" }) : "No end date"),
+                el("td", { class: "nowrap" }, discountWords(d)), el("td", { class: "nowrap" }, n + " of " + d.max_uses),
+                el("td", { class: "nowrap" }, d.expires_at ? new Date(d.expires_at).toLocaleDateString("en-GB", { timeZone: Y.TZ, dateStyle: "medium" }) : "No end date"),
                 el("td", null, el("span", { class: st[1] }, st[0])),
-                el("td", null, el("span", { class: "actions" },
+                el("td", { class: "col-actions" }, el("span", { class: "actions" },
                   btn("Copy", function () { copyText(d.code); }),
                   everUsed(d) && !d.active ? null : btn("Delete", function () {
                     var kept = everUsed(d);
@@ -2215,7 +2244,7 @@
                     (kept ? sb.from("discount_codes").update({ active: false }).eq("id", d.id) : sb.from("discount_codes").delete().eq("id", d.id)).then(ok)
                       .then(function () { toast(kept ? "Switched off." : "Deleted."); renderDiscountsTab(view, c); }).catch(function (er) { toast(friendly(er), "error"); });
                   }, "btn-danger"))));
-            })))) : el("p", { class: "empty" }, "No discount codes yet."),
+            })))) : el("div", { class: "empty-state" }, el("p", null, "No discount codes yet.")),
           redemptions(),
           c.entry_method === "yne" ? prioritySection(c) : null);
       });
@@ -2479,7 +2508,7 @@
       .catch(function (e) { toast(friendly(e), "error"); });
   }
   function prioritySection(c) {
-    var box = el("div", { style: "margin-top:var(--space-6)" });
+    var box = el("div");
     function load() {
       box.replaceChildren(el("h2", null, "Priority entry"), el("p", null, "Loading…"));
       Promise.all([
@@ -2490,24 +2519,23 @@
         var start = c.entry_opens ? new Date(new Date(c.entry_opens).getTime() - hours * 3600 * 1000) : null;
         var waiting = rows.filter(function (r) { return !r.used_at && !r.sent_at; });
         function stamp(d) { return new Date(d).toLocaleString("en-GB", { timeZone: Y.TZ, dateStyle: "medium", timeStyle: "short" }); }
-        box.replaceChildren(el("h2", null, "Priority entry"),
+        box.replaceChildren(el("div", { class: "section-head" }, el("h2", null, "Priority entry"), btn("Add people", function () { addPriority(c, next); }, "btn-primary")),
           el("p", { class: "panel-intro" }, start
             ? "Everyone on this list is emailed their personal link automatically on " + stamp(start) + ", " + hours + " hours before general entry opens. They can enter from then. Volunteers with points are added automatically at that moment, and the point is only taken once their entry is confirmed."
             : "Set when entry opens on the Details tab first. Links are emailed automatically " + hours + " hours before it."),
           el("div", { class: "actions", style: "margin-bottom:var(--space-3)" },
-            btn("Add people", function () { addPriority(c, next); }, "btn-primary"),
             waiting.length ? btn("Send to everyone waiting now", function () { if (!window.confirm("Email the link now to the " + waiting.length + (waiting.length === 1 ? " person" : " people") + " still waiting?")) return; sendPriority(c, null, next); }, "btn-secondary") : null),
           rows.length ? el("div", { class: "table-scroll" }, el("table", { class: "admin-table" },
-            el("thead", null, el("tr", null, ["Name", "Email", "Link sent", "Used", "Status", "Actions"].map(function (h) { return el("th", { scope: "col" }, h); }))),
+            el("thead", null, el("tr", null, ["Name", "Email", "Link sent", "Used", "Status", "Actions"].map(function (h) { return el("th", { scope: "col", class: h === "Actions" ? "col-actions" : null }, h); }))),
             el("tbody", null, rows.map(function (r) {
               var st = r.used_at ? ["Entered with their link", "tag tag-open"] : r.sent_at ? ["Link sent", "tag tag-position"] : [start && start <= new Date() ? "Sending shortly" : "Will be sent automatically", "tag tag-closed"];
               var en = Array.isArray(r.entries) ? r.entries[0] : r.entries;
-              return el("tr", null, el("th", { scope: "row" }, r.full_name || "—", r.from_points ? el("small", null, "Volunteer points (1 point when they enter)") : null), el("td", null, r.email), el("td", null, r.sent_at ? stamp(r.sent_at) : "Not yet"),
-                el("td", null, r.used_at ? stamp(r.used_at) + (en ? " as " + en.full_name : "") : "Not yet"), el("td", null, el("span", { class: st[1] }, st[0])),
-                el("td", null, r.used_at ? "" : el("span", { class: "actions" },
+              return el("tr", null, el("th", { scope: "row" }, r.full_name || "—", r.from_points ? el("small", null, "Volunteer points (1 point when they enter)") : null), el("td", null, r.email), el("td", { class: "nowrap" }, r.sent_at ? stamp(r.sent_at) : "Not yet"),
+                el("td", { class: r.used_at ? null : "nowrap" }, r.used_at ? stamp(r.used_at) + (en ? " as " + en.full_name : "") : "Not yet"), el("td", null, el("span", { class: st[1] }, st[0])),
+                el("td", { class: "col-actions" }, r.used_at ? "" : el("span", { class: "actions" },
                   btn(r.sent_at ? "Send again" : "Send now", function () { sendPriority(c, r.id, next); }),
                   btn("Remove", function () { if (!window.confirm("Remove " + (r.full_name || r.email) + " from the list?" + (r.sent_at ? " Their link will stop working." : ""))) return; sb.from("invites").delete().eq("id", r.id).then(ok).then(next).catch(function (e) { toast(friendly(e), "error"); }); }, "btn-danger"))));
-            })))) : el("p", { class: "empty" }, "Nobody on the priority list yet."));
+            })))) : el("div", { class: "empty-state" }, el("p", null, "Nobody on the priority list yet.")));
       }).catch(function (e) { box.replaceChildren(el("h2", null, "Priority entry"), el("p", { class: "form-error" }, friendly(e))); });
     }
     load();
@@ -3126,7 +3154,7 @@
       var hero = cur("hero");
       panel.appendChild(homeCard("Headline and buttons",
         [homeLine("Headline", hero.title), homeLine("Button 1", hero.primaryLabel + "  (" + hero.primaryUrl + ")"), homeLine("Button 2", hero.secondaryLabel + "  (" + hero.secondaryUrl + ")")],
-        [btn("Edit", function () { editHomeHero(hero); }, "btn-primary"), resetBtn("hero", "wording")]));
+        [btn("Edit", function () { editHomeHero(hero); }, "btn-secondary"), resetBtn("hero", "wording")]));
 
       // ---- hero photos
       panel.appendChild(heroPhotosCard(both[1]));
@@ -3135,13 +3163,13 @@
       var ev = cur("events");
       panel.appendChild(homeCard("Upcoming events",
         [homeLine("Heading", ev.heading), homeLine("Button", ev.buttonLabel), el("p", { class: "help" }, "The events themselves come from the Calendar tab.")],
-        [btn("Edit", function () { editHomeSimple("events", "Upcoming events", ev, [{ name: "heading", label: "Heading", required: true }, { name: "buttonLabel", label: "Button text", required: true }]); }, "btn-primary"), resetBtn("events", "wording")]));
+        [btn("Edit", function () { editHomeSimple("events", "Upcoming events", ev, [{ name: "heading", label: "Heading", required: true }, { name: "buttonLabel", label: "Button text", required: true }]); }, "btn-secondary"), resetBtn("events", "wording")]));
       panel.appendChild(homeListCard("resources", "Resources", cur("resources"), custom("resources")));
       panel.appendChild(homeListCard("cards", "Find your place", cur("cards"), custom("cards")));
       var nw = cur("news");
       panel.appendChild(homeCard("Latest news",
         [homeLine("Heading", nw.heading), homeLine("Button", nw.buttonLabel), el("p", { class: "help" }, "The posts themselves come from the News tab.")],
-        [btn("Edit", function () { editHomeSimple("news", "Latest news", nw, [{ name: "heading", label: "Heading", required: true }, { name: "buttonLabel", label: "Button text", required: true }]); }, "btn-primary"), resetBtn("news", "wording")]));
+        [btn("Edit", function () { editHomeSimple("news", "Latest news", nw, [{ name: "heading", label: "Heading", required: true }, { name: "buttonLabel", label: "Button text", required: true }]); }, "btn-secondary"), resetBtn("news", "wording")]));
       var cta = cur("cta");
       panel.appendChild(homeCard("Question band (bottom of the page)",
         [homeLine("Heading", cta.heading), homeLine("Text", cta.text), homeLine("Button", cta.buttonLabel + "  (" + cta.url + ")")],

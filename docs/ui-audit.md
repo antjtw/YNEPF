@@ -2,9 +2,9 @@
 
 Branch `ui-refinements`. Method and principles: see the project skill at `.claude/skills/ui-gestalt/SKILL.md`.
 
-This is a first pass. It covers the editor (CMS) tabs and the new public pages, using screenshots at
-1280px and 390px wide with realistic sample data. Nothing has been changed yet: this is the list to go
-through together.
+This started as a first pass over the editor (CMS) tabs and the new public pages, using screenshots at
+1280px and 390px wide with realistic sample data. A full pass then fixed most of it: see
+**Status after the full pass** at the end.
 
 **How to read it.** Each finding has an ID, the principle it breaks, where it is, how bad it is
 (High, Medium, Low), the proposed fix and rough effort (S: under an hour, M: a few hours, L: a day).
@@ -169,3 +169,45 @@ After each batch: re-shoot at 1280 and 390, run the tests and the accessibility 
 A static server on the repo root, Playwright, and a stand-in for the database seeded with sample
 volunteers, sessions, codes and points. The tests and that stand-in live outside the repo, so the
 screenshots in `docs/ui-audit/` are the record. The recipe is described in the skill.
+
+
+## Status after the full pass
+
+Legend: **Done**, **Partly** (what is left is noted), **Not done**.
+
+### Systemic
+| ID | Status | What changed |
+|---|---|---|
+| S1 | Done | Phone spacing steps are now distinct: `--space-3` 12px, `--space-4` 15px, `--space-5` 18px (tablet and up unchanged). |
+| S2 | Done | `details.ol-settings` is a proper region: surface, border, padding, rotating chevron. Used by Referees, Import, Helpers, Who has signed up, How the day works and OpenLifter settings. |
+| S3 | Partly | The Home page cards use outlined Edit buttons (one filled primary per region); Edit session and Copy the link are outlined; Delete and Remove sit apart from neutral actions; ghost actions on phones and calendar cards get an outline so they read as buttons. A full redefinition of the button set was not attempted. |
+| S4 | Partly | New shared classes (`section-head`, `stack`, `rota-*`, `vol-card`, `chip`, `empty-state`, `flow-*`) replace the inline margins on the rota, codes, priority, extras and points screens. The remaining inline margins elsewhere in `admin.js` are untouched. |
+| S5 | Done | Numbers and actions are right-aligned on the points, history, codes, priority, money, extras and calendar tables; short cells do not wrap; the calendar's two tables share column widths; the public rota's tables share column widths. |
+| S6 | Done for Codes, Priority, Extras and the rota | Heading on the left, primary action on the right, intro below. The Money tab keeps its toolbar of three buttons above the content. |
+
+### Screens
+| ID | Status | Note |
+|---|---|---|
+| D1, D2, D3 | Done | Online entry is split into Events, Equipment, Prices, Franchise and qualifying, Entry rules, Priority and the waiting list. |
+| C1 to C4 | Done | Fixed columns, inline actions, hairline between sections, calm empty states. |
+| V1 | Done | Sign-up and Publishing are cards, with the link in a copy field and a status row (Sign-up Open, Rota Published) at the top. |
+| V2, V3, V5 | Done | Role names are small muted labels with "Add place" beside them; people sit under their role with a left rule; roles with nobody are one row of "+ Role" chips; steady row height. |
+| V4 | Done | One compact warning on the row; the summary at the top is one short line. |
+| V6 | Done | On a phone the person buttons become an even grid, with Remove place on its own full-width row. |
+| V7, V8 | Done | Two-line intro; the day-of rules are in "How the day works". |
+| P1, P2, P3 | Done | Singular and plural fixed; History opens under the person's row; the file chooser matches the secondary button. |
+| P4 | Partly | Delete-style actions are separated; "Take points away" is still a quiet action. |
+| U1, U2, U3 | Done | Spend your points is one card with numbered steps, a stat row (points, set aside, to spend), a status line with space above it, and unused codes as rows. |
+| F1, F2, F3 | Done | The notes are quiet left-ruled notes; each session is its own group with roles in columns; the consent, privacy note and button are one block. |
+
+### Found during the pass
+- Entries desk: the lift, flags and money columns drifted from row to row (the grid was sized per row), and the "+" marker sat outside the card. Fixed.
+- Reorder arrows: an arrow that cannot be used became a grey blob that looked more important than the live ones. It now fades.
+- Calendar cards: the entry status was a bullet that looked like part of the description. It is a line of its own.
+- Entry journey: "Before you start ... held for 15 minutes" appeared next to "Entries are closed", "not found" and the waiting list. Hidden on those pages. The step marker is a labelled progress bar. The payment error (for example "stripe.js did not load") was plain text and is now styled and announced as an alert. Total to pay is emphasised. The hold countdown is prominent and turns red when it runs out. On phones the side panels have room above them. The confirmation heading no longer shows a black focus box.
+- Phone footer: the columns ran into each other. Spaced.
+
+### Not covered
+- Waiting list, Results and Users tabs, the lifting order builder's internals, and the News, Records, FAQ, Footer and Organisation editors beyond the arrows and button changes above.
+- The Stripe embedded checkout itself (it renders from Stripe, not from this site).
+- A real phone: everything here was checked with a browser at 390px wide, not on a device.

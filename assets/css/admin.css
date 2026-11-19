@@ -191,3 +191,129 @@ body.dragging-lifter { user-select: none; cursor: grabbing; }
 .admin-user a.admin-account[aria-current="page"] { text-decoration: underline; text-underline-offset: 4px; }
 .item-row select.control, .item-row input.control { min-width: 14rem; }
 .item-row .item-main:has(> select) { flex: 1 1 18rem; }
+
+/* ==========================================================================
+   UI refinements: grouping, alignment and rhythm (see docs/ui-audit.md and the ui-gestalt skill)
+   ========================================================================== */
+
+/* Section heads: a heading with its action on the same line, then a short intro, then the content. */
+.section-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3) var(--space-4); flex-wrap: wrap; margin: var(--space-8) 0 var(--space-2); padding-top: var(--space-5); border-top: 1px solid var(--navy-50); }
+.section-head.is-first { margin-top: var(--space-4); padding-top: 0; border-top: 0; }
+.section-head h2, .section-head h3 { margin: 0; }
+.section-head + .panel-intro, .section-head + p { margin-top: var(--space-2); }
+.stack > * + * { margin-top: var(--space-3); }
+.stack-lg > * + * { margin-top: var(--space-5); }
+
+/* Collapsible settings (Referees, Import, Helpers, who has signed up): a region, not bare text. */
+details.ol-settings { background: var(--surface-raised); border: 1px solid var(--navy-100); border-radius: var(--radius-lg); margin: var(--space-3) 0 0; }
+details.ol-settings > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); font-weight: 600; color: var(--text-heading); border-radius: var(--radius-lg); }
+details.ol-settings > summary::-webkit-details-marker { display: none; }
+details.ol-settings > summary::before { content: ""; flex: none; width: 0.55rem; height: 0.55rem; border-right: 2.5px solid currentColor; border-bottom: 2.5px solid currentColor; transform: rotate(-45deg); transition: transform var(--dur-fast) ease; margin-left: 0.15rem; }
+details.ol-settings[open] > summary::before { transform: rotate(45deg); }
+details.ol-settings[open] > summary { border-bottom: 1px solid var(--navy-50); border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+details.ol-settings > summary:hover { background: var(--surface-page); }
+details.ol-settings > :not(summary) { margin-left: var(--space-4); margin-right: var(--space-4); }
+details.ol-settings > summary + * { margin-top: var(--space-3); }
+details.ol-settings > :last-child { margin-bottom: var(--space-4); }
+details.ol-settings .field:first-of-type { margin-top: 0; }
+
+/* Tables: numbers right-aligned, actions right-aligned, short cells never break in the middle. */
+.admin-table th.num, .admin-table td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.admin-table th.col-actions, .admin-table td.col-actions { text-align: right; white-space: nowrap; }
+.admin-table td.col-actions .actions { justify-content: flex-end; flex-wrap: nowrap; }
+.admin-table .nowrap { white-space: nowrap; }
+.admin-table.cal-table { table-layout: fixed; }
+.admin-table.cal-table th:nth-child(1) { width: 34%; }
+.admin-table.cal-table th:nth-child(2) { width: 16%; }
+.admin-table.cal-table th:nth-child(3) { width: 36%; }
+.admin-table.cal-table th:nth-child(4) { width: 14%; }
+@media (max-width: 52em) { .admin-table.cal-table { table-layout: auto; } }
+
+/* Reorder arrows: quiet icon buttons. An arrow that cannot be used fades out instead of becoming a grey blob. */
+.icon-btn { min-width: 2.5rem; padding-inline: 0.6em; }
+.icon-btn[disabled] { --btn-bg: transparent; --btn-border: transparent; --btn-fg: var(--text-muted); opacity: 0.3; }
+.item-row .icon-btn + .icon-btn { margin-left: calc(-1 * var(--space-1)); }
+
+/* Delete sits apart from the neutral actions beside it. */
+.actions .btn-danger { margin-left: var(--space-2); }
+
+/* The native file chooser, styled like our secondary button. */
+input[type="file"] { font: inherit; color: var(--text-default); max-width: 100%; }
+input[type="file"]::file-selector-button { font: inherit; font-weight: 600; color: var(--accent-ink); background: transparent; border: 2px solid var(--accent); border-radius: var(--radius-pill); padding: 0.4em 1.2em; margin-right: var(--space-3); cursor: pointer; min-height: 2.5rem; transition: background-color var(--dur-fast) ease; }
+input[type="file"]::file-selector-button:hover { background: color-mix(in srgb, var(--accent) 12%, var(--surface-page)); }
+
+/* Sub-groups inside a long form: a small heading and a hairline, with tighter gaps inside than between. */
+.form-sub { font-family: var(--font-body); font-size: 0.8125rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; margin: var(--space-6) 0 var(--space-2); padding-top: var(--space-4); border-top: 1px solid var(--navy-50); color: var(--text-muted); }
+.form-sub:first-of-type { border-top: 0; padding-top: 0; }
+.form-sub + .help { margin-top: 0; }
+fieldset.field-set { border: 0; padding: 0; margin: var(--space-3) 0 0; min-width: 0; }
+fieldset.field-set > legend { padding: 0; font-weight: 600; color: var(--text-heading); margin-bottom: var(--space-2); }
+
+/* Status chips row under a page title (sign-up open, rota published). */
+.status-row { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); align-items: center; margin: 0 0 var(--space-4); color: var(--text-muted); font-size: 0.95rem; }
+.status-row .tag { margin-left: var(--space-1); }
+
+/* Calm empty state. */
+.empty-state { margin: var(--space-3) 0 0; padding: var(--space-4); border: 1px dashed var(--border-strong); border-radius: var(--radius-lg); color: var(--text-muted); background: transparent; }
+.empty-state p { margin: 0; }
+
+/* Rota builder: a session is a card, a role is a labelled group, people sit under their role. */
+.rota-session { padding: var(--space-5); }
+.rota-roles { margin-top: var(--space-4); display: grid; gap: var(--space-5); }
+.rota-role-head { display: flex; align-items: center; gap: var(--space-2) var(--space-3); flex-wrap: wrap; }
+.rota-role-name { margin: 0; font-size: 0.8125rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); font-family: var(--font-body); }
+.rota-role-name small { text-transform: none; letter-spacing: 0; font-weight: 400; margin-left: var(--space-1); }
+.rota-people { list-style: none; margin: var(--space-1) 0 0; padding: 0 0 0 var(--space-4); border-left: 3px solid var(--navy-100); }
+.rota-place { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-4); flex-wrap: wrap; padding: var(--space-2) 0; min-height: 3.25rem; }
+.rota-place + .rota-place { box-shadow: inset 0 1px 0 var(--navy-50); }
+.rota-place .item-main { flex: 1 1 14rem; min-width: 0; }
+.rota-place .item-title { margin: 0; font-weight: 600; }
+.rota-place .item-sub { margin: 0; color: var(--text-muted); font-size: 0.9rem; }
+.rota-place select.control { min-height: 2.75rem; padding-block: var(--space-2); }
+.rota-warn { display: flex; gap: var(--space-2); align-items: flex-start; margin: var(--space-1) 0 0; color: var(--error-text); font-size: 0.9rem; font-weight: 600; }
+.rota-warn::before { content: "!"; flex: none; display: inline-grid; place-items: center; width: 1.25rem; height: 1.25rem; border-radius: 50%; background: var(--error-text); color: #fff; font-size: 0.8rem; line-height: 1; margin-top: 0.1rem; }
+.rota-place.is-warn { box-shadow: none; }
+.rota-actions { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); align-items: center; justify-content: flex-end; }
+.rota-empty-roles { margin-top: var(--space-5); padding-top: var(--space-4); border-top: 1px solid var(--navy-50); }
+.rota-empty-roles p { margin: 0 0 var(--space-2); color: var(--text-muted); font-size: 0.9rem; }
+.rota-empty-roles .actions { gap: var(--space-2); }
+@media (max-width: 40rem) {
+  .rota-session { padding: var(--space-4); }
+  .rota-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); width: 100%; justify-content: stretch; margin-top: var(--space-2); }
+  .rota-actions .btn { width: 100%; padding-inline: 0.4em; }
+  .rota-actions .btn-ghost { border-color: var(--border-strong); }
+  .rota-actions .btn-danger { grid-column: 1 / -1; }
+  .rota-place .item-main { flex-basis: 100%; }
+  .rota-people { padding-left: var(--space-3); }
+}
+
+/* Sign-up and publishing cards on the rota tab. */
+.vol-card { padding: var(--space-5); }
+.vol-card + .vol-card { margin-top: var(--space-4); }
+.vol-card-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-4); flex-wrap: wrap; }
+.vol-card-head h3 { margin: 0; display: flex; align-items: center; gap: var(--space-2); }
+.vol-card .help { margin: var(--space-2) 0 0; }
+.vol-card .actions { margin-top: var(--space-3); }
+.copy-row { display: flex; gap: var(--space-2); align-items: stretch; flex-wrap: wrap; margin-top: var(--space-3); }
+.copy-row input { flex: 1 1 16rem; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.9rem; }
+.vol-card hr { border: 0; border-top: 1px solid var(--navy-50); margin: var(--space-4) 0; }
+.vol-settings { display: grid; gap: var(--space-4); }
+
+/* A history panel that opens under the person it belongs to. */
+.admin-table tr.row-detail > td { padding: 0; background: var(--surface-page); }
+.row-detail-inner { padding: var(--space-4); border-left: 3px solid var(--accent); margin: var(--space-2) 0; }
+
+/* Follow-ups from the first re-shoot */
+.rota-roles, .rota-people, .rota-place, .rota-role { max-width: none; }
+.rota-role-head .btn { margin-left: calc(-1 * var(--space-1)); }
+details.ol-settings + .callout, details.ol-settings + details.ol-settings { margin-top: var(--space-3); }
+details.ol-settings ~ .callout { margin-top: var(--space-4); max-width: none; }
+.chip-row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.chip { font: inherit; font-size: 0.9rem; font-weight: 600; color: var(--accent-ink); background: transparent; border: 1.5px dashed var(--border-strong); border-radius: var(--radius-pill); padding: 0.3em 0.9em; min-height: 2.25rem; cursor: pointer; transition: background-color var(--dur-fast) ease, border-color var(--dur-fast) ease; }
+.chip:hover { background: color-mix(in srgb, var(--accent) 10%, var(--surface-page)); border-color: var(--accent); border-style: solid; }
+
+/* Entries desk: every row uses the same columns, so names, lifts, flags and money line up down the page. */
+.entry-row > summary { grid-template-columns: minmax(10rem, 1.2fr) minmax(12rem, 2fr) minmax(11rem, 15rem) 4.5rem; }
+.entry-row > summary::before { margin-left: 0; left: var(--space-4); top: 50%; transform: translateY(-50%); }
+.entry-flags { display: flex; flex-wrap: wrap; gap: var(--space-1); justify-content: flex-end; }
+@media (max-width: 52em) { .entry-row > summary { grid-template-columns: 1fr auto; } .entry-flags { justify-content: flex-start; } }

@@ -308,7 +308,7 @@
     }
     if (!opts.brief) {
       var line = state === "archived" ? "" : entryLine(c);
-      if (line) card.appendChild(el("ul", { style: "margin-top:var(--space-2);" }, el("li", null, line)));
+      if (line) card.appendChild(el("p", { class: "event-entry-line" }, line));
       if (state === "full") {
         card.appendChild(el("p", { style: "margin:var(--space-3) 0 0;" },
           c.waitlist_url ? "All places have been taken. You can join the waiting list in case one comes up." : "All places have been taken."));

@@ -733,3 +733,81 @@ table.lifters thead th { overflow-wrap: normal; }
   table.lifters td:empty { display: none; }
   table.lifters th:first-child, table.lifters td:first-child { padding-left: 0; }
 }
+
+/* ==========================================================================
+   Flows: a short sequence of steps in one card (spend your points, change your volunteer answers)
+   ========================================================================== */
+.panel.flow { max-width: 38rem; margin-top: var(--space-8); padding: var(--space-6); }
+.panel.flow > h2 { margin: 0 0 var(--space-1); font-size: var(--fs-36); font-family: var(--font-display); }
+.flow-intro { margin: 0 0 var(--space-5); color: var(--text-muted); }
+.flow-step { padding-top: var(--space-5); margin-top: var(--space-5); border-top: 1px solid var(--navy-50, #dde3ec); }
+.flow-intro + .flow-step { margin-top: 0; }
+.flow-step[hidden] { display: none; }
+.panel .flow-step-title { display: flex; align-items: center; gap: var(--space-3); margin: 0 0 var(--space-3); font-size: var(--fs-24); font-family: var(--font-body); font-weight: 700; }
+.step-num { flex: none; display: inline-grid; place-items: center; width: 1.9rem; height: 1.9rem; border-radius: 50%; background: var(--accent-ink); color: #fff; font-size: 0.95rem; font-weight: 700; }
+.flow-step .field { margin-top: var(--space-3); }
+.flow-step .actions { margin-top: var(--space-4); }
+.form-status { min-height: 1.5em; margin: var(--space-3) 0 0; }
+.flow-hello { margin: 0 0 var(--space-3); }
+.flow-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); margin: 0 0 var(--space-4); }
+.flow-stats p { margin: 0; padding: var(--space-3) var(--space-4); background: var(--surface-page); border-radius: var(--radius-lg); color: var(--text-muted); font-size: var(--fs-16); }
+.flow-stats strong { display: block; font-size: var(--fs-36); line-height: 1.1; color: var(--text-heading); }
+.flow-stats .is-key { background: var(--success-bg, #e3f2e6); color: var(--success-text, #1d5c2c); }
+.flow-stats .is-key strong { color: inherit; }
+.panel .flow-sub { margin: var(--space-6) 0 var(--space-2); font-size: var(--fs-19); font-family: var(--font-body); font-weight: 700; }
+.flow-list { list-style: none; margin: var(--space-3) 0 0; padding: 0; max-width: none; border: 1px solid var(--navy-50, #dde3ec); border-radius: var(--radius-lg); }
+.flow-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-4); flex-wrap: wrap; padding: var(--space-3) var(--space-4); margin: 0; }
+.flow-row + .flow-row { border-top: 1px solid var(--navy-50, #dde3ec); }
+.flow-row-main { flex: 1 1 12rem; min-width: 0; }
+.flow-row-title { margin: 0; font-weight: 700; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 1rem; overflow-wrap: anywhere; }
+.flow-row-sub { margin: 0; color: var(--text-muted); font-size: var(--fs-16); }
+@media (max-width: 40rem) { .panel.flow { padding: var(--space-5); } .flow-stats { gap: var(--space-2); } .flow-stats p { padding: var(--space-2) var(--space-3); } }
+
+/* Volunteer sign-up form: notes, session groups and the consent block. */
+.form-note { margin: var(--space-4) 0; padding: var(--space-3) var(--space-4); max-width: none; background: var(--surface-page); border-left: 4px solid var(--accent); border-radius: 0 var(--radius) var(--radius) 0; }
+.form-note p, .form-note { color: var(--text-default); }
+.form-part { font-size: var(--fs-24); margin: var(--space-7) 0 var(--space-2); padding-top: var(--space-5); border-top: 1px solid var(--navy-50, #dde3ec); }
+.session-group { border: 1px solid var(--navy-100, #c9d2e0); border-radius: var(--radius-lg); padding: var(--space-3) var(--space-4) var(--space-4); margin: var(--space-3) 0 0; min-width: 0; }
+.session-group > legend { padding: 0 var(--space-2); font-weight: 700; color: var(--text-heading); }
+.session-group > legend span { display: block; font-weight: 400; color: var(--text-muted); font-size: var(--fs-16); }
+.session-roles { display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: var(--space-3) var(--space-5); margin-top: var(--space-2); }
+.session-roles .field-check { margin: 0; }
+.form-consent { margin-top: var(--space-7); padding-top: var(--space-5); border-top: 1px solid var(--navy-50, #dde3ec); }
+.form-consent .field { margin-top: 0; }
+.form-consent > .small { margin: var(--space-3) 0 var(--space-5); }
+
+/* The public rota: every session's table has the same columns, so names line up from one session to the next. */
+.rota-table { table-layout: fixed; width: 100%; }
+.rota-table th:first-child, .rota-table td:first-child { width: 14rem; }
+@media (max-width: 40rem) { .rota-table th:first-child, .rota-table td:first-child { width: 40%; } }
+.rota-table td { overflow-wrap: anywhere; }
+
+/* Calendar cards: the entry status is a line of its own (not another bullet), and every action reads as a button. */
+.event-entry-line { margin: var(--space-3) 0 0; font-weight: 600; color: var(--text-heading); }
+.event-actions .btn-ghost { border-color: var(--border-strong); }
+
+/* ==========================================================================
+   Entry journey: a clear step marker, an error that looks like every other error, an emphasised total
+   ========================================================================== */
+.step-progress { margin: 0 0 var(--space-5); }
+.step-label { margin: 0 0 var(--space-2); font-size: var(--fs-16); color: var(--text-muted); display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); align-items: baseline; max-width: none; }
+.step-label span { font-weight: 700; color: var(--accent-ink); text-transform: uppercase; letter-spacing: 0.05em; font-size: var(--fs-14); }
+.step-label strong { color: var(--text-heading); font-size: var(--fs-19); }
+.step-bar { list-style: none; display: flex; gap: var(--space-1); margin: 0; padding: 0; max-width: none; }
+.step-bar li { flex: 1 1 0; height: 0.3125rem; border-radius: 3px; background: var(--navy-100, #c9d2e0); margin: 0; }
+.step-bar li.is-done { background: var(--accent-ink); opacity: 0.55; }
+.step-bar li.is-now { background: var(--accent-ink); }
+form > p.field-error:not([hidden]), #submit-error:not([hidden]), #wl-error:not([hidden]) { display: flex; gap: var(--space-2); margin: var(--space-3) 0 0; color: var(--error-text); font-weight: 600; font-size: var(--fs-16); max-width: none; }
+form > p.field-error:not([hidden])::before, #submit-error:not([hidden])::before, #wl-error:not([hidden])::before { content: "!"; flex: none; display: grid; place-items: center; width: 1.25rem; height: 1.25rem; border-radius: 50%; background: var(--error-border); color: #fff; font-size: 0.8rem; line-height: 1; margin-top: 0.1rem; }
+#total-line, #fee-line { color: var(--text-heading); }
+#total-line strong { font-size: 1.35em; }
+.form-actions { margin-top: var(--space-6); }
+[id^="state-"] h1:focus { outline: none; }
+[role="timer"] { font-weight: 700; color: var(--text-heading); font-size: var(--fs-19); margin: 0 0 var(--space-4); max-width: none; }
+[role="timer"].is-expired { color: var(--error-text); font-weight: 600; font-size: var(--fs-19); }
+
+/* On a phone the side panels come after the form: give them room, so they do not read as part of the buttons above. */
+@media (max-width: 40em) {
+  .contact-aside { margin-top: var(--space-8); }
+  .site-footer .grid-column-one-third + .grid-column-one-third { margin-top: var(--space-7); }
+}

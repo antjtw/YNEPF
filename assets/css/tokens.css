@@ -115,9 +115,9 @@
   --space-0: 0;
   --space-1: 0.3125rem;   /* 5px */
   --space-2: 0.625rem;    /* 10px */
-  --space-3: 0.9375rem;   /* 15px */
+  --space-3: 0.75rem;     /* 12px, 15px from tablet */
   --space-4: 0.9375rem;   /* 15px, 20px from tablet */
-  --space-5: 0.9375rem;   /* 15px, 25px from tablet */
+  --space-5: 1.125rem;    /* 18px, 25px from tablet */
   --space-6: 1.25rem;     /* 20px, 30px from tablet */
   --space-7: 1.5625rem;   /* 25px, 40px from tablet */
   --space-8: 1.875rem;    /* 30px, 50px from tablet */
@@ -143,6 +143,7 @@
     --fs-16: 1rem;       --lh-16: 1.5;
     --fs-14: 0.875rem;   --lh-14: 1.4286;
 
+    --space-3: 0.9375rem;   /* 15px */
     --space-4: 1.25rem;     /* 20px */
     --space-5: 1.5625rem;   /* 25px */
     --space-6: 1.875rem;    /* 30px */

@@ -351,7 +351,7 @@
       el("p", { class: "lede", id: "total-line" }, "Total to pay: ", el("strong", null, totalNow() === null ? "—" : pounds(totalNow()))),
       el("p", { class: "help", id: "hold-note", hidden: totalNow() === 0 }, "Pressing the button holds your place for " + ctx.settings.hold_minutes + " minutes while you pay. We never see or store your card details."),
       refundNote(),
-      el("p", { class: "field-error", id: "submit-error", hidden: true })
+      el("p", { class: "field-error", id: "submit-error", role: "alert", hidden: true })
     ];
   }
 
@@ -430,7 +430,7 @@
           countdown = setInterval(function () {
             var left = Math.max(0, Math.round((endsAt - Date.now()) / 1000));
             if (left > 0) clock.textContent = "Time left to pay: " + Math.floor(left / 60) + ":" + ("0" + (left % 60)).slice(-2);
-            else { clearInterval(countdown); clock.textContent = "Your held place has run out. If you have not paid, please start again. If you pay now and a place is still free, your entry will be confirmed; otherwise you will be refunded in full."; }
+            else { clearInterval(countdown); clock.classList.add("is-expired"); clock.textContent = "Your held place has run out. If you have not paid, please start again. If you pay now and a place is still free, your entry will be confirmed; otherwise you will be refunded in full."; }
           }, 1000);
           var box = el("div", { id: "checkout" }); app.appendChild(box);
           return Stripe(r.b.publishable_key).initEmbeddedCheckout({ clientSecret: r.b.client_secret }).then(function (c) { c.mount(box); });
@@ -452,7 +452,9 @@
     clearErrors(); app.innerHTML = "";
     var list = stepList(), at = list.indexOf(step);
     if (at < 0) { step = "about"; at = 0; }
-    app.appendChild(el("p", { class: "help" }, "Step " + (at + 1) + ": " + STEP_NAMES[step]));
+    app.appendChild(el("div", { class: "step-progress" },
+      el("p", { class: "step-label" }, el("span", null, "Step " + (at + 1) + " of " + list.length), " ", el("strong", null, STEP_NAMES[step])),
+      el("ol", { class: "step-bar", "aria-hidden": "true" }, list.map(function (k, i) { return el("li", { class: i < at ? "is-done" : i === at ? "is-now" : "" }); }))));
     var last = step === "check";
     var body = step === "about" ? stepAbout() : step === "guardian" ? stepGuardian() : step === "lifting" ? stepLifting() : stepCheck();
     var form = el("form", { novalidate: true, onsubmit: function (ev) {
@@ -486,6 +488,7 @@
   // All places are taken: the waiting list opens by itself. Name and email, then we email when a place comes up.
   function showWaitlist(comp, settings, note) {
     title.textContent = comp.name + " is full";
+    var before = document.getElementById("enter-before"); if (before) before.hidden = true;
     lede.textContent = Y.dateRange(comp.start_date, comp.end_date) + (comp.venue_name ? " at " + comp.venue_name : "");
     status.hidden = !preview; if (preview) status.innerHTML = "<p><strong>Preview.</strong> This competition is not published. You can try the waiting list because you are signed in to the site editor.</p>";
     var hours = settings.offer_window_hours || 48;
@@ -515,6 +518,7 @@
   // ---- load ------------------------------------------------------------------------------------
   function stop(headline, html) {
     title.textContent = headline; lede.textContent = ""; app.hidden = true; status.hidden = false; status.innerHTML = html;
+    var before = document.getElementById("enter-before"); if (before) before.hidden = true;      // "your place is held for N minutes" means nothing on a page with no form
   }
   function init() {
     var q = new URLSearchParams(location.search), slug = q.get("c") || ""; invite = q.get("invite") || ""; offer = q.get("offer") || "";
