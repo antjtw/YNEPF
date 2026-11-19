@@ -578,7 +578,7 @@ ok((await bal("cm2@x.com")) === 3 && (await bal("cm1@x.com")) === 9, "balances a
 const nm = await vu(U.entries, { email: "brand.new@x.com", full_name: "Brand New", committee: true, create: true });
 ok(nm.email === "brand.new@x.com" && (await q(`select committee from public.vol_people where email = 'brand.new@x.com'`))[0].committee === true, "a committee member who has never volunteered can be added");
 ok((await vu(U.entries, { email: "ghost2@x.com", full_name: "Ghost Two" })).error?.includes("not_found"), "without the create flag an unknown person is still refused");
-await db.exec("set role anon"); ok(!(await can(`select public.committee_points_award('2027-01-01')`)), "the public cannot award points"); await db.exec("reset role");
+await db.exec("set role anon"); ok(!(await can(`select public.committee_points_award('2027-01-01')`)) && !(await can(`select public.points_codes_expire()`)), "the public cannot award points or sweep codes"); await db.exec("reset role");
 
 // ---- give an unused code's points back
 await db.exec(`select public.points_insert('rel@x.com', 8, 'Volunteered: test', 'earned', now(), null, null, 'r22:a'); insert into public.vol_people (email, full_name) values ('rel@x.com', 'Rel Ease') on conflict do nothing;`);
@@ -635,6 +635,15 @@ ok((await bal("rel@x.com")) === 4 && (await q(`select count(*)::int n from publi
 await db.exec(`select public.points_insert('del@x.com', 4, 'Volunteered: test', 'earned', now(), null, null, 'n23:a'); insert into public.discount_codes (code, recipient_email, kind, value, points_cost) values ('DEL-20OFF-AAAAAA', 'del@x.com', 'amount', 2000, 4);`);
 await db.exec(`delete from public.discount_codes where code = 'DEL-20OFF-AAAAAA'`);
 ok((await hist("del@x.com")).some((x) => x.kind === "note" && /^Discount code released: DEL-20OFF-AAAAAA/.test(x.reason)), "deleting an unused points code on the Codes tab leaves a 'released' note too");
+
+// ---- an unused points code that runs out leaves an "expired" line, once
+await db.exec(`select public.points_insert('exp@x.com', 4, 'Volunteered: test', 'earned', now(), null, null, 'x24:a');
+ insert into public.discount_codes (code, recipient_email, kind, value, points_cost, expires_at) values ('EXP-20OFF-AAAAAA', 'exp@x.com', 'amount', 2000, 4, now() + interval '1 hour'), ('EXP-20OFF-BBBBBB', 'exp@x.com', 'amount', 2000, 0, now() - interval '1 hour');`);
+await q(`select public.points_codes_expire()`);          // notes for codes that expired earlier in this test run
+ok((await q(`select public.points_codes_expire() n`))[0].n === 0, "a code that has not run out gets no line");
+await db.exec(`update public.discount_codes set expires_at = now() - interval '1 minute' where code = 'EXP-20OFF-AAAAAA'`);
+ok((await q(`select public.points_codes_expire() n`))[0].n === 1 && (await hist("exp@x.com")).some((x) => x.kind === "note" && /^Discount code expired: EXP-20OFF-AAAAAA \(4 points no longer held\)/.test(x.reason)), "a points code that ran out unused leaves an expired line");
+ok((await q(`select public.points_codes_expire() n`))[0].n === 0 && (await bal("exp@x.com")) === 4, "only once, and the balance is untouched");
 // who may do what
 await db.exec("set role anon");
 ok(!(await can(`select public.waitlist_join('{}'::jsonb)`)) && !(await can(`select public.waitlist_sweep('${W}')`)) && !(await can(`select public.waitlist_make_offer('${W}'::uuid, 'x')`)), "the public cannot call the waiting list functions (only our server can)");

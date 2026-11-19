@@ -391,6 +391,7 @@ if (typeof Deno !== "undefined") {
         }
       }
       if (!body.competition_id) {
+        await rpc("points_codes_expire", {});       // unused points codes that have run out leave an "expired" line in the history
         // committee and executive points, once a quarter has ended
         const cres = await rpc("committee_points_award", {});
         const cp = await cres.json().catch(() => null) as { awarded: number; people: { name: string; email: string; quarter: string }[] } | null;

@@ -2775,3 +2775,25 @@ begin
 end $$;
 drop trigger if exists discount_points_released on public.discount_codes;
 create trigger discount_points_released after update or delete on public.discount_codes for each row execute function public.discount_points_released();
+
+
+-- A points code nobody used before it ran out frees its points by itself; this leaves the "expired" line in the history. The waitlist function's timer
+-- calls it. A code that is on an entry (paid, or held while someone pays) is left alone, and each code is only noted once.
+create or replace function public.points_codes_expire() returns integer
+language plpgsql security definer set search_path = public
+as $$
+declare r record; n integer := 0;
+begin
+  for r in select d.id, d.code, d.points_cost, d.recipient_email, d.competition_id, d.expires_at as expired_at from public.discount_codes d
+            where d.points_cost > 0 and d.points_spent_at is null and d.active and d.recipient_email <> '' and d.expires_at is not null and d.expires_at <= now()
+              and not exists (select 1 from public.entries e where e.discount_code_id = d.id and (e.status in ('paid', 'comped') or (e.status = 'held' and e.hold_expires_at > now()))) loop
+    if public.points_insert(r.recipient_email, 0, 'Discount code expired: ' || r.code || ' (' || r.points_cost || ' points no longer held)', 'note', r.expired_at, r.competition_id, null, 'codeoff:' || r.id) then n := n + 1; end if;
+  end loop;
+  return n;
+end $$;
+revoke all on function public.points_codes_expire() from public, anon, authenticated;
+do $$ begin
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    grant execute on function public.points_codes_expire() to service_role;
+  end if;
+end $$;
