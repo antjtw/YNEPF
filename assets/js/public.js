@@ -685,7 +685,133 @@
     }).catch(function (e) { fail(root, e); });
   }
 
-  var routes = { privacy: privacy, calendar: calendar, committee: committee, news: news, post: post, faqs: faqs, records: records, lifting: lifting };
+  // The points list: names and points only (emails are never sent to this page). Points expire 24 months after they were earned.
+  function points(root) {
+    Y.db().rpc("points_public_list").then(function (r) {
+      if (r.error) throw r.error;
+      var rows = (r.data || []).slice().sort(function (a, b) { return b.points - a.points || (a.name < b.name ? -1 : 1); });
+      if (!rows.length) { root.replaceChildren(el("p", null, "Nobody has any points yet.")); return; }
+      var q = el("input", { type: "search", id: "points-q", placeholder: "Search by name", "aria-label": "Search by name", style: "max-width:22rem" }), tbody = el("tbody");
+      // The list is long, so it stays hidden until someone searches: it shows only the people who match.
+      var hint = el("p", { class: "help", role: "status", "aria-live": "polite" }), tableWrap;
+      function draw() {
+        var t = q.value.trim().toLowerCase();
+        if (!t) { tbody.replaceChildren(); tableWrap.hidden = true; hint.textContent = rows.length + (rows.length === 1 ? " person has" : " people have") + " points. Type a name above to see someone's points."; return; }
+        var hits = rows.filter(function (x) { return x.name.toLowerCase().indexOf(t) >= 0; });
+        tbody.replaceChildren.apply(tbody, hits.map(function (x) { return el("tr", null, el("th", { scope: "row" }, x.name), el("td", null, String(x.points))); }));
+        tableWrap.hidden = !hits.length; hint.textContent = hits.length ? hits.length + (hits.length === 1 ? " match." : " matches.") : "Nobody with that name has points yet.";
+      }
+      q.addEventListener("input", draw);
+      root.replaceChildren(el("p", null, "Volunteers earn points for every session or set up and tear down they help with. Points can be spent on priority entry and discounts, and last 24 months. ", el("a", { href: "faqs#how-do-i-earn-points" }, "How points work"), "."),
+        el("div", { class: "field" }, el("label", { for: "points-q" }, "Find a name"), q),
+        hint,
+        (tableWrap = el("div", { class: "table-wrap", hidden: "" }, el("table", { class: "data" }, el("caption", { class: "visually-hidden" }, "Volunteer points"), el("thead", null, el("tr", null, el("th", { scope: "col" }, "Name"), el("th", { scope: "col" }, "Points"))), tbody))),
+        spendPoints());
+      draw();
+    }).catch(function (e) { fail(root, e); });
+  }
+
+  // Spend your own points: an emailed one-time code proves the address is yours, then points become a £20 discount code (4 points each).
+  // Priority entry needs nothing here: it arrives by email by itself, and costs 1 point when the entry is confirmed.
+  function spendPoints() {
+    var CFG = window.YNEPF_CONFIG || {}, email = el("input", { type: "email", id: "sp-email", autocomplete: "email", required: true }), code = el("input", { type: "text", id: "sp-code", inputmode: "numeric", autocomplete: "one-time-code", maxlength: "6" });
+    var msg = el("p", { role: "status", "aria-live": "polite", class: "help" }), step2 = el("div", { hidden: "" }), step3 = el("div", { hidden: "" });
+    function post(action, payload) {
+      return fetch((CFG.supabaseUrl || "").replace(/\/$/, "") + "/functions/v1/waitlist", { method: "POST", headers: { "Content-Type": "application/json", apikey: CFG.supabaseAnonKey || "", Authorization: "Bearer " + (CFG.supabaseAnonKey || "") },
+        body: JSON.stringify(Object.assign({ action: action, email: email.value.trim() }, payload)) }).then(function (r) { return r.json().catch(function () { return {}; }); }).catch(function () { return { ok: false, message: "We could not reach the server. Please try again." }; });
+    }
+    function say(t, bad) { msg.textContent = t || ""; msg.className = bad ? "form-error" : "help"; }
+    var send = el("button", { type: "button", class: "btn btn-secondary" }, "Email me a code");
+    send.addEventListener("click", function () {
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.value.trim())) return say("Enter the email address you volunteered with.", true);
+      send.disabled = true; say("Sending…");
+      post("points_start", {}).then(function (b) { send.disabled = false; if (!b.ok) return say(b.message || "We could not send a code.", true); say("If that address has points, a 6 digit code is on its way. It works for 15 minutes."); step2.hidden = false; code.focus(); });
+    });
+    var show = el("button", { type: "button", class: "btn btn-primary" }, "Show my points");
+    show.addEventListener("click", function () {
+      if (!code.value.trim()) return say("Enter the code from the email.", true);
+      show.disabled = true; say("Checking…");
+      post("points_options", { code: code.value }).then(function (b) {
+        show.disabled = false; if (!b.ok) return say(b.message || "That code did not work.", true);
+        say(""); drawOptions(b);
+      });
+    });
+    function drawOptions(o) {
+      var max = Math.min(5, Math.floor(o.available / o.points_per_step));
+      var comp = el("select", { class: "control", id: "sp-comp" }, o.competitions.map(function (c) { return el("option", { value: c.id }, c.name); }));
+      var steps = el("select", { class: "control", id: "sp-steps" }); for (var k = 1; k <= Math.max(max, 1); k++) steps.appendChild(el("option", { value: String(k) }, k + (k === 1 ? " discount: £" : " discounts: £") + (k * o.step_pence / 100) + " off for " + (k * o.points_per_step) + " points"));
+      var go = el("button", { type: "button", class: "btn btn-primary" }, "Get my discount code");
+      var lines = [el("p", null, (o.name ? o.name + ", you" : "You") + " have ", el("strong", null, o.balance + (o.balance === 1 ? " point" : " points")), o.reserved ? ", and " + o.reserved + " " + (o.reserved === 1 ? "is" : "are") + " already set aside (a priority link or a discount code you have not used yet). That leaves " : ". That leaves ", o.reserved ? el("strong", null, o.available + " to spend") : el("strong", null, o.available + " to spend"), "."),
+        el("p", { class: "help" }, "Priority entry (1 point) needs nothing from you: the link arrives by email before entry opens, and the point is only taken when your entry is confirmed. A discount costs 4 points for every £20 off the entry fee, and the points are taken when your entry is confirmed.")];
+      if ((o.codes || []).length) {
+        lines.push(el("h3", null, "Your unused discount codes"), el("p", { class: "help" }, "Changed your mind? Give a code back and its points are free to spend again. A code that is never used frees its points by itself when entry closes."),
+          el("ul", { class: "item-list" }, o.codes.map(function (c) {
+            var give = el("button", { type: "button", class: "btn btn-secondary btn-sm", "aria-label": "Give back " + c.code }, "Give the points back");
+            give.addEventListener("click", function () {
+              give.disabled = true; say("Giving the points back…");
+              post("points_release", { code: code.value, code_id: c.id }).then(function (b) {
+                give.disabled = false; if (!b.ok) return say(b.message || "We could not do that.", true);
+                post("points_options", { code: code.value }).then(function (o2) { say("Done: " + b.points + " points are free again."); if (o2.ok) drawOptions(o2); });
+              });
+            });
+            return el("li", { class: "item-row" }, el("div", { class: "item-main" }, el("p", { class: "item-title" }, c.code), el("p", { class: "item-sub" }, "£" + (c.pence / 100) + " off " + (c.competition || "a competition") + ", holding " + c.points + " points")), give);
+          })));
+      }
+      if (!o.competitions.length) lines.push(el("p", null, "No competition is open for entry right now. Come back when entry opens."));
+      else if (max < 1) lines.push(el("p", null, "You need at least 4 free points for a £20 discount."));
+      else {
+        go.addEventListener("click", function () {
+          go.disabled = true; say("Making your code…");
+          post("points_redeem", { code: code.value, competition_id: comp.value, steps: Number(steps.value) }).then(function (b) {
+            go.disabled = false; if (!b.ok) return say(b.message || "We could not make a code.", true);
+            say(""); step2.hidden = true; step3.hidden = false; step3.replaceChildren(el("div", { class: "success-panel", role: "status" }, el("h2", null, "Your £" + b.pounds + " discount"), el("p", { class: "lead" }, el("strong", { style: "font-size:1.5rem" }, b.code)),
+              el("p", null, "It is for " + b.competition + ", for this email address, and can be used once. We have also emailed it to you. Type it into the discount box on the entry form."), el("p", null, b.available_after + (b.available_after === 1 ? " point" : " points") + " still free to spend.")));
+          });
+        });
+        lines.push(el("div", { class: "field" }, el("label", { for: "sp-comp" }, "Which competition?"), comp), el("div", { class: "field" }, el("label", { for: "sp-steps" }, "How much?"), steps), el("div", { class: "actions" }, go));
+      }
+      step3.hidden = false; step3.replaceChildren.apply(step3, lines);
+    }
+    return el("section", { "aria-labelledby": "sp-h", style: "margin-top:var(--space-7);max-width:var(--measure)" }, el("h2", { id: "sp-h" }, "Spend your points"),
+      el("p", null, "Enter the email address you volunteered with and we will email you a code. Then you can see your points and turn them into a discount on your entry."),
+      el("div", { class: "field" }, el("label", { for: "sp-email" }, "Your email address"), email), el("div", { class: "actions" }, send), msg,
+      (function () { step2.replaceChildren(el("div", { class: "field" }, el("label", { for: "sp-code" }, "The code we emailed you"), code), el("div", { class: "actions" }, show)); return step2; })(), step3);
+  }
+
+  // The volunteer rota (/rota?c=<address>): who is helping in each session. Names and roles only. With ?preview=1 a signed-in entries team
+  // member can see the saved rota before it is published.
+  function rota(root) {
+    var params = new URLSearchParams(location.search), key = params.get("c") || "", preview = params.get("preview") === "1";
+    var title = document.getElementById("page-title"), lede = document.getElementById("page-lede");
+    if (!key) { title.textContent = "Volunteer rota"; lede.textContent = ""; root.replaceChildren(el("p", null, "Choose a competition from the ", el("a", { href: "calendar.html" }, "calendar"), ".")); return; }
+    var find = preview ? Y.db().from("competitions").select("id,name,start_date,end_date").eq("slug", key).limit(1).then(function (r) { if (r.error) throw r.error; return r.data || []; })
+      : load("competitions_public", function (t) { return t.select("id,name,start_date,end_date").eq("slug", key).limit(1); });
+    find.then(function (rows) {
+      if (!rows.length) { title.textContent = preview ? "Preview" : "Rota not found"; lede.textContent = ""; root.replaceChildren(el("p", null, preview ? "Sign in to the admin area first, then reload this page to see the preview." : "We could not find that competition.")); return; }
+      var c = rows[0];
+      title.textContent = c.name + ": volunteer rota"; lede.textContent = Y.dateRange(c.start_date, c.end_date);
+      return (preview ? Y.db().rpc("rota_preview", { c: c.id }) : Y.db().from("rota_public").select("*").eq("competition_id", c.id)).then(function (r) {
+        if (r.error) throw r.error;
+        var data = r.data || [];
+        if (!data.length) { root.replaceChildren(el("p", null, preview ? "Nothing is filled in yet." : "The rota has not been published yet. Please check back later.")); return; }
+        var sessions = {}, order = [];
+        data.forEach(function (x) { var s = sessions[x.vol_session_id]; if (!s) { s = sessions[x.vol_session_id] = { label: x.label, when: x.when_text, n: x.session_order, roles: {}, ro: [] }; order.push(s); } var ro = s.roles[x.role]; if (!ro) { ro = s.roles[x.role] = { name: x.role, n: x.role_order, people: [] }; s.ro.push(ro); } ro.people.push({ n: x.position, name: x.name, level: x.level }); });
+        order.sort(function (a, b) { return a.n - b.n; });
+        var kids = [];
+        if (preview) kids.push(el("div", { class: "callout", role: "status" }, el("p", { class: "callout-title" }, "Preview"), el("p", { style: "margin:0" }, "This is the saved rota. It is only visible to the entries team until it is published.")));
+        order.forEach(function (s) {
+          s.ro.sort(function (a, b) { return a.n - b.n; });
+          kids.push(el("section", { class: "lo-session" }, el("h2", null, s.label), s.when ? el("p", { class: "lo-times" }, s.when) : null,
+            el("div", { class: "table-wrap" }, el("table", { class: "data" }, el("caption", { class: "visually-hidden" }, s.label),
+              el("thead", null, el("tr", null, el("th", { scope: "col" }, "Role"), el("th", { scope: "col" }, "Volunteers"))),
+              el("tbody", null, s.ro.map(function (ro) { ro.people.sort(function (a, b) { return a.n - b.n; }); return el("tr", null, el("th", { scope: "row" }, ro.name), el("td", null, ro.people.map(function (p) { return p.name + (p.level ? " (" + p.level + ")" : ""); }).join(", "))); }))))));
+        });
+        root.replaceChildren.apply(root, kids);
+      });
+    }).catch(function (e) { fail(root, e); });
+  }
+
+  var routes = { points: points, rota: rota, privacy: privacy, calendar: calendar, committee: committee, news: news, post: post, faqs: faqs, records: records, lifting: lifting };
   function boot() {
     var page = document.body.getAttribute("data-view") || document.body.getAttribute("data-page");
     var root = document.getElementById("live");

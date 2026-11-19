@@ -474,6 +474,8 @@ create table if not exists public.invites (                -- priority entry (ph
 -- opens (the link is made at that moment, so a row with no token_hash is "waiting to be sent").
 alter table public.entry_settings add column if not exists priority_hours integer not null default 24;
 alter table public.invites add column if not exists full_name text not null default '';
+alter table public.invites add column if not exists from_points boolean not null default false;                       -- a link made from volunteer points: it costs one point when the entry is confirmed
+alter table public.entry_settings add column if not exists priority_from_points boolean not null default true;      -- everyone with a point gets a priority link
 alter table public.invites add column if not exists sent_at timestamptz;
 alter table public.invites alter column token_hash drop not null;
 update public.invites set sent_at = now() where sent_at is null and token_hash is not null;     -- links made by hand earlier count as sent
@@ -896,37 +898,112 @@ grant execute on function public.competition_settlement(uuid) to authenticated; 
 -- ---------------------------------------------------------------------------
 -- 12. Volunteers, points and priority entry (phase 3)
 -- ---------------------------------------------------------------------------
-create table if not exists public.volunteer_roles (
+-- The first, unused placeholder tables are replaced by the vol_* tables below (nothing was ever stored in them).
+drop table if exists public.rota_signups cascade;
+drop table if exists public.rota_slots cascade;
+drop table if exists public.volunteer_roles cascade;
+
+-- People who volunteer or help: one row per email address (sign-ups, referees, anyone the coordinator adds).
+create table if not exists public.vol_people (
+  email text primary key check (email = lower(email)),
+  full_name text not null,
+  mobile text not null default '',
+  tshirt text not null default '' check (tshirt in ('', 'XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  committee boolean not null default false,                 -- part of the committee or executive: earns points each quarter
+  committee_from date,                                      -- the day they were ticked
+  committee_until date                                      -- the last day they were part of it (when unticked)
+);
+alter table public.vol_people add column if not exists committee boolean not null default false;
+alter table public.vol_people add column if not exists committee_from date;
+alter table public.vol_people add column if not exists committee_until date;
+-- The roles. on_form: volunteers can say they are happy to do it. The others (referees, technical controller, session manager,
+-- platform manager, jury, co-ordinators) are filled in by the coordinator, who picks from the pool.
+create table if not exists public.vol_roles (
   id uuid primary key default gen_random_uuid(),
-  name text not null unique,                              -- "Loader", "Referee", "Set up and take down" ...
-  points integer not null default 0,
+  name text not null unique,
+  area text not null default 'session' check (area in ('session', 'setup', 'teardown')),
+  on_form boolean not null default false,
+  default_places integer not null default 1,
+  points integer not null default 1,
   sort_order integer not null default 0
 );
-create table if not exists public.rota_slots (
+insert into public.vol_roles (name, area, on_form, default_places, points, sort_order) values
+  ('Chief referee', 'session', false, 1, 1, 10),
+  ('Side referee', 'session', false, 2, 1, 20),
+  ('Technical controller', 'session', false, 1, 1, 30),
+  ('Jury', 'session', false, 0, 1, 35),
+  ('Session manager', 'session', false, 1, 1, 40),
+  ('Table', 'session', true, 2, 1, 50),
+  ('MC', 'session', true, 1, 1, 60),
+  ('Platform manager', 'session', false, 1, 1, 70),
+  ('Platform crew', 'session', true, 4, 1, 80),
+  ('Warm-up / runner', 'session', true, 1, 1, 90),
+  ('Ad-hoc', 'session', false, 2, 1, 100),
+  ('Set up co-ordinator', 'setup', false, 1, 1, 110),
+  ('Set up crew', 'setup', true, 6, 1, 120),
+  ('Tear down co-ordinator', 'teardown', false, 1, 1, 130),
+  ('Tear down crew', 'teardown', true, 6, 1, 140)
+on conflict (name) do nothing;
+-- One per competition: is sign-up open, and is the rota published.
+create table if not exists public.vol_rota (
+  competition_id uuid primary key references public.competitions (id) on delete cascade,
+  signup_open boolean not null default false,
+  offer_tshirts boolean not null default true,
+  intro text not null default '',
+  status text not null default 'draft' check (status in ('draft', 'published')),
+  published_at timestamptz
+);
+alter table public.vol_rota add column if not exists signup_closes_at timestamptz;        -- sign-up turns itself off at this moment (optional)
+-- The sessions to staff (a lifting session, set up, tear down) and the places in each.
+create table if not exists public.vol_sessions (
   id uuid primary key default gen_random_uuid(),
   competition_id uuid not null references public.competitions (id) on delete cascade,
-  role_id uuid not null references public.volunteer_roles (id),
-  day integer not null default 1,
-  starts_at timestamptz,
-  ends_at timestamptz,
-  places integer not null default 1
+  area text not null default 'session' check (area in ('session', 'setup', 'teardown')),
+  label text not null,
+  when_text text not null default '',
+  jury boolean not null default false,
+  sort_order integer not null default 0
 );
-create table if not exists public.rota_signups (
+create index if not exists vol_sessions_comp on public.vol_sessions (competition_id, sort_order);
+create table if not exists public.vol_places (
   id uuid primary key default gen_random_uuid(),
-  slot_id uuid not null references public.rota_slots (id) on delete cascade,
+  vol_session_id uuid not null references public.vol_sessions (id) on delete cascade,
+  role_id uuid not null references public.vol_roles (id),
+  position integer not null default 1,
+  email text check (email is null or email = lower(email)),
+  person_name text not null default '',
+  status text not null default 'planned' check (status in ('planned', 'arrived', 'no_show', 'cancelled')),
+  updated_at timestamptz not null default now()
+);
+create index if not exists vol_places_session on public.vol_places (vol_session_id);
+-- What people said on the form: who, and which roles in which sessions they are happy to do.
+create table if not exists public.vol_signups (
+  id uuid primary key default gen_random_uuid(),
+  competition_id uuid not null references public.competitions (id) on delete cascade,
   email text not null check (email = lower(email)),
   full_name text not null,
-  status text not null default 'signed_up' check (status in ('signed_up', 'done', 'no_show', 'cancelled')),
+  mobile text not null default '',
+  tshirt text not null default '',
+  note text not null default '',
   created_at timestamptz not null default now(),
-  unique (slot_id, email)
+  unique (competition_id, email)
 );
+create table if not exists public.vol_signup_roles (
+  signup_id uuid not null references public.vol_signups (id) on delete cascade,
+  vol_session_id uuid not null references public.vol_sessions (id) on delete cascade,
+  role_id uuid not null references public.vol_roles (id),
+  primary key (signup_id, vol_session_id, role_id)
+);
+
 -- Append only. A balance is the sum of unexpired rows; spending uses the oldest first.
 create table if not exists public.points_ledger (
   id bigint generated always as identity primary key,
   email text not null check (email = lower(email)),
   delta integer not null,                                  -- positive earned, negative spent
   reason text not null,
-  signup_id uuid references public.rota_signups (id),
+  signup_id uuid,
   entry_id uuid references public.entries (id),
   earned_at timestamptz not null default now(),
   expires_at timestamptz                                   -- 24 months after earning, for earned rows
@@ -978,7 +1055,10 @@ select
   k.lifting_order_url,
   k.openipf_url,
   k.slug,
-  exists (select 1 from public.lifting_orders lo where lo.competition_id = k.id and lo.status = 'published') as lifting_published
+  exists (select 1 from public.lifting_orders lo where lo.competition_id = k.id and lo.status = 'published') as lifting_published,
+  k.entries_closed_manually,
+  exists (select 1 from public.vol_rota v where v.competition_id = k.id and v.signup_open and coalesce(v.signup_closes_at, 'infinity') > now()) as volunteers_open,
+  exists (select 1 from public.vol_rota v where v.competition_id = k.id and v.status = 'published') as rota_published
 from (
   select c.*, (c.entry_method = 'yne' and not c.entries_closed_manually and (c.entry_opens is null or c.entry_opens <= now())
                and (c.entry_closes is null or c.entry_closes > now()) and public.places_open(c.id) < 1) as auto_full
@@ -1006,7 +1086,7 @@ declare t text;
 begin
   -- Settings that the public competition page needs to read: public read, admins and the entries team write.
   foreach t in array array['entry_settings', 'entry_stages', 'price_rules', 'addons', 'addon_options', 'addon_images',
-                           'qualifying_totals', 'weight_classes', 'divisions', 'clubs', 'volunteer_roles'] loop
+                           'qualifying_totals', 'weight_classes', 'divisions', 'clubs'] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('drop policy if exists "public read" on public.%I', t);
     execute format('create policy "public read" on public.%I for select to anon, authenticated using (true)', t);
@@ -1017,7 +1097,7 @@ begin
   -- payees and hosts are here because they hold contact emails and our commercial split.
   foreach t in array array['federation_fees', 'discount_codes', 'payees', 'hosts', 'entries', 'entry_private', 'entry_addons', 'payments', 'refunds', 'stripe_events', 'waiting_list', 'offers',
                            'invites', 'email_log', 'payout_rules', 'payouts', 'lifting_orders', 'lo_sessions', 'lo_flights',
-                           'lo_assignments', 'competition_redirects', 'rota_slots', 'rota_signups', 'points_ledger'] loop
+                           'lo_assignments', 'competition_redirects', 'points_ledger', 'vol_people', 'vol_roles', 'vol_rota', 'vol_sessions', 'vol_places', 'vol_signups', 'vol_signup_roles'] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('drop policy if exists "entries team" on public.%I', t);
     execute format('create policy "entries team" on public.%I for all to authenticated using (public.is_entries()) with check (public.is_entries())', t);
@@ -1029,9 +1109,8 @@ create policy "public read published" on public.lifting_orders for select to ano
 drop policy if exists "public read published" on public.lo_sessions;
 create policy "public read published" on public.lo_sessions for select to anon, authenticated
   using (exists (select 1 from public.lifting_orders l where l.competition_id = lo_sessions.competition_id and l.status = 'published'));
--- The rota is public so people can sign up; sign-ups themselves go through a function, not directly.
-drop policy if exists "public read" on public.rota_slots;
-create policy "public read" on public.rota_slots for select to anon, authenticated using (true);
+-- The volunteer tables are for the entries team only. The public sign-up form and the published rota go through
+-- functions and a view (section 17), so no emails or mobile numbers are ever readable.
 -- Email wording: the entries team writes it; nobody else needs to read it.
 alter table public.email_templates enable row level security;
 drop policy if exists "entries team" on public.email_templates;
@@ -1046,15 +1125,15 @@ create policy "entries read" on public.audit_log for select to authenticated usi
 -- ---------------------------------------------------------------------------
 grant select on public.clubs, public.entry_settings, public.entry_stages, public.price_rules, public.addons, public.addon_options,
                 public.addon_images, public.qualifying_totals, public.weight_classes, public.divisions, public.payees,
-                public.hosts, public.volunteer_roles, public.rota_slots, public.lifting_orders, public.lo_sessions to anon;
+                public.hosts, public.lifting_orders, public.lo_sessions to anon;
 grant select on public.entries_public, public.waiting_list_public, public.competition_entry_state to anon, authenticated;
 grant select, insert, update, delete on
   public.entry_settings, public.entry_stages, public.price_rules, public.addons, public.addon_options, public.addon_images,
-  public.qualifying_totals, public.weight_classes, public.divisions, public.payees, public.hosts, public.volunteer_roles,
+  public.qualifying_totals, public.weight_classes, public.divisions, public.payees, public.hosts,
   public.federation_fees, public.discount_codes, public.entries, public.entry_private, public.entry_addons, public.payments, public.refunds, public.stripe_events,
   public.waiting_list, public.offers, public.invites, public.email_templates, public.email_log, public.payout_rules,
   public.payouts, public.lifting_orders, public.lo_sessions, public.lo_flights, public.lo_assignments,
-  public.competition_redirects, public.rota_slots, public.rota_signups, public.points_ledger
+  public.competition_redirects, public.points_ledger, public.vol_people, public.vol_roles, public.vol_rota, public.vol_sessions, public.vol_places, public.vol_signups, public.vol_signup_roles
   to authenticated;
 grant select on public.audit_log to authenticated;
 -- The audit log and points ledger are append only: nobody gets update or delete on them.
@@ -1255,6 +1334,10 @@ begin
       case when v_age < 18 then trim(p->>'guardian_name') else '' end, case when v_age < 18 then trim(p->>'guardian_phone') else '' end,
       case when v_age < 18 then trim(p->>'guardian_email') else '' end, v_age < 18, v_access, coalesce(c.end_date, c.start_date) + 30);
   if v_invite is not null then update public.invites set entry_id = v_entry where id = v_invite; end if;
+  if v_free then          -- a free entry is confirmed here, so the link is used and any points are spent now
+    update public.invites set used_at = now() where entry_id = v_entry and used_at is null;
+    perform public.points_spend_for_entry(v_entry);
+  end if;
   return jsonb_build_object('entry_id', v_entry, 'price_pence', v_price, 'hold_expires_at', v_expires, 'competition', c.name, 'slug', c.slug, 'free', v_free, 'discount_pence', v_discount, 'extras_pence', v_extras);
 end
 $$;
@@ -1540,6 +1623,7 @@ begin
   update public.entries set status = 'paid', paid_at = now(), hold_expires_at = null,
     cancelled_at = null, cancel_reason = '' where id = e;
   update public.invites set used_at = now() where entry_id = e and used_at is null;
+  perform public.points_spend_for_entry(e);          -- priority and points discounts cost their points now the entry is confirmed
   return 'paid';
 end
 $$;
@@ -1580,6 +1664,7 @@ declare
   v_guest_days integer := coalesce((p->>'guest_delay_days')::int, 14);
   v_offer_hours integer := coalesce((p->>'offer_window_hours')::int, 48);
   v_priority_hours integer := coalesce((p->>'priority_hours')::int, 24);
+  v_priority_points boolean := coalesce((p->>'priority_from_points')::boolean, true);
   -- Qualification: none | link (the OpenIPF link is required, nothing is checked) | glp (a minimum GL score) | totals (a qualifying total per weight class).
   v_qual text := coalesce(nullif(p->>'qualification', ''), case when coalesce((p->>'openipf_required')::boolean, false) then 'link' else 'none' end);
   v_ipf text;
@@ -1612,13 +1697,13 @@ begin
     entries_closed_manually = coalesce((p->>'entries_closed_manually')::boolean, false),
     is_franchise = coalesce((p->>'is_franchise')::boolean, is_franchise)
     where id = c;
-  insert into public.entry_settings (competition_id, events, equipment, hold_minutes, openipf_mode, qualification_mode, qualification_glp, guest_delay_days, offer_window_hours, priority_hours, updated_at)
+  insert into public.entry_settings (competition_id, events, equipment, hold_minutes, openipf_mode, qualification_mode, qualification_glp, guest_delay_days, offer_window_hours, priority_hours, priority_from_points, updated_at)
     values (c, case when cardinality(v_events) = 0 then array['full_power', 'bench_only'] else v_events end,
             case when cardinality(v_equip) = 0 then array['classic', 'equipped'] else v_equip end,
-            v_hold, v_ipf, case when v_qual in ('glp', 'totals') then v_qual else 'none' end, case when v_qual = 'glp' then v_glp end, v_guest_days, least(greatest(v_offer_hours, 1), 168), least(greatest(v_priority_hours, 1), 336), now())
+            v_hold, v_ipf, case when v_qual in ('glp', 'totals') then v_qual else 'none' end, case when v_qual = 'glp' then v_glp end, v_guest_days, least(greatest(v_offer_hours, 1), 168), least(greatest(v_priority_hours, 1), 336), v_priority_points, now())
     on conflict (competition_id) do update set events = excluded.events, equipment = excluded.equipment,
       hold_minutes = excluded.hold_minutes, openipf_mode = excluded.openipf_mode, qualification_mode = excluded.qualification_mode, qualification_glp = excluded.qualification_glp, guest_delay_days = excluded.guest_delay_days,
-      offer_window_hours = excluded.offer_window_hours, priority_hours = excluded.priority_hours, updated_at = now();
+      offer_window_hours = excluded.offer_window_hours, priority_hours = excluded.priority_hours, priority_from_points = excluded.priority_from_points, updated_at = now();
 
   -- Qualifying totals by weight class (only when that is the chosen standard). p->'qualifying_totals' = [{"sex": "M", "label": "83", "total_kg": 450}]
   if v_qual = 'totals' and jsonb_typeof(p->'qualifying_totals') = 'array' then
@@ -1691,7 +1776,7 @@ begin
     if e !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then raise exception 'invalid:email:%', e; end if;
     if exists (select 1 from public.invites i where i.competition_id = c and i.email = e and i.used_at is not null) then continue; end if;   -- already entered with a link
     delete from public.invites i where i.competition_id = c and i.email = e and i.used_at is null;
-    insert into public.invites (competition_id, email, full_name) values (c, e, left(n, 120));
+    insert into public.invites (competition_id, email, full_name, from_points) values (c, e, left(n, 120), coalesce((p->>'from_points')::boolean, false));      -- from_points: this link costs 1 volunteer point when the entry is confirmed
     if not (e = any (seen)) then cnt := cnt + 1; seen := seen || e; end if;
   end loop;
   return cnt;
@@ -1716,7 +1801,7 @@ $$;
 create or replace function public.priority_pending(c uuid, only_id uuid default null, include_sent boolean default false) returns jsonb
 language sql stable security definer set search_path = public
 as $$
-  select coalesce(jsonb_agg(jsonb_build_object('id', i.id, 'email', i.email, 'name', i.full_name) order by i.email), '[]'::jsonb)
+  select coalesce(jsonb_agg(jsonb_build_object('id', i.id, 'email', i.email, 'name', i.full_name, 'points', i.from_points) order by i.email), '[]'::jsonb)
     from public.invites i
    where i.competition_id = c and i.used_at is null
      and (only_id is null or i.id = only_id)
@@ -1987,7 +2072,7 @@ grant execute on function public.save_competition_fees(uuid, jsonb) to authentic
 -- ---------------------------------------------------------------------------
 -- The text lives in site_settings (key page.privacy, JSON: body_md and updated) and is edited with the page editor in the site
 -- editor (Footer, Privacy policy, Edit). This puts in the first version once; it never overwrites an edited one.
-insert into public.site_settings (key, value) values ('page.privacy', $privacy${"body_md": "## Who we are\n\nThe Yorkshire and North East Powerlifting Federation (YNEPF) runs powerlifting competitions and events in our region. We are responsible for the personal information described in this policy. In data protection terms, we are the \"controller\". The Federation's Chairperson looks after data protection.\n\nYou can contact us at info@ynepf.co.uk.\n\n## What information we collect\n\nMost of this comes from you, when you enter a competition or volunteer. We collect:\n\n- Your first and last name, and your date of birth.\n- Your age category, weight class and the region you compete in.\n- Your address.\n- Your sex, which we use only to enter you into the right competition category (men's or women's). This should usually match your sex at birth. If you are a transgender athlete, please contact us before you enter and we will talk it through. We may ask whether you hold a Therapeutic Use Exemption (TUE) for hormones you take, because that can affect which category you compete in.\n- Your email address and phone number, and other contact details. We use them to contact you about your entry and to fix any problems.\n- Your social media handles, and links to public profiles such as OpenPowerlifting or OpenIPF. If you give us an OpenIPF profile link, we read your public results from it, to check qualifying totals and to show your best total in the lifting order.\n- Payment information. Stripe takes payments for us. We don't store any bank or card details. Stripe shows us the last four digits of the card used.\n- Your competition results: your lifts, scores and placings.\n- For volunteers, your name and email address, and which competitions you helped at.\n- Photos and video taken at our events and in livestreams.\n- If you join a competition's waiting list, your name and email address.\n- Messages you send us, and your email address if you join our mailing list.\n- Website information: we don't set any cookies of our own. Our website host and our payment provider (Stripe) may use cookies or collect their own information about visitors. That is covered by their own privacy policies, not this one.\n\nWe don't ask for health information.\n\n## Why we use your information\n\n- To run competitions, including entries, lifting orders, weigh-in, scoring and results. We need this to carry out your entry.\n- To contact you about your entry, and to chase or fix anything that's missing or wrong. This is in our legitimate interests, and yours.\n- To publish results and keep records of the sport. This is in our legitimate interests.\n- To thank volunteers and give them priority entry. This is in our legitimate interests.\n- To livestream and photograph events, to sell photo packages, and to promote powerlifting. This is in our legitimate interests.\n- To send you emails about competitions you may want to enter. We do this with your consent, or where you have entered with us before. You can unsubscribe at any time.\n- To keep our financial records. This is a legal duty.\n- To keep events safe, including recording accidents. This is in our legitimate interests, and sometimes a legal duty.\n\n## Who can see it\n\nWe never sell your information. We don't share it with anyone else without your consent, except in the ways listed here or where the law says we must.\n\n- The YNEPF executive and committee. They can see the information you give us, including the more personal details.\n- Franchise hosts. A small number of people at the club or training facility running a competition can view the entrant details they need to coordinate entries and chase anyone who needs chasing. They don't hold their own copies, because the Federation keeps the information. Hosts must use these details only for that competition and keep them secure.\n- White Lights Media and the member who photographs for each division. They can see who has ordered and paid for a photo package. This is only so they can deliver it on time and keep things consistent. They must not share this information or use it for anything else.\n- Referees and officials working at the event, who need to see lifting orders.\n- British Powerlifting and the IPF, who receive results when we upload them to OpenIPF. We only upload results.\n- The services we use to run the website and our entries: Stripe (payments), Supabase (our secure database and sign-in), Resend (sending our emails), Vercel (hosting the website) and Google (our email accounts and shared documents). They handle information only on our behalf.\n- Anyone the law says we must tell, such as the police or a regulator.\n\nSome of these providers may handle information outside the UK. When they do, we rely on the safeguards that UK data protection law requires.\n\n## Results, photos and livestreams\n\nResults are public. We publish names, clubs, weight classes and lifts on our website and social media. We also upload results to OpenIPF, which is how British Powerlifting and the IPF receive them. OpenIPF is public. We don't publish your address, date of birth or contact details.\n\nWe photograph and film everyone at our events, and some events are livestreamed. There is no way to opt out, so by entering you agree to be photographed and filmed. When you enter, you also agree that we can use photos and video of you in our promotional material.\n\n## Under 18s\n\nFor lifters under 18, a parent or guardian enters them or gives permission. That permission covers photos, video and promotional material. We publish only their name, age category and lifts.\n\n## How long we keep it\n\n- Entry details, including your address and contact details: 24 months after the competition, then we delete them.\n- Volunteer details: 24 months.\n- Results: we keep these permanently as a record of the sport. They also stay on OpenIPF and OpenPowerlifting, which keep them indefinitely.\n- Payment and financial records: 6 years.\n- Accident records: 3 years, or longer for under 18s.\n- Mailing list details: until you unsubscribe.\n\n## Keeping it safe\n\nWe store your information in the secure online services listed above. Only people who need it can open it, and our editing tools need a sign-in. If you think your information has been shared when it shouldn't have been, tell us straight away at info@ynepf.co.uk.\n\n## Your rights\n\nYou can ask us to:\n\n- show you the information we hold about you\n- correct anything that is wrong\n- delete your information\n- limit or stop how we use it\n- give you a copy to move to another service, where this applies\n- stop using it if we rely on your consent, and you withdraw that consent\n\nEmail info@ynepf.co.uk to use any of these rights. We will reply within one month. Some rights have limits. For example, we may need to keep results as a record of the sport.\n\nIf you are unhappy with how we have handled your information, you can complain to the Information Commissioner's Office (ICO) at [ico.org.uk](https://ico.org.uk) or on 0303 123 1113. We would like the chance to put things right first.\n\n## Changes to this policy\n\nWe may update this policy. The latest version will be on our website, with the date at the top.\n", "updated": "2026-11-17"}$privacy$)
+insert into public.site_settings (key, value) values ('page.privacy', $privacy${"body_md": "## Who we are\n\nThe Yorkshire and North East Powerlifting Federation (YNEPF) runs powerlifting competitions and events in our region. We are responsible for the personal information described in this policy. In data protection terms, we are the \"controller\". The Federation's Chairperson looks after data protection.\n\nYou can contact us at info@ynepf.co.uk.\n\n## What information we collect\n\nMost of this comes from you, when you enter a competition or volunteer. We collect:\n\n- Your first and last name, and your date of birth.\n- Your age category, weight class and the region you compete in.\n- Your address.\n- Your sex, which we use only to enter you into the right competition category (men's or women's). This should usually match your sex at birth. If you are a transgender athlete, please contact us before you enter and we will talk it through. We may ask whether you hold a Therapeutic Use Exemption (TUE) for hormones you take, because that can affect which category you compete in.\n- Your email address and phone number, and other contact details. We use them to contact you about your entry and to fix any problems.\n- Your social media handles, and links to public profiles such as OpenPowerlifting or OpenIPF. If you give us an OpenIPF profile link, we read your public results from it, to check qualifying totals and to show your best total in the lifting order.\n- Payment information. Stripe takes payments for us. We don't store any bank or card details. Stripe shows us the last four digits of the card used.\n- Your competition results: your lifts, scores and placings.\n- For volunteers, your name and email address, an optional mobile number, your T-shirt size, which roles you can do, and which competitions you helped at. We also keep a record of the points you earn and spend.\n- Photos and video taken at our events and in livestreams.\n- If you join a competition's waiting list, your name and email address.\n- Messages you send us, and your email address if you join our mailing list.\n- Website information: we don't set any cookies of our own. Our website host and our payment provider (Stripe) may use cookies or collect their own information about visitors. That is covered by their own privacy policies, not this one.\n\nWe don't ask for health information.\n\n## Why we use your information\n\n- To run competitions, including entries, lifting orders, weigh-in, scoring and results. We need this to carry out your entry.\n- To contact you about your entry, and to chase or fix anything that's missing or wrong. This is in our legitimate interests, and yours.\n- To publish results and keep records of the sport. This is in our legitimate interests.\n- To thank volunteers and give them priority entry, discounts and other rewards for their points. This is in our legitimate interests.\n- To organise volunteers: the rota, a WhatsApp group for the competition if you give us your mobile number, and volunteer T-shirts. This is in our legitimate interests. We only use your mobile number if you choose to give it to us.\n- To livestream and photograph events, to sell photo packages, and to promote powerlifting. This is in our legitimate interests.\n- To send you emails about competitions you may want to enter. We do this with your consent, or where you have entered with us before. You can unsubscribe at any time.\n- To keep our financial records. This is a legal duty.\n- To keep events safe, including recording accidents. This is in our legitimate interests, and sometimes a legal duty.\n\n## Who can see it\n\nWe never sell your information. We don't share it with anyone else without your consent, except in the ways listed here or where the law says we must.\n\n- The YNEPF executive and committee. They can see the information you give us, including the more personal details.\n- Franchise hosts. A small number of people at the club or training facility running a competition can view the entrant details they need to coordinate entries and chase anyone who needs chasing. They don't hold their own copies, because the Federation keeps the information. Hosts must use these details only for that competition and keep them secure.\n- White Lights Media and the member who photographs for each division. They can see who has ordered and paid for a photo package. This is only so they can deliver it on time and keep things consistent. They must not share this information or use it for anything else.\n- Referees and officials working at the event, who need to see lifting orders.\n- Everyone, for volunteers: our public volunteer rota shows names and roles, and our points list shows names and points. We never publish volunteers' email addresses or mobile numbers.\n- British Powerlifting and the IPF, who receive results when we upload them to OpenIPF. We only upload results.\n- The services we use to run the website and our entries: Stripe (payments), Supabase (our secure database and sign-in), Resend (sending our emails), Vercel (hosting the website) and Google (our email accounts and shared documents). They handle information only on our behalf.\n- Anyone the law says we must tell, such as the police or a regulator.\n\nSome of these providers may handle information outside the UK. When they do, we rely on the safeguards that UK data protection law requires.\n\n## Results, photos and livestreams\n\nResults are public. We publish names, clubs, weight classes and lifts on our website and social media. We also upload results to OpenIPF, which is how British Powerlifting and the IPF receive them. OpenIPF is public. We don't publish your address, date of birth or contact details.\n\nWe photograph and film everyone at our events, and some events are livestreamed. There is no way to opt out, so by entering you agree to be photographed and filmed. When you enter, you also agree that we can use photos and video of you in our promotional material.\n\n## Under 18s\n\nFor lifters under 18, a parent or guardian enters them or gives permission. That permission covers photos, video and promotional material. We publish only their name, age category and lifts.\n\n## How long we keep it\n\n- Entry details, including your address and contact details: 24 months after the competition, then we delete them.\n- Volunteer details: 24 months.\n- Results: we keep these permanently as a record of the sport. They also stay on OpenIPF and OpenPowerlifting, which keep them indefinitely.\n- Payment and financial records: 6 years.\n- Accident records: 3 years, or longer for under 18s.\n- Mailing list details: until you unsubscribe.\n\n## Keeping it safe\n\nWe store your information in the secure online services listed above. Only people who need it can open it, and our editing tools need a sign-in. If you think your information has been shared when it shouldn't have been, tell us straight away at info@ynepf.co.uk.\n\n## Your rights\n\nYou can ask us to:\n\n- show you the information we hold about you\n- correct anything that is wrong\n- delete your information\n- limit or stop how we use it\n- give you a copy to move to another service, where this applies\n- stop using it if we rely on your consent, and you withdraw that consent\n\nEmail info@ynepf.co.uk to use any of these rights. We will reply within one month. Some rights have limits. For example, we may need to keep results as a record of the sport.\n\nIf you are unhappy with how we have handled your information, you can complain to the Information Commissioner's Office (ICO) at [ico.org.uk](https://ico.org.uk) or on 0303 123 1113. We would like the chance to put things right first.\n\n## Changes to this policy\n\nWe may update this policy. The latest version will be on our website, with the date at the top.\n", "updated": "2026-11-18"}$privacy$)
 on conflict (key) do nothing;
 
 -- The footer's "Privacy policy" link points at the new page. (It was a "#" placeholder.) If there is no such link yet, add one to the bottom row.
@@ -1998,6 +2083,717 @@ select g.id, 'Privacy policy', 'privacy', 10
  where g.placement = 'bottom' and not exists (select 1 from public.footer_links where url = 'privacy')
  order by g.sort_order limit 1;
 
+-- The footer's Explore column gets a "Volunteer tracker" link (the points page) straight after "Competition calendar". Added once; rename, move or remove it
+-- under Footer in the site editor like any other link.
+do $$
+declare g uuid; cal integer;
+begin
+  select id into g from public.footer_groups where lower(btrim(title)) = 'explore' order by sort_order limit 1;
+  if g is not null and not exists (select 1 from public.footer_links where url in ('points', 'points.html')) then
+    select sort_order into cal from public.footer_links where group_id = g and url in ('calendar.html', 'calendar') order by sort_order limit 1;
+    if cal is null then
+      insert into public.footer_links (group_id, label, url, sort_order) values (g, 'Volunteer tracker', 'points', coalesce((select max(sort_order) from public.footer_links where group_id = g), 0) + 10);
+    else
+      update public.footer_links set sort_order = sort_order + 1 where group_id = g and sort_order > cal;
+      insert into public.footer_links (group_id, label, url, sort_order) values (g, 'Volunteer tracker', 'points', cal + 1);
+    end if;
+  end if;
+end $$;
+
 -- The entry page asks the database for the time, so a phone with the wrong clock is not told entry is closed when it is not.
 create or replace function public.server_time() returns timestamptz language sql stable as $$ select now() $$;
 grant execute on function public.server_time() to anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 17. Volunteers: the sign-up form, changing your answers, referees, and the published rota (stage 1)
+-- ---------------------------------------------------------------------------
+-- Referees (and the technical controller and jury) are chosen from a roster, each with a level that is shown on the rota.
+create table if not exists public.vol_referees (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  email text check (email is null or email = lower(email)),
+  level text not null check (level in ('ipf_1', 'ipf_2', 'bp_national', 'bp_divisional', 'ynepf_divisional')),
+  active boolean not null default true,
+  source text not null default 'manual' check (source in ('manual', 'committee')),
+  created_at timestamptz not null default now()
+);
+create unique index if not exists vol_referees_name on public.vol_referees (lower(btrim(name)));
+alter table public.vol_referees enable row level security;
+drop policy if exists "entries team" on public.vol_referees;
+create policy "entries team" on public.vol_referees for all to authenticated using (public.is_entries()) with check (public.is_entries());
+grant select, insert, update, delete on public.vol_referees to authenticated;
+
+alter table public.vol_roles add column if not exists uses_referees boolean not null default false;
+update public.vol_roles set uses_referees = true where name in ('Chief referee', 'Side referee', 'Technical controller', 'Jury');
+-- level: the referee's level as shown on the rota ("British Powerlifting National referee"); override: the coordinator chose this person
+-- for a role they did not tick on the form, so they are not flagged as unavailable.
+alter table public.vol_places add column if not exists level text not null default '';
+alter table public.vol_places add column if not exists override boolean not null default false;
+-- Each sign-up has a secret link for changing its answers (emailed to the volunteer, never shown to the public).
+alter table public.vol_signups add column if not exists edit_token text;
+update public.vol_signups set edit_token = replace(gen_random_uuid()::text, '-', '') || replace(gen_random_uuid()::text, '-', '') where edit_token is null;
+alter table public.vol_signups alter column edit_token set default (replace(gen_random_uuid()::text, '-', '') || replace(gen_random_uuid()::text, '-', ''));
+alter table public.vol_signups alter column edit_token set not null;
+create unique index if not exists vol_signups_token on public.vol_signups (edit_token);
+alter table public.vol_signups add column if not exists updated_at timestamptz not null default now();
+
+-- What the public sign-up form needs: the competition, and each session with only the roles volunteers can choose from. With a valid
+-- edit token it also returns that person's own answers, to fill the form in. Nothing else personal is ever returned. A signed-in
+-- entries team member can also open the form for an unpublished (test) competition.
+drop function if exists public.volunteer_form(text);
+create or replace function public.volunteer_form(slug text, token text default null) returns jsonb
+language plpgsql stable security definer set search_path = public
+as $$
+declare c public.competitions%rowtype; v public.vol_rota%rowtype; su public.vol_signups%rowtype; mine jsonb := null;
+begin
+  select * into c from public.competitions where competitions.slug = volunteer_form.slug;
+  if not found or not (c.published or public.is_entries()) then return jsonb_build_object('open', false); end if;
+  select * into v from public.vol_rota where competition_id = c.id;
+  if not found or not v.signup_open or coalesce(v.signup_closes_at, 'infinity') <= now() then return jsonb_build_object('open', false, 'name', c.name); end if;
+  if token is not null and btrim(token) <> '' then
+    select * into su from public.vol_signups where competition_id = c.id and edit_token = token;
+    if not found then return jsonb_build_object('open', true, 'name', c.name, 'slug', c.slug, 'bad_token', true); end if;
+    mine := jsonb_build_object('name', su.full_name, 'email', su.email, 'mobile', su.mobile, 'tshirt', su.tshirt, 'note', su.note,
+      'choices', coalesce((select jsonb_agg(jsonb_build_object('session_id', r.vol_session_id, 'role_id', r.role_id)) from public.vol_signup_roles r where r.signup_id = su.id), '[]'::jsonb));
+  end if;
+  return jsonb_build_object('open', true, 'name', c.name, 'slug', c.slug, 'start_date', c.start_date, 'offer_tshirts', v.offer_tshirts, 'intro', v.intro, 'mine', mine,
+    'sessions', coalesce((
+      select jsonb_agg(jsonb_build_object('id', s.id, 'area', s.area, 'label', s.label, 'when_text', s.when_text,
+        'roles', (select jsonb_agg(jsonb_build_object('id', r.id, 'name', r.name) order by r.sort_order)
+                    from public.vol_roles r where r.on_form and exists (select 1 from public.vol_places p where p.vol_session_id = s.id and p.role_id = r.id)))
+        order by s.sort_order)
+      from public.vol_sessions s
+      where s.competition_id = c.id and exists (select 1 from public.vol_places p join public.vol_roles r on r.id = p.role_id where p.vol_session_id = s.id and r.on_form)), '[]'::jsonb));
+end $$;
+revoke all on function public.volunteer_form(text, text) from public;
+grant execute on function public.volunteer_form(text, text) to anon, authenticated;
+
+-- A volunteer signs up, or (with their edit token) changes their answers. Called only by the Edge Function, which then emails them.
+--   p = { slug, name, email, mobile, tshirt, over18, note, token, choices: [ { session_id, role_id } ] }
+-- Signing up again with an email that already has a sign-up is refused ("exists"): they use the emailed link to change it instead, so
+-- nobody can overwrite someone else's answers by typing their address.
+drop function if exists public.volunteer_signup(jsonb);
+create or replace function public.volunteer_signup(p jsonb) returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare c public.competitions%rowtype; v public.vol_rota%rowtype; su public.vol_signups%rowtype; v_name text; v_email text; v_mobile text; v_shirt text; v_note text; v_token text := btrim(coalesce(p->>'token', '')); ch jsonb; v_edit boolean := false; v_lines jsonb;
+begin
+  select * into c from public.competitions where slug = p->>'slug';
+  if not found then raise exception 'closed'; end if;
+  select * into v from public.vol_rota where competition_id = c.id;
+  if not found or not v.signup_open or coalesce(v.signup_closes_at, 'infinity') <= now() then raise exception 'closed'; end if;
+  v_name := btrim(coalesce(p->>'name', '')); v_email := lower(btrim(coalesce(p->>'email', '')));
+  v_mobile := btrim(coalesce(p->>'mobile', '')); v_shirt := btrim(coalesce(p->>'tshirt', '')); v_note := left(btrim(coalesce(p->>'note', '')), 500);
+  if v_token <> '' then
+    select * into su from public.vol_signups where competition_id = c.id and edit_token = v_token;
+    if not found then raise exception 'bad_token'; end if;
+    v_edit := true; v_email := su.email;
+  end if;
+  if length(v_name) < 2 or length(v_name) > 120 then raise exception 'invalid:name'; end if;
+  if v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' or length(v_email) > 200 then raise exception 'invalid:email'; end if;
+  if not coalesce((p->>'over18')::boolean, false) then raise exception 'invalid:over18'; end if;
+  if v_mobile <> '' and (v_mobile !~ '^[0-9 +()-]{7,20}$') then raise exception 'invalid:mobile'; end if;
+  if v.offer_tshirts and v_shirt not in ('XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL') then raise exception 'invalid:tshirt'; end if;
+  if not v.offer_tshirts then v_shirt := ''; end if;
+  if jsonb_typeof(coalesce(p->'choices', '[]'::jsonb)) <> 'array' or jsonb_array_length(coalesce(p->'choices', '[]'::jsonb)) = 0 then raise exception 'invalid:choices'; end if;
+  for ch in select * from jsonb_array_elements(p->'choices') loop
+    if not exists (select 1 from public.vol_sessions s join public.vol_places pl on pl.vol_session_id = s.id join public.vol_roles r on r.id = pl.role_id
+                    where s.id = (ch->>'session_id')::uuid and s.competition_id = c.id and r.id = (ch->>'role_id')::uuid and r.on_form) then raise exception 'invalid:choices'; end if;
+  end loop;
+  if not v_edit then
+    if exists (select 1 from public.vol_signups where competition_id = c.id and email = v_email) then raise exception 'exists'; end if;
+    insert into public.vol_signups (competition_id, email, full_name, mobile, tshirt, note) values (c.id, v_email, v_name, v_mobile, v_shirt, v_note) returning * into su;
+  else
+    update public.vol_signups set full_name = v_name, mobile = v_mobile, tshirt = v_shirt, note = v_note, updated_at = now() where id = su.id returning * into su;
+  end if;
+  delete from public.vol_signup_roles where signup_id = su.id;
+  for ch in select * from jsonb_array_elements(p->'choices') loop
+    insert into public.vol_signup_roles (signup_id, vol_session_id, role_id) values (su.id, (ch->>'session_id')::uuid, (ch->>'role_id')::uuid) on conflict do nothing;
+  end loop;
+  insert into public.vol_people (email, full_name, mobile, tshirt) values (v_email, v_name, v_mobile, v_shirt)
+    on conflict (email) do update set full_name = excluded.full_name, mobile = case when excluded.mobile <> '' then excluded.mobile else public.vol_people.mobile end,
+      tshirt = case when excluded.tshirt <> '' then excluded.tshirt else public.vol_people.tshirt end, updated_at = now();
+  select coalesce(jsonb_agg(x.line order by x.so), '[]'::jsonb) into v_lines from (
+    select s.sort_order as so, s.label || ': ' || string_agg(r.name, ', ' order by r.sort_order) as line
+      from public.vol_signup_roles sr join public.vol_sessions s on s.id = sr.vol_session_id join public.vol_roles r on r.id = sr.role_id
+     where sr.signup_id = su.id group by s.id, s.label, s.sort_order) x;
+  return jsonb_build_object('token', su.edit_token, 'name', su.full_name, 'email', su.email, 'competition', c.name, 'slug', c.slug, 'edited', v_edit, 'lines', v_lines);
+end $$;
+revoke all on function public.volunteer_signup(jsonb) from public, anon, authenticated;
+do $$ begin if exists (select 1 from pg_roles where rolname = 'service_role') then grant execute on function public.volunteer_signup(jsonb) to service_role; end if; end $$;
+
+-- "Email me my link": the Edge Function asks whether this email has signed up, and gets the secret link to send them.
+create or replace function public.volunteer_link(p_slug text, p_email text) returns jsonb
+language plpgsql stable security definer set search_path = public
+as $$
+declare c public.competitions%rowtype; su public.vol_signups%rowtype;
+begin
+  select * into c from public.competitions where slug = p_slug;
+  if not found then return jsonb_build_object('found', false); end if;
+  select * into su from public.vol_signups where competition_id = c.id and email = lower(btrim(coalesce(p_email, '')));
+  if not found then return jsonb_build_object('found', false); end if;
+  return jsonb_build_object('found', true, 'token', su.edit_token, 'name', su.full_name, 'email', su.email, 'competition', c.name, 'slug', c.slug);
+end $$;
+revoke all on function public.volunteer_link(text, text) from public, anon, authenticated;
+do $$ begin if exists (select 1 from pg_roles where rolname = 'service_role') then grant execute on function public.volunteer_link(text, text) to service_role; end if; end $$;
+
+-- The published rota: names, roles and referee levels only (never emails or mobile numbers).
+drop function if exists public.rota_preview(uuid);
+create or replace view public.rota_public as
+select s.competition_id, s.id as vol_session_id, s.area, s.label, s.when_text, s.sort_order as session_order,
+       r.name as role, r.sort_order as role_order, p.position, p.person_name as name, p.level
+from public.vol_rota v
+join public.competitions c on c.id = v.competition_id and c.published
+join public.vol_sessions s on s.competition_id = v.competition_id
+join public.vol_places p on p.vol_session_id = s.id and p.person_name <> '' and p.status <> 'cancelled'
+join public.vol_roles r on r.id = p.role_id
+where v.status = 'published';
+grant select on public.rota_public to anon, authenticated;
+
+-- The same for the entries team before it is published (the rota's Preview link), published or not.
+create or replace function public.rota_preview(c uuid) returns setof public.rota_public
+language plpgsql stable security definer set search_path = public
+as $$
+begin
+  if not public.is_entries() then raise exception 'forbidden'; end if;
+  return query
+  select s.competition_id, s.id, s.area, s.label, s.when_text, s.sort_order, r.name, r.sort_order, p.position, p.person_name, p.level
+    from public.vol_sessions s
+    join public.vol_places p on p.vol_session_id = s.id and p.person_name <> '' and p.status <> 'cancelled'
+    join public.vol_roles r on r.id = p.role_id
+   where s.competition_id = c;
+end $$;
+revoke all on function public.rota_preview(uuid) from public, anon;
+grant execute on function public.rota_preview(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 18. Volunteer points (stage 2): the ledger, balances, tick-off on the day, adjustments, import
+-- ---------------------------------------------------------------------------
+-- The ledger is append only (nobody can update or delete a row): corrections are new rows. A balance is worked out, never stored:
+-- points are earned in lots that expire 24 months after they were earned, and a spend uses the oldest unexpired lot first.
+alter table public.points_ledger add column if not exists kind text not null default 'earned'
+  check (kind in ('earned', 'spent', 'adjustment', 'forfeit', 'reversal', 'restore', 'import'));
+alter table public.points_ledger add column if not exists competition_id uuid references public.competitions (id) on delete set null;
+alter table public.points_ledger add column if not exists place_id uuid references public.vol_places (id) on delete set null;
+alter table public.points_ledger add column if not exists created_by text not null default '';
+alter table public.points_ledger add column if not exists import_key text;
+create unique index if not exists points_ledger_import_key on public.points_ledger (import_key) where import_key is not null;
+create index if not exists points_ledger_place on public.points_ledger (place_id);
+
+create or replace function public.points_set_expiry() returns trigger language plpgsql as $$
+begin
+  if new.delta > 0 and new.expires_at is null then new.expires_at := new.earned_at + interval '24 months'; end if;
+  return new;
+end $$;
+drop trigger if exists points_ledger_expiry on public.points_ledger;
+create trigger points_ledger_expiry before insert on public.points_ledger for each row execute function public.points_set_expiry();
+
+-- The lots still left for one person at a moment in time (earned, not spent, not expired).
+create or replace function public.points_lots(p_email text, p_at timestamptz default now())
+returns table (remaining integer, earned_at timestamptz, expires_at timestamptz)
+language plpgsql stable security definer set search_path = public
+as $$
+declare r record; amt integer[] := '{}'; exp timestamptz[] := '{}'; at_ timestamptz[] := '{}'; i integer; need integer; take integer;
+begin
+  for r in select l.delta, l.earned_at, coalesce(l.expires_at, l.earned_at + interval '24 months') as ex from public.points_ledger l where l.email = lower(p_email) order by l.earned_at, l.id loop
+    if r.delta > 0 then
+      amt := amt || r.delta; exp := exp || r.ex; at_ := at_ || r.earned_at;
+    else
+      need := -r.delta;
+      for i in 1 .. coalesce(array_length(amt, 1), 0) loop
+        exit when need <= 0;
+        if amt[i] > 0 and exp[i] > r.earned_at then take := least(amt[i], need); amt[i] := amt[i] - take; need := need - take; end if;
+      end loop;
+    end if;
+  end loop;
+  for i in 1 .. coalesce(array_length(amt, 1), 0) loop
+    if amt[i] > 0 and exp[i] > p_at then remaining := amt[i]; earned_at := at_[i]; expires_at := exp[i]; return next; end if;
+  end loop;
+end $$;
+revoke all on function public.points_lots(text, timestamptz) from public, anon, authenticated;
+
+create or replace function public.points_balance(p_email text, p_at timestamptz default now()) returns integer
+language sql stable security definer set search_path = public
+as $$ select coalesce(sum(remaining), 0)::int from public.points_lots(p_email, p_at) $$;
+revoke all on function public.points_balance(text, timestamptz) from public, anon, authenticated;
+
+-- The public points list: names and points only, never anyone's email, and nobody with no points. (A function, not a view, so the public
+-- cannot call the balance function for an email address of their choice.)
+drop view if exists public.points_public;
+create or replace function public.points_public_list() returns table (name text, points integer)
+language sql stable security definer set search_path = public
+as $$
+  select p.full_name, b.points from public.vol_people p
+  cross join lateral (select public.points_balance(p.email) as points) b
+  where b.points > 0 order by p.full_name
+$$;
+revoke all on function public.points_public_list() from public;
+grant execute on function public.points_public_list() to anon, authenticated;
+
+-- Everyone with points history, for the entries team: balance, what they earned and spent over time, and what is about to expire.
+create or replace function public.points_overview() returns table (email text, name text, balance integer, earned integer, spent integer, expiring integer, next_expiry timestamptz)
+language plpgsql stable security definer set search_path = public
+as $$
+begin
+  if not public.is_entries() then raise exception 'forbidden'; end if;
+  return query
+  select e.email, coalesce(p.full_name, e.email), public.points_balance(e.email),
+         (select coalesce(sum(delta) filter (where delta > 0), 0)::int from public.points_ledger l where l.email = e.email),
+         (select coalesce(-sum(delta) filter (where delta < 0), 0)::int from public.points_ledger l where l.email = e.email),
+         (select coalesce(sum(x.remaining), 0)::int from public.points_lots(e.email) x where x.expires_at <= now() + interval '60 days'),
+         (select min(x.expires_at) from public.points_lots(e.email) x)
+  from (select distinct l.email from public.points_ledger l) e
+  left join public.vol_people p on p.email = e.email
+  order by 2;
+end $$;
+revoke all on function public.points_overview() from public, anon;
+grant execute on function public.points_overview() to authenticated;
+
+-- Internal: add one row to the ledger.
+create or replace function public.points_insert(p_email text, p_delta integer, p_reason text, p_kind text, p_at timestamptz, p_comp uuid, p_place uuid, p_key text) returns boolean
+language plpgsql security definer set search_path = public
+as $$
+declare who text := 'system';
+begin
+  if auth.uid() is not null then select coalesce(u.email, 'unknown') into who from auth.users u where u.id = auth.uid(); end if;
+  insert into public.points_ledger (email, delta, reason, kind, earned_at, competition_id, place_id, created_by, import_key)
+    values (lower(p_email), p_delta, p_reason, p_kind, coalesce(p_at, now()), p_comp, p_place, coalesce(who, 'system'), p_key)
+    on conflict (import_key) where import_key is not null do nothing;
+  return found;
+end $$;
+revoke all on function public.points_insert(text, integer, text, text, timestamptz, uuid, uuid, text) from public, anon, authenticated;
+
+-- Tick off a volunteer on the day. arrived: they earn the role's points. no_show: they lose their whole balance. cancelled: they told us in
+-- advance, so nothing happens. planned: undo. Moving between states reverses the earlier effect first.
+create or replace function public.vol_mark(pl uuid, new_status text) returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare p public.vol_places%rowtype; s public.vol_sessions%rowtype; c public.competitions%rowtype; r public.vol_roles%rowtype; v_net integer; v_bal integer; v_pts integer := 0;
+begin
+  if not public.is_entries() then raise exception 'forbidden'; end if;
+  if new_status not in ('planned', 'arrived', 'no_show', 'cancelled') then raise exception 'invalid:status'; end if;
+  select * into p from public.vol_places where id = pl for update;
+  if not found then raise exception 'not_found'; end if;
+  select * into s from public.vol_sessions where id = p.vol_session_id;
+  select * into c from public.competitions where id = s.competition_id;
+  select * into r from public.vol_roles where id = p.role_id;
+  if p.status = new_status then return jsonb_build_object('points', 0, 'status', p.status); end if;
+  -- undo what the old state did
+  select coalesce(sum(delta), 0) into v_net from public.points_ledger where place_id = pl;
+  if p.email is not null and v_net <> 0 then
+    perform public.points_insert(p.email, -v_net, case when p.status = 'arrived' then 'Reversed: ' else 'Restored: ' end || r.name || ', ' || s.label || ', ' || c.name,
+      case when p.status = 'arrived' then 'reversal' else 'restore' end, now(), c.id, pl, null);
+  end if;
+  -- apply the new one
+  if p.email is not null and new_status = 'arrived' then
+    v_pts := r.points;
+    perform public.points_insert(p.email, v_pts, 'Volunteered: ' || r.name || ', ' || s.label || ', ' || c.name, 'earned', least(c.start_date::timestamptz + interval '12 hours', now()), c.id, pl, null);   -- dated the competition day, never in the future
+  elsif p.email is not null and new_status = 'no_show' then
+    v_bal := public.points_balance(p.email);
+    if v_bal > 0 then
+      v_pts := -v_bal;
+      perform public.points_insert(p.email, -v_bal, 'Forfeited: did not turn up and did not tell us (' || r.name || ', ' || s.label || ', ' || c.name || ')', 'forfeit', now(), c.id, pl, null);
+    end if;
+  end if;
+  update public.vol_places set status = new_status, updated_at = now() where id = pl;
+  return jsonb_build_object('points', v_pts, 'status', new_status, 'no_email', p.email is null);
+end $$;
+revoke all on function public.vol_mark(uuid, text) from public, anon;
+grant execute on function public.vol_mark(uuid, text) to authenticated;
+
+-- Add or take away points by hand: a thank you, a correction, a spend (membership, a discount). p = { email, name, delta, reason, date }
+create or replace function public.points_adjust(p jsonb) returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare v_email text := lower(btrim(coalesce(p->>'email', ''))); v_delta integer := (p->>'delta')::int; v_reason text := btrim(coalesce(p->>'reason', '')); v_at timestamptz; v_bal integer;
+begin
+  if not public.is_entries() then raise exception 'forbidden'; end if;
+  if v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then raise exception 'invalid:email'; end if;
+  if v_delta is null or v_delta = 0 or abs(v_delta) > 100 then raise exception 'invalid:delta'; end if;
+  if v_reason = '' then raise exception 'invalid:reason'; end if;
+  v_at := coalesce(nullif(p->>'date', '')::date::timestamptz + interval '12 hours', now());
+  if not exists (select 1 from public.vol_people where email = v_email) then
+    if btrim(coalesce(p->>'name', '')) = '' then raise exception 'invalid:name'; end if;
+    insert into public.vol_people (email, full_name) values (v_email, btrim(p->>'name'));
+  end if;
+  if v_delta < 0 then
+    v_bal := public.points_balance(v_email);
+    if -v_delta > v_bal then raise exception 'insufficient'; end if;
+  end if;
+  perform public.points_insert(v_email, v_delta, v_reason, case when v_delta > 0 then 'adjustment' else 'spent' end, v_at, null, null, null);
+  return jsonb_build_object('balance', public.points_balance(v_email));
+end $$;
+revoke all on function public.points_adjust(jsonb) from public, anon;
+grant execute on function public.points_adjust(jsonb) to authenticated;
+
+-- Bring in the points sheet: p = { rows: [ { key, email, name, date, delta, reason } ] }. A key already imported is skipped, so it is safe to run twice.
+create or replace function public.points_import(p jsonb) returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare r jsonb; v_email text; n_in integer := 0; n_skip integer := 0;
+begin
+  if not public.is_entries() then raise exception 'forbidden'; end if;
+  for r in select * from jsonb_array_elements(coalesce(p->'rows', '[]'::jsonb)) loop
+    v_email := lower(btrim(coalesce(r->>'email', '')));
+    if v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' or coalesce((r->>'delta')::int, 0) = 0 or btrim(coalesce(r->>'key', '')) = '' then n_skip := n_skip + 1; continue; end if;
+    insert into public.vol_people (email, full_name) values (v_email, coalesce(nullif(btrim(r->>'name'), ''), v_email)) on conflict (email) do nothing;
+    if public.points_insert(v_email, (r->>'delta')::int, left(coalesce(r->>'reason', 'Imported'), 200), 'import', (r->>'date')::date::timestamptz + interval '12 hours', null, null, 'sheet:' || (r->>'key')) then n_in := n_in + 1; else n_skip := n_skip + 1; end if;
+  end loop;
+  return jsonb_build_object('inserted', n_in, 'skipped', n_skip);
+end $$;
+revoke all on function public.points_import(jsonb) from public, anon;
+grant execute on function public.points_import(jsonb) to authenticated;
+
+-- Points for people who helped at a competition we did not staff (a franchise): p = { competition_id, rows: [ { name, email, points } ] }.
+-- One award per person per competition: sending the same email again is skipped.
+create or replace function public.points_award_helpers(p jsonb) returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare c public.competitions%rowtype; r jsonb; v_email text; v_pts integer; n_in integer := 0; n_skip integer := 0;
+begin
+  if not public.is_entries() then raise exception 'forbidden'; end if;
+  select * into c from public.competitions where id = (p->>'competition_id')::uuid;
+  if not found then raise exception 'not_found'; end if;
+  for r in select * from jsonb_array_elements(coalesce(p->'rows', '[]'::jsonb)) loop
+    v_email := lower(btrim(coalesce(r->>'email', ''))); v_pts := coalesce((r->>'points')::int, 1);
+    if v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' or v_pts < 1 or v_pts > 10 then n_skip := n_skip + 1; continue; end if;
+    insert into public.vol_people (email, full_name) values (v_email, coalesce(nullif(btrim(r->>'name'), ''), v_email)) on conflict (email) do nothing;
+    if public.points_insert(v_email, v_pts, 'Helped at ' || c.name, 'earned', least(c.start_date::timestamptz + interval '12 hours', now()), c.id, null, 'helper:' || c.id || ':' || v_email) then n_in := n_in + 1; else n_skip := n_skip + 1; end if;
+  end loop;
+  return jsonb_build_object('awarded', n_in, 'skipped', n_skip);
+end $$;
+revoke all on function public.points_award_helpers(jsonb) from public, anon;
+grant execute on function public.points_award_helpers(jsonb) to authenticated;
+
+
+-- ---------------------------------------------------------------------------
+-- 20. Volunteer points at work (stage 3): priority links from the ledger, points spent when an entry is confirmed, self-service discount codes
+-- ---------------------------------------------------------------------------
+alter table public.entry_settings add column if not exists priority_from_points boolean not null default true;      -- everyone with a point gets a priority link
+alter table public.invites add column if not exists from_points boolean not null default false;                       -- this link costs one point when the entry is confirmed
+alter table public.discount_codes add column if not exists points_cost integer not null default 0 check (points_cost >= 0);
+alter table public.discount_codes add column if not exists points_spent_at timestamptz;
+
+-- Everyone with at least one unexpired point gets a priority link for each online competition whose priority window has opened and general
+-- entry has not. Their rows join the priority list ("waiting to be sent"), and the waitlist function's timer emails the links. Anyone who already
+-- has a link (made by hand or earlier) or who has already entered is left alone. Called by the timer.
+create or replace function public.priority_fill() returns integer
+language plpgsql security definer set search_path = public
+as $$
+declare c record; n integer := 0; k integer;
+begin
+  for c in
+    select co.id from public.competitions co join public.entry_settings s on s.competition_id = co.id
+     where co.published and co.entry_method = 'yne' and s.priority_from_points and not co.entries_closed_manually
+       and co.entry_opens is not null and co.entry_opens > now()
+       and co.entry_opens - make_interval(hours => s.priority_hours) <= now()
+  loop
+    insert into public.invites (competition_id, email, full_name, from_points)
+      select c.id, e.email, coalesce(p.full_name, ''), true
+        from (select distinct l.email from public.points_ledger l) e
+        left join public.vol_people p on p.email = e.email
+       where public.points_balance(e.email) >= 1
+         and not exists (select 1 from public.invites i where i.competition_id = c.id and i.email = e.email)
+         and not exists (select 1 from public.entries en where en.competition_id = c.id and en.email = e.email and en.status in ('paid', 'comped'));
+    get diagnostics k = row_count; n := n + k;
+  end loop;
+  return n;
+end $$;
+
+-- Once an entry is confirmed: a priority link made from points costs one point, and a discount code bought with points costs what it was priced at.
+-- Each is spent once (the ledger key stops a second run doubling it), and never more than the person still has.
+create or replace function public.points_spend_for_entry(e uuid) returns void
+language plpgsql security definer set search_path = public
+as $$
+declare r record; v_name text; amt integer;
+begin
+  for r in select i.id, i.email, i.competition_id from public.invites i where i.entry_id = e and i.from_points loop
+    select name into v_name from public.competitions where id = r.competition_id;
+    if public.points_balance(r.email) >= 1 then
+      perform public.points_insert(r.email, -1, 'Priority entry: ' || coalesce(v_name, 'a competition'), 'spent', now(), r.competition_id, null, 'priority:' || r.id);
+    end if;
+  end loop;
+  for r in select d.id, d.code, d.points_cost, d.recipient_email, d.competition_id from public.entries en join public.discount_codes d on d.id = en.discount_code_id
+            where en.id = e and d.points_cost > 0 and d.points_spent_at is null and d.recipient_email <> '' loop
+    select name into v_name from public.competitions where id = r.competition_id;
+    amt := least(r.points_cost, public.points_balance(r.recipient_email));
+    if amt > 0 then
+      perform public.points_insert(r.recipient_email, -amt, 'Discount used: ' || r.code || ' (' || coalesce(v_name, 'a competition') || ')', 'spent', now(), r.competition_id, null, 'discount:' || r.id);
+    end if;
+    update public.discount_codes set points_spent_at = now() where id = r.id;
+  end loop;
+end $$;
+revoke all on function public.priority_fill(), public.points_spend_for_entry(uuid) from public, anon, authenticated;
+do $$ begin
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    grant execute on function public.priority_fill(), public.points_spend_for_entry(uuid) to service_role;
+  end if;
+end $$;
+
+-- ---- Spend your own points: an emailed one-time code, then a £20 discount for every 4 points -------------------------------------------------
+-- Everything here is called only by the waitlist Edge Function (service role). The code is emailed; only its hash is stored, it works for
+-- 15 minutes, five wrong tries lock it, and an address with no points is told nothing different from one that has some.
+create table if not exists public.points_login (
+  id uuid primary key default gen_random_uuid(),
+  email text not null check (email = lower(email)),
+  code_hash text not null,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  attempts integer not null default 0,
+  used_at timestamptz
+);
+alter table public.points_login enable row level security;
+
+create or replace function public.points_login_start(p_email text, th text) returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare v_email text := lower(btrim(coalesce(p_email, ''))); v_name text;
+begin
+  if v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then return jsonb_build_object('ok', false, 'error', 'invalid_email'); end if;
+  if (select count(*) from public.points_login where email = v_email and created_at > now() - interval '1 hour') >= 5 then return jsonb_build_object('ok', false, 'error', 'rate'); end if;
+  if not exists (select 1 from public.points_ledger where email = v_email) then return jsonb_build_object('ok', true, 'send', false); end if;
+  insert into public.points_login (email, code_hash, expires_at) values (v_email, th, now() + interval '15 minutes');
+  select full_name into v_name from public.vol_people where email = v_email;
+  return jsonb_build_object('ok', true, 'send', true, 'name', coalesce(v_name, ''));
+end $$;
+
+-- Is this a good code for this address? A wrong one counts against the address (five and it is locked until a new one is asked for).
+create or replace function public.points_login_ok(p_email text, th text) returns uuid
+language plpgsql security definer set search_path = public
+as $$
+declare v_id uuid;
+begin
+  select id into v_id from public.points_login
+   where email = lower(btrim(coalesce(p_email, ''))) and code_hash = th and used_at is null and expires_at > now() and attempts < 5
+   order by created_at desc limit 1;
+  if v_id is null then
+    update public.points_login set attempts = attempts + 1 where email = lower(btrim(coalesce(p_email, ''))) and used_at is null and expires_at > now();
+  end if;
+  return v_id;
+end $$;
+
+-- What they have and what they can do with it: points, points already set aside (unused codes, priority links waiting), what is free to spend, and the competitions a code can be for.
+create or replace function public.points_options(p_email text, th text) returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare v_email text := lower(btrim(coalesce(p_email, ''))); v_bal integer; v_res integer; v_name text;
+begin
+  if public.points_login_ok(v_email, th) is null then return jsonb_build_object('ok', false, 'error', 'code'); end if;
+  v_bal := public.points_balance(v_email);
+  v_res := coalesce((select sum(d.points_cost) from public.discount_codes d where d.recipient_email = v_email and d.points_cost > 0 and d.points_spent_at is null and d.active and (d.expires_at is null or d.expires_at > now())), 0)
+         + (select count(*) from public.invites i join public.competitions c on c.id = i.competition_id
+             where i.email = v_email and i.from_points and i.used_at is null and not c.entries_closed_manually and coalesce(c.entry_closes, 'infinity') > now());
+  select full_name into v_name from public.vol_people where email = v_email;
+  return jsonb_build_object('ok', true, 'name', coalesce(v_name, ''), 'balance', v_bal, 'reserved', v_res, 'available', greatest(v_bal - v_res, 0),
+    'points_per_step', 4, 'step_pence', 2000,
+    'codes', coalesce((select jsonb_agg(jsonb_build_object('id', d.id, 'code', d.code, 'competition', c.name, 'points', d.points_cost, 'pence', d.value, 'expires_at', d.expires_at) order by d.created_at)
+        from public.discount_codes d left join public.competitions c on c.id = d.competition_id
+       where d.recipient_email = v_email and d.points_cost > 0 and d.points_spent_at is null and d.active and (d.expires_at is null or d.expires_at > now())
+         and not exists (select 1 from public.entries e where e.discount_code_id = d.id and (e.status in ('paid', 'comped') or (e.status = 'held' and e.hold_expires_at > now())))), '[]'::jsonb),
+    'competitions', coalesce((select jsonb_agg(jsonb_build_object('id', c.id, 'name', c.name, 'slug', c.slug, 'start_date', c.start_date) order by c.start_date)
+        from public.competitions c where c.published and c.entry_method = 'yne' and not c.entries_closed_manually and coalesce(c.entry_closes, 'infinity') > now() and c.start_date >= current_date), '[]'::jsonb));
+end $$;
+
+-- Turn points into a discount code for one competition: £20 for every 4 points (up to 5 steps at a time). The code is only for this email and can be used once.
+-- The points are set aside now and come off the balance when an entry using the code is confirmed. Uses up the emailed code.
+create or replace function public.points_redeem(p_email text, th text, comp uuid, steps integer) returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare v_email text := lower(btrim(coalesce(p_email, ''))); v_login uuid; o jsonb; c public.competitions%rowtype; v_name text; v_prefix text; v_code text; u text; tries integer := 0;
+  v_row public.discount_codes%rowtype; v_cost integer; v_pence integer;
+  alphabet constant text := 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+begin
+  if steps is null or steps < 1 or steps > 5 then return jsonb_build_object('ok', false, 'error', 'steps'); end if;
+  o := public.points_options(v_email, th);
+  if not (o->>'ok')::boolean then return o; end if;
+  select * into c from public.competitions where id = comp;
+  if not found or not c.published or c.entry_method <> 'yne' or c.entries_closed_manually or coalesce(c.entry_closes, 'infinity') <= now() or c.start_date < current_date then return jsonb_build_object('ok', false, 'error', 'competition'); end if;
+  v_cost := steps * 4; v_pence := steps * 2000;
+  if (o->>'available')::int < v_cost then return jsonb_build_object('ok', false, 'error', 'points', 'available', (o->>'available')::int); end if;
+  v_name := o->>'name';
+  v_prefix := left(upper(regexp_replace(v_name, '[^A-Za-z]', '', 'g')), 10); if v_prefix = '' then v_prefix := 'YNE'; end if;
+  loop
+    u := replace(gen_random_uuid()::text, '-', '');
+    v_code := v_prefix || '-' || (v_pence / 100)::text || 'OFF-' || (select string_agg(substr(alphabet, (('x' || substr(u, i * 2 - 1, 2))::bit(8)::int % length(alphabet)) + 1, 1), '') from generate_series(1, 6) i);
+    exit when not exists (select 1 from public.discount_codes where code_key = upper(v_code));
+    tries := tries + 1; if tries > 20 then raise exception 'could not make a unique code'; end if;
+  end loop;
+  insert into public.discount_codes (competition_id, code, recipient_name, recipient_email, kind, value, max_uses, expires_at, reason, created_by, points_cost)
+    values (c.id, v_code, v_name, v_email, 'amount', v_pence, 1, coalesce(c.entry_closes, (c.start_date + 1)::timestamptz), 'Volunteer points: ' || v_cost || ' points for £' || (v_pence / 100), 'self-service', v_cost)
+    returning * into v_row;
+  update public.points_login set used_at = now() where email = v_email and code_hash = th and used_at is null;
+  perform public.points_insert(v_email, 0, 'Discount code made: ' || v_row.code || ' (' || v_cost || ' points held for ' || c.name || ')', 'note', now(), c.id, null, 'code:' || v_row.id);
+  return jsonb_build_object('ok', true, 'code', v_row.code, 'discount_pence', v_pence, 'points', v_cost, 'competition', c.name, 'name', v_name, 'slug', c.slug, 'expires_at', v_row.expires_at,
+    'available_after', (o->>'available')::int - v_cost);
+end $$;
+revoke all on function public.points_login_start(text, text), public.points_login_ok(text, text), public.points_options(text, text), public.points_redeem(text, text, uuid, integer) from public, anon, authenticated;
+do $$ begin
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    grant execute on function public.points_login_start(text, text), public.points_login_ok(text, text), public.points_options(text, text), public.points_redeem(text, text, uuid, integer) to service_role;
+  end if;
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- 21. Edit a volunteer: their name, mobile, T-shirt size or email address (entries team only)
+-- ---------------------------------------------------------------------------
+-- p = { email (who they are now), full_name, new_email (optional), mobile (optional), tshirt (optional), committee (optional true/false), create (optional: add them if new) }
+-- A new name shows everywhere (points list, sign-ups, the rota, the referee roster). A new email moves everything that belongs to the old one: sign-ups,
+-- rota places, points (including the history, so nothing is lost), unused priority links and unused discount codes, so they still work. The change is
+-- written to the audit log with who made it. If the new address already belongs to someone else it is refused: that is two people to merge, not a rename.
+create or replace function public.vol_person_update(p jsonb) returns jsonb
+language plpgsql security definer set search_path = public, auth
+as $$
+declare
+  v_old text := lower(btrim(coalesce(p->>'email', ''))); v_new text := lower(btrim(coalesce(nullif(p->>'new_email', ''), p->>'email', '')));
+  v_name text := btrim(coalesce(p->>'full_name', '')); had public.vol_people%rowtype; v_mobile text; v_shirt text; who text; n_pts integer; v_committee boolean; v_create boolean := coalesce((p->>'create')::boolean, false); v_had boolean;
+begin
+  if not public.is_entries() then raise exception 'forbidden'; end if;
+  if length(v_name) < 2 or length(v_name) > 120 then raise exception 'invalid:name'; end if;
+  if v_new !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' or length(v_new) > 200 then raise exception 'invalid:email'; end if;
+  select * into had from public.vol_people where email = v_old;
+  v_had := found;
+  if not v_had and not v_create and not exists (select 1 from public.points_ledger where email = v_old) and not exists (select 1 from public.vol_signups where email = v_old) then raise exception 'not_found'; end if;
+  if not v_had and v_create and v_new <> v_old then raise exception 'invalid:email'; end if;
+  if not v_had and v_create and (exists (select 1 from public.points_ledger where email = v_old) or exists (select 1 from public.vol_signups where email = v_old)) then raise exception 'exists'; end if;
+  v_mobile := left(case when p ? 'mobile' then btrim(coalesce(p->>'mobile', '')) else coalesce(had.mobile, '') end, 40);
+  v_shirt := case when p ? 'tshirt' then btrim(coalesce(p->>'tshirt', '')) else coalesce(had.tshirt, '') end;
+  if v_shirt not in ('', 'XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL') then raise exception 'invalid:tshirt'; end if;
+  select coalesce(email, 'unknown') into who from auth.users where id = auth.uid();
+  if v_new <> v_old and (exists (select 1 from public.vol_people where email = v_new) or exists (select 1 from public.points_ledger where email = v_new) or exists (select 1 from public.vol_signups where email = v_new)) then
+    raise exception 'exists';
+  end if;
+  if not v_had then
+    insert into public.vol_people (email, full_name, mobile, tshirt) values (v_old, v_name, v_mobile, v_shirt) on conflict (email) do nothing;
+  end if;
+  update public.vol_people set full_name = v_name, mobile = v_mobile, tshirt = v_shirt, updated_at = now() where email = v_old;
+  -- the committee box: ticking starts it today, unticking ends it yesterday (so they count only if they were part of it on a quarter's last day)
+  if p ? 'committee' then
+    v_committee := coalesce((p->>'committee')::boolean, false);
+    if v_committee and not coalesce(had.committee, false) then update public.vol_people set committee = true, committee_from = current_date, committee_until = null where email = v_old;
+    elsif not v_committee and coalesce(had.committee, false) then update public.vol_people set committee = false, committee_until = current_date - 1 where email = v_old; end if;
+  end if;
+  update public.vol_signups set full_name = v_name, mobile = v_mobile, tshirt = v_shirt where email = v_old;
+  update public.vol_places set person_name = v_name where email = v_old;
+  update public.vol_referees set name = v_name where email = v_old;
+  if v_new <> v_old then
+    update public.vol_people set email = v_new where email = v_old;
+    update public.vol_signups set email = v_new where email = v_old;
+    update public.vol_places set email = v_new where email = v_old;
+    update public.vol_referees set email = v_new where email = v_old;
+    update public.points_ledger set email = v_new where email = v_old;
+    update public.invites set email = v_new where email = v_old and used_at is null;
+    update public.discount_codes set recipient_email = v_new where recipient_email = v_old and points_spent_at is null and active;
+    delete from public.points_login where email = v_old;
+  end if;
+  insert into public.audit_log (actor_id, actor_email, table_name, row_id, action, before, after)
+    values (auth.uid(), coalesce(who, 'system'), 'vol_people', v_old, 'update',
+            jsonb_build_object('email', v_old, 'full_name', coalesce(had.full_name, ''), 'mobile', coalesce(had.mobile, ''), 'tshirt', coalesce(had.tshirt, ''), 'committee', coalesce(had.committee, false)),
+            jsonb_build_object('email', v_new, 'full_name', v_name, 'mobile', v_mobile, 'tshirt', v_shirt, 'committee', case when p ? 'committee' then coalesce((p->>'committee')::boolean, false) else coalesce(had.committee, false) end));
+  select public.points_balance(v_new) into n_pts;
+  return jsonb_build_object('email', v_new, 'name', v_name, 'balance', n_pts, 'email_changed', v_new <> v_old);
+end $$;
+revoke all on function public.vol_person_update(jsonb) from public, anon;
+grant execute on function public.vol_person_update(jsonb) to authenticated;
+
+
+-- ---------------------------------------------------------------------------
+-- 22. Committee and executive points: 3 points at the end of every quarter for everyone ticked "part of the committee"
+-- ---------------------------------------------------------------------------
+-- Tick the box when editing a volunteer (see vol_person_update). Awards start with the quarter ending 31 December 2026. Someone earns a quarter if they were
+-- part of the committee on its last day (31 March, 30 June, 30 September, 31 December). Each person and quarter is awarded once, however often this runs, and
+-- anything missed is caught up. The waitlist function's timer calls it and emails competitions@ when it awards anything.
+create or replace function public.committee_points_award(p_today date default current_date) returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare q date; r record; ins boolean; done jsonb := '[]'::jsonb; d date := date '2026-12-31';
+begin
+  while d <= p_today loop
+    q := d;
+    for r in select email, full_name from public.vol_people
+              where committee and committee_from is not null and committee_from <= q and (committee_until is null or committee_until >= q) loop
+      ins := public.points_insert(r.email, 3, 'Committee service: Q' || extract(quarter from q)::int || ' ' || extract(year from q)::int, 'earned',
+                                  ((q::timestamp + interval '12 hours') at time zone 'Europe/London'), null, null, 'committee:' || r.email || ':' || q);
+      if ins then done := done || jsonb_build_array(jsonb_build_object('name', r.full_name, 'email', r.email, 'quarter', 'Q' || extract(quarter from q)::int || ' ' || extract(year from q)::int)); end if;
+    end loop;
+    d := (date_trunc('month', (d + 1)::timestamp) + interval '3 months - 1 day')::date;
+  end loop;
+  return jsonb_build_object('awarded', jsonb_array_length(done), 'people', done);
+end $$;
+revoke all on function public.committee_points_award(date) from public, anon, authenticated;
+do $$ begin
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    grant execute on function public.committee_points_award(date) to service_role;
+  end if;
+end $$;
+
+
+-- ---- Give the points of an unused discount code back --------------------------------------------------------------------------------
+-- An unused code only holds its points (they come off when an entry using it is confirmed), so giving them back is just switching the code off. A code that
+-- is already on an entry (paid, or held while someone pays) cannot be released, and one that has been spent is never given back. Codes that nobody uses also
+-- free their points by themselves when entry closes (they expire), with no ledger change needed. Uses the emailed code, which stays good for more releases.
+create or replace function public.points_release(p_email text, th text, p_code uuid) returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare v_email text := lower(btrim(coalesce(p_email, ''))); d public.discount_codes%rowtype; o jsonb; v_comp text;
+begin
+  if public.points_login_ok(v_email, th) is null then return jsonb_build_object('ok', false, 'error', 'code'); end if;
+  select * into d from public.discount_codes where id = p_code and recipient_email = v_email and points_cost > 0 and points_spent_at is null and active for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'not_found'); end if;
+  if exists (select 1 from public.entries e where e.discount_code_id = d.id and (e.status in ('paid', 'comped') or (e.status = 'held' and e.hold_expires_at > now()))) then
+    return jsonb_build_object('ok', false, 'error', 'in_use');
+  end if;
+  update public.discount_codes set active = false, reason = left(reason || ' (released by the volunteer)', 300) where id = d.id;
+  select name into v_comp from public.competitions where id = d.competition_id;
+  o := public.points_options(v_email, th);
+  return jsonb_build_object('ok', true, 'code', d.code, 'points', d.points_cost, 'competition', coalesce(v_comp, ''), 'available', (o->>'available')::int, 'balance', (o->>'balance')::int);
+end $$;
+revoke all on function public.points_release(text, text, uuid) from public, anon, authenticated;
+do $$ begin
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    grant execute on function public.points_release(text, text, uuid) to service_role;
+  end if;
+end $$;
+
+
+-- ---------------------------------------------------------------------------
+-- 23. The points history tells the whole story of a discount code: made (points held), then spent when the entry is confirmed, or released
+-- ---------------------------------------------------------------------------
+-- A note is a ledger line that moves no points (0), so it never changes a balance. A code being made, and later spent or released, each leave a line.
+alter table public.points_ledger drop constraint if exists points_ledger_kind_check;
+alter table public.points_ledger add constraint points_ledger_kind_check
+  check (kind in ('earned', 'spent', 'adjustment', 'forfeit', 'reversal', 'restore', 'import', 'note'));
+
+-- An unused points code that is switched off or deleted (by the volunteer giving it back, or by you on the Codes tab) leaves a "released" note.
+create or replace function public.discount_points_released() returns trigger
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if old.points_cost > 0 and old.points_spent_at is null and old.recipient_email <> '' and old.active and (tg_op = 'DELETE' or not new.active) then
+    perform public.points_insert(old.recipient_email, 0, 'Discount code released: ' || old.code || ' (' || old.points_cost || ' points no longer held)', 'note', now(), old.competition_id, null, 'codeoff:' || old.id);
+  end if;
+  return case when tg_op = 'DELETE' then old else new end;
+end $$;
+drop trigger if exists discount_points_released on public.discount_codes;
+create trigger discount_points_released after update or delete on public.discount_codes for each row execute function public.discount_points_released();
+
+
+-- A points code nobody used before it ran out frees its points by itself; this leaves the "expired" line in the history. The waitlist function's timer
+-- calls it. A code that is on an entry (paid, or held while someone pays) is left alone, and each code is only noted once.
+create or replace function public.points_codes_expire() returns integer
+language plpgsql security definer set search_path = public
+as $$
+declare r record; n integer := 0;
+begin
+  for r in select d.id, d.code, d.points_cost, d.recipient_email, d.competition_id, d.expires_at as expired_at from public.discount_codes d
+            where d.points_cost > 0 and d.points_spent_at is null and d.active and d.recipient_email <> '' and d.expires_at is not null and d.expires_at <= now()
+              and not exists (select 1 from public.entries e where e.discount_code_id = d.id and (e.status in ('paid', 'comped') or (e.status = 'held' and e.hold_expires_at > now()))) loop
+    if public.points_insert(r.recipient_email, 0, 'Discount code expired: ' || r.code || ' (' || r.points_cost || ' points no longer held)', 'note', r.expired_at, r.competition_id, null, 'codeoff:' || r.id) then n := n + 1; end if;
+  end loop;
+  return n;
+end $$;
+revoke all on function public.points_codes_expire() from public, anon, authenticated;
+do $$ begin
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    grant execute on function public.points_codes_expire() to service_role;
+  end if;
+end $$;

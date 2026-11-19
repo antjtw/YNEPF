@@ -197,7 +197,7 @@
     if (c.kind === "event") return "none";
     var opens = c.entry_opens ? new Date(c.entry_opens) : null;
     var closes = c.entry_closes ? new Date(c.entry_closes) : null;
-    if (closes && now >= closes) return "closed";
+    if ((closes && now >= closes) || c.entries_closed_manually) return "closed";      // closing date passed, or "Close entries now" ticked
     if (c.entries_full) return "full";
     if (opens && now < opens) return "soon";
     if (opens || closes || c.entry_url) return "open";
@@ -326,15 +326,17 @@
         waitlist: state === "full" && c.waitlist_url ? (c.waitlist_url.charAt(0) === "/"
           ? el("a", { href: c.waitlist_url, "aria-label": "Join the waiting list for " + c.name }, "Join the waiting list")
           : el("a", { href: c.waitlist_url, target: "_blank", rel: "noopener", "aria-label": "Join the waiting list for " + c.name + " (opens in a new tab)" }, "Join the waiting list ", Y_EXT())) : null,
+        volunteer: c.volunteers_open && c.slug && state !== "archived" ? el("a", { href: "/volunteer?c=" + encodeURIComponent(c.slug), "aria-label": "Volunteer at " + c.name }, "Volunteer") : null,
+        rota: c.rota_published && c.slug ? el("a", { href: "/rota?c=" + encodeURIComponent(c.slug), "aria-label": "See who is volunteering at " + c.name }, "View volunteer rota") : null,
         order: c.lifting_published ? el("a", { href: liftingHref(c) }, "View lifting order") : null,
         entries: c.has_entries && c.slug && !c.lifting_published ? el("a", { href: "/entries?c=" + encodeURIComponent(c.slug) }, "View entries") : null,
         results: c.openipf_url ? el("a", { href: c.openipf_url, target: "_blank", rel: "noopener",
           "aria-label": "View results on OpenIPF for " + c.name + " (opens in a new tab)" }, "View results on OpenIPF ", Y_EXT()) : null
       };
-      var order = state === "archived" ? ["results", "order", "entries"]
-        : state === "closed" ? ["order", "entries", "results"]
-        : state === "full" ? ["waitlist", "entries", "order", "results"]
-        : ["enter", "entries", "order", "results"];
+      var order = state === "archived" ? ["results", "order", "entries", "rota"]
+        : state === "closed" ? ["order", "entries", "volunteer", "rota", "results"]
+        : state === "full" ? ["waitlist", "entries", "order", "volunteer", "rota", "results"]
+        : ["enter", "entries", "order", "volunteer", "rota", "results"];
       var actions = [], first = true;
       order.forEach(function (k) {
         if (!A[k]) return;

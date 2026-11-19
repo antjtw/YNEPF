@@ -31,7 +31,7 @@ const SHARE_ALT = "A lifter pulling a deadlift, beside the words: The home of dr
 const FALLBACK_DESCRIPTION = "The home of drug tested powerlifting in Yorkshire and the North East. Find upcoming competitions, records, news and how to get involved.";
 // These pages show different content for different addresses (post.html?p=..., /lifting-order/...), so
 // they get the general link preview but no fixed canonical address and are left out of the sitemap.
-const DYNAMIC = ["post.html", "lifting/index.html"];
+const DYNAMIC = ["post.html", "lifting/index.html", "volunteer.html", "rota.html"];
 
 const header = fs.readFileSync(path.join(ROOT, "assets/partials/header.html"), "utf8").trim();
 const footer = fs.readFileSync(path.join(ROOT, "assets/partials/footer.html"), "utf8").trim();
@@ -49,6 +49,9 @@ const pages = [
   "post.html",
   "faqs.html",
   "privacy.html",
+  "volunteer.html",
+  "rota.html",
+  "points.html",
   "chairperson.html",
   "rules.html",
   "contact.html",

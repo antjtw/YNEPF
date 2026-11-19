@@ -185,3 +185,9 @@ body.dragging-lifter { user-select: none; cursor: grabbing; }
 .lab-headacts { display: inline-flex; gap: var(--space-2); margin-left: auto; }
 
 .lo-sub { margin: var(--space-4) 0 var(--space-1); font-size: 1rem; color: var(--text); text-transform: none; letter-spacing: 0; }
+
+.admin-user a.admin-account { display: inline-flex; align-items: center; gap: var(--space-2); font-weight: 600; text-decoration: none; }
+.admin-user a.admin-account:hover { text-decoration: underline; }
+.admin-user a.admin-account[aria-current="page"] { text-decoration: underline; text-underline-offset: 4px; }
+.item-row select.control, .item-row input.control { min-width: 14rem; }
+.item-row .item-main:has(> select) { flex: 1 1 18rem; }

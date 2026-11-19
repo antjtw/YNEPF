@@ -335,6 +335,315 @@ const stime = (await db.query("select public.server_time() t")).rows[0].t;
 ok(stime && Math.abs(new Date(stime) - Date.now()) < 60000, "anyone can read the server time: " + stime);
 await db.exec("reset role");
 
+// ---- volunteers: sign-up form and rota ----
+await db.exec("reset role");
+const VC = "99999999-9999-9999-9999-999999999999";
+await db.exec(`insert into public.competitions (id,name,start_date,capacity,published,slug,entry_method) values ('${VC}','Vol Open','2027-07-10',20,true,'vol-open','yne')`);
+const roleId = async (n) => (await q(`select id from public.vol_roles where name = $1`, [n]))[0].id;
+const [rTable, rMc, rCrew, rSetupCrew, rChief] = [await roleId("Table"), await roleId("MC"), await roleId("Platform crew"), await roleId("Set up crew"), await roleId("Chief referee")];
+ok((await q(`select count(*)::int n from public.vol_roles`))[0].n >= 15, "the role catalogue is loaded");
+const form = async (slug = "vol-open") => (await q(`select public.volunteer_form($1) f`, [slug]))[0].f;
+await db.exec("set role anon");
+ok((await form()).open === false, "no rota yet: the form is closed");
+await db.exec("reset role");
+await db.exec(`insert into public.vol_rota (competition_id, signup_open) values ('${VC}', false)`);
+const [s1] = await q(`insert into public.vol_sessions (competition_id, area, label, when_text, sort_order) values ('${VC}','session','Session 1; Saturday AM','Weigh-in 08:00',10) returning id`);
+const [s2] = await q(`insert into public.vol_sessions (competition_id, area, label, sort_order) values ('${VC}','setup','Set up; Friday PM',20) returning id`);
+for (const [sid, rid, n] of [[s1.id, rTable, 2], [s1.id, rMc, 1], [s1.id, rCrew, 4], [s1.id, rChief, 1], [s2.id, rSetupCrew, 6]]) for (let i = 1; i <= n; i++) await db.exec(`insert into public.vol_places (vol_session_id, role_id, position) values ('${sid}','${rid}',${i})`);
+await db.exec("set role anon");
+ok((await form()).open === false, "sign-up not switched on: closed");
+await db.exec("reset role"); await db.exec(`update public.vol_rota set signup_open = true where competition_id = '${VC}'`); await db.exec("set role anon");
+const fm = await form();
+ok(fm.open && fm.sessions.length === 2 && JSON.stringify(fm.sessions[0].roles.map((r) => r.name)) === '["Table","MC","Platform crew"]' && fm.sessions[1].roles[0].name === "Set up crew", "the form lists sessions and only the roles volunteers can choose (no referees): " + JSON.stringify(fm.sessions.map((x) => x.roles.map((r) => r.name))));
+let lastSignup = null;
+const signup = async (o) => { const prev = await db.query("select current_user u").then((r) => r.rows[0].u); await db.exec("reset role"); try { lastSignup = (await db.query(`select public.volunteer_signup($1::jsonb) r`, [JSON.stringify({ slug: "vol-open", name: "Vic Volunteer", email: "Vic@X.com", mobile: "07700 900123", tshirt: "L", over18: true, choices: [{ session_id: s1.id, role_id: rMc }], ...o })])).rows[0].r; return null; } catch (e) { return e.message; } finally { if (prev !== "postgres" && prev !== "pglite") await db.exec("set role " + prev); } };
+ok(!(await signup({})), "a valid sign-up works");
+for (const [what, o, msg] of [["under 18 / not ticked", { over18: false }, "invalid:over18"], ["a bad email", { email: "nope" }, "invalid:email"], ["no T-shirt size", { tshirt: "" }, "invalid:tshirt"], ["a made-up size", { tshirt: "HUGE" }, "invalid:tshirt"],
+  ["no roles chosen", { choices: [] }, "invalid:choices"], ["a role that is not on the form (chief referee)", { choices: [{ session_id: s1.id, role_id: rChief }] }, "invalid:choices"], ["a bad mobile", { mobile: "abc" }, "invalid:mobile"], ["a short name", { name: "V" }, "invalid:name"], ["the wrong competition", { slug: "nope" }, "closed"]]) {
+  const e = await signup(o); ok(e && e.includes(msg), "refused: " + what + " (" + (e || "accepted").slice(0, 50) + ")");
+}
+await db.exec("reset role");
+let su = await q(`select s.email, s.full_name, s.mobile, s.tshirt, (select count(*)::int from public.vol_signup_roles r where r.signup_id = s.id) n from public.vol_signups s where competition_id = '${VC}'`);
+ok(su.length === 1 && su[0].email === "vic@x.com" && su[0].n === 1 && su[0].tshirt === "L", "stored with a lower case email: " + JSON.stringify(su));
+await db.exec("set role anon");
+ok((await signup({ name: "Someone Else", choices: [{ session_id: s1.id, role_id: rTable }] }))?.includes("exists"), "signing up again with an email that already signed up is refused: nobody can overwrite another person's answers by typing their address");
+await db.exec("reset role");
+const vtok = (await q(`select edit_token t from public.vol_signups where competition_id = '${VC}'`))[0].t;
+ok(vtok && vtok.length >= 60, "every sign-up has a long secret link token");
+ok((await signup({ token: "wrong", name: "x y", choices: [{ session_id: s1.id, role_id: rTable }] }))?.includes("bad_token"), "a wrong token is refused");
+ok(!(await signup({ token: vtok, name: "Vic V Changed", email: "ignored@x.com", choices: [{ session_id: s1.id, role_id: rTable }, { session_id: s2.id, role_id: rSetupCrew }] })) && lastSignup.edited === true && lastSignup.email === "vic@x.com" && lastSignup.lines.length === 2, "with the token they can change their answers (the email stays theirs): " + JSON.stringify(lastSignup).slice(0, 160));
+await db.exec("set role anon");
+const fm2 = (await q(`select public.volunteer_form('vol-open', $1) f`, [vtok]))[0].f;
+ok(fm2.mine && fm2.mine.name === "Vic V Changed" && fm2.mine.choices.length === 2 && fm2.mine.tshirt === "L", "the form can be filled in with their own answers from the token");
+ok((await q(`select public.volunteer_form('vol-open', 'nope') f`))[0].f.bad_token === true && !(await q(`select public.volunteer_form('vol-open') f`))[0].f.mine, "a wrong token gives nothing, and no token shows no answers");
+ok(!(await can(`select public.volunteer_signup('{}'::jsonb)`)) && !(await can(`select public.volunteer_link('vol-open', 'vic@x.com')`)), "the public cannot call the sign-up or link functions directly (only our server can)");
+await db.exec("reset role");
+const lk = (await q(`select public.volunteer_link('vol-open', 'VIC@x.com') r`))[0].r, lk2 = (await q(`select public.volunteer_link('vol-open', 'nobody@x.com') r`))[0].r;
+ok(lk.found === true && lk.token === vtok && lk2.found === false, "the link lookup finds a sign-up by email, and says so when there is none");
+await db.exec("reset role");
+su = await q(`select s.full_name, (select count(*)::int from public.vol_signup_roles r where r.signup_id = s.id) n from public.vol_signups s where competition_id = '${VC}'`);
+ok(su.length === 1 && su[0].full_name === "Vic V Changed" && su[0].n === 2, "still one person, now with two choices");
+// referees: a roster with levels, shown on the rota
+await db.exec(`insert into public.vol_referees (name, email, level) values ('Rhea Referee', 'rhea@x.com', 'bp_national')`);
+ok(!(await q(`select 1 from public.vol_referees where lower(name) = 'rhea referee'`)).length === false, "the referee roster stores a level");
+await db.exec("set role anon"); ok(!(await can(`select * from public.vol_referees`)), "the public cannot read the referee roster"); await db.exec("reset role");
+ok((await q(`select count(*)::int n from public.vol_people where email = 'vic@x.com'`))[0].n === 1, "and in the people list");
+// the public cannot read people's details
+await db.exec("set role anon");
+ok(!(await can(`select * from public.vol_signups`)) && !(await can(`select * from public.vol_people`)) && !(await can(`select * from public.vol_places`)), "the public cannot read sign-ups, people or places");
+// the rota: nothing public until published, then names only
+await db.exec("reset role");
+const [pl] = await q(`select id from public.vol_places where vol_session_id = '${s1.id}' and role_id = '${rMc}' limit 1`);
+await db.exec(`update public.vol_places set person_name = 'Mia MC', email = 'mia@x.com', level = 'British Powerlifting National referee' where id = '${pl.id}'`);
+await db.exec("set role anon");
+ok((await db.query(`select * from public.rota_public where competition_id = '${VC}'`)).rows.length === 0, "an unpublished rota shows nothing");
+await db.exec("reset role"); await db.exec(`update public.vol_rota set status = 'published' where competition_id = '${VC}'`); await db.exec("set role anon");
+const pub = (await db.query(`select * from public.rota_public where competition_id = '${VC}'`)).rows;
+ok(pub.length === 1 && pub[0].name === "Mia MC" && pub[0].role === "MC" && pub[0].level === "British Powerlifting National referee" && !("email" in pub[0]) && !("mobile" in pub[0]), "the published rota shows names, roles and levels, with no emails or mobile numbers");
+await db.exec("reset role");
+const prevRows = async (who) => asUser(who, async () => { try { return (await db.query(`select * from public.rota_preview('${VC}')`)).rows; } catch (e) { return { error: e.message }; } });
+await db.exec(`update public.vol_rota set status = 'draft' where competition_id = '${VC}'`);
+ok((await prevRows(U.entries)).length === 1 && (await prevRows(U.editor)).error?.includes("forbidden"), "the entries team can preview a draft rota; an editor cannot");
+// the entries team manages everything; an editor cannot
+await db.exec("reset role"); await db.query(`select set_config('request.uid','${U.entries}',false)`); await db.exec("set role authenticated");
+ok(await can(`update public.vol_places set person_name = 'Someone' where id = '${pl.id}'`) && (await q(`select count(*)::int n from public.vol_signups`))[0].n >= 1, "the entries team can read sign-ups and edit places");
+await db.exec("reset role"); await db.query(`select set_config('request.uid','${U.editor}',false)`); await db.exec("set role authenticated");
+ok((await q(`select count(*)::int n from public.vol_signups`))[0].n === 0, "an editor sees no sign-ups");
+await db.exec("reset role");
+
+// ---- volunteer points: ledger, expiry, tick-off, adjustments, import ----
+await db.exec("reset role");
+const bal = async (e, at = "now()") => (await q(`select public.points_balance('${e}', ${at}) b`))[0].b;
+const pe = async (fn, who, arg) => asUser(who, async () => { try { return (await db.query(`select public.${fn}($1::jsonb) r`, [JSON.stringify(arg)])).rows[0].r; } catch (e) { return { error: e.message }; } });
+await db.exec(`insert into public.vol_people (email, full_name) values ('fifo@x.com','Fifo Person'), ('vic@x.com','Vic V Changed') on conflict (email) do nothing`);
+// earned 3 points two years and a month ago (expired), 2 a year ago, 1 last month; spent 1 six months ago: the spend uses the oldest unexpired lot
+await db.exec(`insert into public.points_ledger (email, delta, reason, kind, earned_at) values
+  ('fifo@x.com', 3, 'old', 'import', now() - interval '25 months'),
+  ('fifo@x.com', 2, 'a year ago', 'import', now() - interval '12 months'),
+  ('fifo@x.com', 1, 'last month', 'import', now() - interval '1 month'),
+  ('fifo@x.com', -1, 'spent', 'spent', now() - interval '6 months')`);
+ok((await bal("fifo@x.com")) === 3, "points expire 24 months after earning, and a spend uses the oldest live lot first (it took one from the 25 month old lot, which was still live six months ago): balance " + (await bal("fifo@x.com")));
+ok((await bal("fifo@x.com", "now() - interval '7 months'")) === 5 - 0, "balance as it was seven months ago (the 25 month old points were still live): " + (await bal("fifo@x.com", "now() - interval '7 months'")));
+await db.exec(`insert into public.points_ledger (email, delta, reason, kind, earned_at) values ('fifo@x.com', 1, 'soon', 'import', now() - interval '23 months 20 days')`);
+const ov = (await asUser(U.entries, async () => (await db.query(`select * from public.points_overview() where email = 'fifo@x.com'`)).rows))[0];
+ok(ov && ov.balance === 4 && ov.expiring === 1 && ov.earned === 7 && ov.spent === 1, "the overview shows balance, what is about to expire, and totals: " + JSON.stringify(ov));
+ok((await asUser(U.editor, async () => { try { await db.query(`select * from public.points_overview()`); return "ok"; } catch (e) { return e.message; } })).includes("forbidden"), "an editor cannot see the overview");
+// tick-off on the day
+const placeOf = async (sid, rid, n = 1) => (await q(`select id from public.vol_places where vol_session_id = '${sid}' and role_id = '${rid}' and position = ${n}`))[0].id;
+await db.exec(`update public.vol_places set person_name = 'Vic V Changed', email = 'vic@x.com' where id = '${await placeOf(s1.id, rMc)}'`);
+const plMc = await placeOf(s1.id, rMc);
+const mark = (st, who = U.entries) => asUser(who, async () => { try { return (await db.query(`select public.vol_mark($1::uuid, $2) r`, [plMc, st])).rows[0].r; } catch (e) { return { error: e.message }; } });
+ok((await mark("arrived", U.editor)).error?.includes("forbidden"), "an editor cannot tick people off");
+let m = await mark("arrived");
+ok(m.points === 1 && (await bal("vic@x.com")) === 1, "arrived: they earn the role's point");
+ok((await mark("arrived")).points === 0 && (await bal("vic@x.com")) === 1, "ticking arrived twice does not pay twice");
+await mark("planned"); ok((await bal("vic@x.com")) === 0, "undoing arrived takes the point back");
+await mark("arrived");
+await asUser(U.entries, () => pe("points_adjust", U.entries, { email: "vic@x.com", delta: 4, reason: "Thank you for the extra work" }));
+ok((await bal("vic@x.com")) === 5, "a manual thank-you adds points");
+m = await mark("no_show");
+ok(m.points === -4 && (await bal("vic@x.com")) === 0, "no show: this place stops counting and they lose the rest of their balance too, so nothing is left (" + JSON.stringify(m) + ")");
+await mark("cancelled"); ok((await bal("vic@x.com")) === 4, "undoing a no-show gives the forfeited points back");
+await mark("no_show"); await mark("planned"); await mark("cancelled");
+ok((await q(`select status from public.vol_places where id = '${plMc}'`))[0].status === "cancelled" && (await bal("vic@x.com")) === 4, "told us in advance (cancelled): no points lost");
+// adjustments: take away, never below zero, reason needed
+let adj = await pe("points_adjust", U.entries, { email: "vic@x.com", delta: -2, reason: "Half price BP membership (5)" });
+ok(adj.balance === 2, "taking points away (a spend) lowers the balance: " + JSON.stringify(adj));
+ok((await pe("points_adjust", U.entries, { email: "vic@x.com", delta: -9, reason: "x" })).error?.includes("insufficient"), "cannot spend more than the balance");
+ok((await pe("points_adjust", U.entries, { email: "vic@x.com", delta: 1, reason: "" })).error?.includes("invalid:reason"), "a reason is required");
+ok((await pe("points_adjust", U.entries, { email: "new@x.com", delta: 1, reason: "r" })).error?.includes("invalid:name"), "a new person needs a name");
+ok((await pe("points_adjust", U.editor, { email: "vic@x.com", delta: 1, reason: "r" })).error?.includes("forbidden"), "only the entries team can adjust points");
+// the ledger is append only and shows who did what
+await asUser(U.entries, async () => {
+  ok(!(await can(`update public.points_ledger set delta = 99`)) && !(await can(`delete from public.points_ledger`)), "nobody can change or delete a ledger row");
+});
+ok((await q(`select count(*)::int n from public.points_ledger where email = 'vic@x.com' and created_by <> ''`))[0].n >= 3, "rows record who made them");
+// import: safe to run twice, sums match
+const imp = { rows: [{ key: "r1:a", email: "imp@x.com", name: "Imp One", date: "2025-03-01", delta: 2, reason: "Volunteered: March Open" }, { key: "r1:b", email: "imp@x.com", name: "Imp One", date: "2025-04-12", delta: -1, reason: "Spent: NESC" }, { key: "r2:a", email: "BAD", date: "2025-03-01", delta: 1, reason: "x" }] };
+let ir = await pe("points_import", U.entries, imp);
+ok(ir.inserted === 2 && ir.skipped === 1 && (await bal("imp@x.com")) === 1, "import adds the rows and skips the bad one: " + JSON.stringify(ir));
+ir = await pe("points_import", U.entries, imp); ok(ir.inserted === 0 && (await bal("imp@x.com")) === 1, "importing the same sheet again changes nothing");
+// helpers at a competition we did not staff
+const hp = await pe("points_award_helpers", U.entries, { competition_id: VC, rows: [{ name: "Hal Helper", email: "hal@x.com", points: 2 }, { name: "No Email", email: "" }] });
+ok(hp.awarded === 1 && hp.skipped === 1 && (await bal("hal@x.com")) === 2, "helpers at a franchise competition earn points once: " + JSON.stringify(hp));
+ok((await pe("points_award_helpers", U.entries, { competition_id: VC, rows: [{ name: "Hal Helper", email: "hal@x.com", points: 2 }] })).awarded === 0, "and not twice");
+// the public list is names and points only
+await db.exec("set role anon");
+const pubPts = (await db.query(`select * from public.points_public_list() order by points desc`)).rows;
+ok(pubPts.length >= 3 && Object.keys(pubPts[0]).sort().join() === "name,points" && !pubPts.some((x) => x.points <= 0), "the public points list shows names and points only, never zero: " + JSON.stringify(pubPts[0]));
+ok(!(await can(`select public.points_balance('vic@x.com')`)) && !(await can(`select * from public.points_ledger`)), "the public cannot read the ledger or call balances");
+await db.exec("reset role");
+
+
+// ---- stage 3: priority links from points, points spent when an entry is confirmed, self-service discount codes
+const PC = "a3a3a3a3-0000-4000-8000-000000000003";
+await db.exec(`update public.entry_settings set priority_from_points = false where competition_id = '${PR}'`);          // the earlier priority tests keep their own people
+await db.exec(`insert into public.competitions (id,name,start_date,capacity,published,slug,entry_method,entry_opens) values ('${PC}','Points Open','2027-05-15',50,true,'points-open','yne', now() + interval '10 hours');
+ insert into public.entry_settings (competition_id) values ('${PC}');
+ insert into public.price_rules (competition_id,sort_order,label,event,age_category,price_pence) values ('${PC}',1,'Full power','full_power',null,6000);
+ select public.points_insert('pat@x.com', 5, 'Volunteered: test', 'earned', now(), null, null, 'p3:a');
+ select public.points_insert('old@x.com', 1, 'Volunteered: long ago', 'earned', now() - interval '3 years', null, null, 'p3:b');
+ insert into public.vol_people (email, full_name) values ('pat@x.com', 'Pat Helper') on conflict do nothing;`);
+await db.exec(`insert into public.invites (competition_id, email, full_name) values ('${PC}', 'man@x.com', 'Manual Person');
+ select public.points_insert('man@x.com', 3, 'Volunteered: test', 'earned', now(), null, null, 'p3:c');`);
+const s3_n = (await q(`select public.priority_fill() n`))[0].n;
+ok(s3_n >= 1 && (await q(`select email from public.invites where competition_id = '${PC}' and from_points order by email`)).every((x) => x.email !== "old@x.com" && x.email !== "man@x.com") && (await q(`select 1 from public.invites where competition_id = '${PC}' and email = 'pat@x.com' and from_points`)).length === 1, "priority_fill: people with an unexpired point and no link already get one (pat), not an expired one (old) or a hand-made one (man)");
+ok((await q(`select public.priority_fill() n`))[0].n === 0, "and running it again adds nobody");
+let invs = (await q(`select email, from_points, token_hash from public.invites where competition_id = '${PC}' order by email`));
+ok(invs.length >= 2 && invs.find((x) => x.email === "pat@x.com").from_points && !invs.find((x) => x.email === "man@x.com").from_points && invs.every((x) => !x.token_hash), "priority list: pat from points, the hand-made one unchanged, both waiting to be sent");
+ok((await q(`select public.priority_competitions() r`))[0].r.includes(PC), "the timer picks the competition up");
+const s3_patInv = (await q(`select id from public.invites where competition_id='${PC}' and email='pat@x.com'`))[0].id;
+await q(`select public.priority_issue('${s3_patInv}', $1)`, [await hash("pat-token")]);
+const s3_manInv = (await q(`select id from public.invites where competition_id='${PC}' and email='man@x.com'`))[0].id;
+await q(`select public.priority_issue('${s3_manInv}', $1)`, [await hash("man-token")]);
+const s3_sp = (o) => q(`select public.start_entry($1::jsonb) r`, [JSON.stringify({ ...good, competition_id: PC, ...o })]).then((r) => r[0].r).catch((e) => ({ error: e.message }));
+const s3_e1 = await s3_sp({ email: "pat@x.com", full_name: "Pat Helper", invite: "pat-token" });
+ok(s3_e1.entry_id && s3_e1.price_pence === 6000, "pat enters with their link before general entry opens: " + JSON.stringify(s3_e1));
+ok((await bal("pat@x.com")) === 5, "nothing is spent while the entry is only started");
+ok((await q(`select public.confirm_entry_payment('${s3_e1.entry_id}') r`))[0].r === "paid" && (await bal("pat@x.com")) === 4, "confirmed: the priority link costs one point");
+await q(`select public.confirm_entry_payment('${s3_e1.entry_id}')`);
+ok((await bal("pat@x.com")) === 4 && (await q(`select count(*)::int n from public.points_ledger where import_key like 'priority:%'`))[0].n === 1, "confirming again does not spend it twice");
+const s3_e2 = await s3_sp({ email: "man@x.com", full_name: "Manual Person", invite: "man-token", date_of_birth: "1991-02-03" });
+await q(`select public.confirm_entry_payment('${s3_e2.entry_id}')`);
+ok((await bal("man@x.com")) === 3, "a link made by hand costs no points");
+// self-service: ask for a code, look at the options, turn points into a discount code
+const s3_lg = async (email, code) => q(`select public.points_login_start($1, $2) r`, [email, await hash(code)]).then((r) => r[0].r);
+ok((await s3_lg("pat@x.com", "111111")).send === true && (await s3_lg("nobody@x.com", "222222")).send === false && (await s3_lg("not an email", "3")).ok === false, "a code is only made for an address with points history, and the answer tells a stranger nothing");
+const s3_opt = async (email, code) => q(`select public.points_options($1, $2) r`, [email, await hash(code)]).then((r) => r[0].r);
+ok((await s3_opt("pat@x.com", "999999")).ok === false, "a wrong code shows nothing");
+let s3_o1 = await s3_opt("pat@x.com", "111111");
+ok(s3_o1.ok && s3_o1.balance === 4 && s3_o1.reserved === 0 && s3_o1.available === 4 && s3_o1.competitions.some((x) => x.id === PC), "the right code shows balance, points set aside and what is free: " + JSON.stringify({ ...s3_o1, competitions: s3_o1.competitions.length }));
+const PD = "a3a3a3a3-0000-4000-8000-000000000004";
+await db.exec(`insert into public.competitions (id,name,start_date,capacity,published,slug,entry_method,entry_opens) values ('${PD}','Discount Open','2027-07-10',50,true,'discount-open','yne', now() - interval '1 day');
+ insert into public.entry_settings (competition_id) values ('${PD}');
+ insert into public.price_rules (competition_id,sort_order,label,event,age_category,price_pence) values ('${PD}',1,'Full power','full_power',null,6000);`);
+const s3_rd = async (email, code, comp, steps) => q(`select public.points_redeem($1, $2, $3::uuid, $4) r`, [email, await hash(code), comp, steps]).then((r) => r[0].r).catch((e) => ({ error: e.message }));
+ok((await s3_rd("pat@x.com", "111111", PD, 2)).error === "points", "£40 needs 8 points: refused when there are only 4");
+const s3_red = await s3_rd("pat@x.com", "111111", PD, 1);
+ok(s3_red.ok && s3_red.discount_pence === 2000 && s3_red.points === 4 && /^PAT/.test(s3_red.code) && s3_red.available_after === 0, "4 points buy a £20 code: " + JSON.stringify(s3_red));
+ok((await s3_opt("pat@x.com", "111111")).ok === false, "the emailed code works once");
+const s3_dc = (await q(`select recipient_email, points_cost, kind, value, max_uses, competition_id from public.discount_codes where code = $1`, [s3_red.code]))[0];
+ok(s3_dc.recipient_email === "pat@x.com" && s3_dc.points_cost === 4 && s3_dc.kind === "amount" && s3_dc.value === 2000 && s3_dc.max_uses === 1 && s3_dc.competition_id === PD, "the code is for that person, that competition, once");
+await s3_lg("pat@x.com", "333333"); ok((await s3_opt("pat@x.com", "333333")).available === 0 && (await s3_opt("pat@x.com", "333333")).reserved === 4, "points in an unused code are set aside, so they cannot be spent twice");
+ok((await bal("pat@x.com")) === 4, "but the balance only drops when the code is used");
+await db.exec(`update public.competitions set entry_opens = now() - interval '1 hour' where id = '${PC}'`);
+const s3_e3 = await s3_sp({ competition_id: PD, email: "pat@x.com", full_name: "Pat Helper", discount_code: s3_red.code, date_of_birth: "1992-01-01" });
+ok(s3_e3.price_pence === 4000 && s3_e3.discount_pence === 2000, "the code takes £20 off: " + JSON.stringify(s3_e3));
+ok((await bal("pat@x.com")) === 4, "still not spent: the entry is not confirmed");
+await q(`select public.confirm_entry_payment('${s3_e3.entry_id}')`);
+ok((await bal("pat@x.com")) === 0 && (await q(`select points_spent_at from public.discount_codes where code = $1`, [s3_red.code]))[0].points_spent_at, "confirmed: the 4 points come off");
+// five wrong tries lock a code; five requests an hour is the limit
+await s3_lg("pat@x.com", "444444"); for (let i = 0; i < 5; i++) await s3_opt("pat@x.com", "wrong" + i);
+ok((await s3_opt("pat@x.com", "444444")).ok === false, "five wrong tries lock the code");
+await db.exec(`delete from public.points_login`); for (let i = 0; i < 5; i++) await s3_lg("pat@x.com", "c" + i);
+ok((await s3_lg("pat@x.com", "c9")).error === "rate", "no more than five codes an hour for one address");
+await db.exec("set role anon");
+ok(!(await can(`select public.priority_fill()`)) && !(await can(`select public.points_options('pat@x.com', 'x')`)) && !(await can(`select public.points_redeem('pat@x.com', 'x', '${PC}', 1)`)) && !(await can(`select public.points_login_start('pat@x.com', 'x')`)) && !(await can(`select * from public.points_login`)), "the public cannot call any of these, or read the codes");
+await db.exec("reset role");
+
+
+// ---- edit a volunteer: name, mobile, T-shirt, email
+const vu = (who, arg) => pe("vol_person_update", who, arg);
+await db.exec(`insert into public.vol_people (email, full_name, mobile) values ('edit@x.com', 'Edd Old', '07000') on conflict do nothing;
+ select public.points_insert('edit@x.com', 3, 'Volunteered: test', 'earned', now(), null, null, 'v21:a');
+ insert into public.vol_signups (competition_id, email, full_name, mobile) values ('${VC}', 'edit@x.com', 'Edd Old', '07000');
+ insert into public.discount_codes (code, recipient_email, kind, value, points_cost) values ('EDD-20OFF-AAAAAA', 'edit@x.com', 'amount', 2000, 4);`);
+ok((await vu(U.editor, { email: "edit@x.com", full_name: "X" })).error?.includes("forbidden"), "only the entries team can edit a volunteer");
+let vr = await vu(U.entries, { email: "edit@x.com", full_name: "Edd New" });
+ok(vr.name === "Edd New" && !vr.email_changed && (await q(`select full_name from public.vol_signups where email = 'edit@x.com'`))[0].full_name === "Edd New" && (await q(`select full_name from public.vol_people where email = 'edit@x.com'`))[0].full_name === "Edd New", "a new name shows on the person and their sign-ups: " + JSON.stringify(vr));
+ok((await vu(U.entries, { email: "edit@x.com", full_name: "E" })).error?.includes("invalid:name") && (await vu(U.entries, { email: "edit@x.com", new_email: "nope", full_name: "Edd New" })).error?.includes("invalid:email") && (await vu(U.entries, { email: "ghost@x.com", full_name: "Ghost Person" })).error?.includes("not_found"), "names and emails are checked, and an unknown person is refused");
+ok((await vu(U.entries, { email: "edit@x.com", new_email: "pat@x.com", full_name: "Edd New" })).error?.includes("exists"), "an email that already belongs to someone else is refused");
+vr = await vu(U.entries, { email: "edit@x.com", new_email: " Edd.New@X.com ", full_name: "Edd New", mobile: "07111", tshirt: "L" });
+ok(vr.email === "edd.new@x.com" && vr.email_changed && vr.balance === 3, "a new email keeps the points: " + JSON.stringify(vr));
+ok((await q(`select count(*)::int n from public.points_ledger where email = 'edit@x.com'`))[0].n === 0 && (await q(`select count(*)::int n from public.points_ledger where email = 'edd.new@x.com'`))[0].n === 1, "the history moves with them");
+ok((await q(`select mobile, tshirt from public.vol_signups where email = 'edd.new@x.com'`))[0].tshirt === "L" && (await q(`select recipient_email from public.discount_codes where code = 'EDD-20OFF-AAAAAA'`))[0].recipient_email === "edd.new@x.com", "sign-ups and an unused discount code follow the new address");
+ok((await q(`select count(*)::int n from public.audit_log where table_name = 'vol_people' and row_id = 'edit@x.com' and actor_email = 'entries@example.com'`))[0].n >= 2, "each change is in the audit log with who made it");
+
+// ---- committee points: tick the box, 3 points at each quarter end from 31 Dec 2026, once, only if in post on the last day
+await db.exec(`insert into public.vol_people (email, full_name) values ('cm1@x.com', 'Cam One'), ('cm2@x.com', 'Cam Two'), ('cm3@x.com', 'Cam Three') on conflict do nothing;`);
+const cp = (d) => q(`select public.committee_points_award($1::date) r`, [d]).then((r) => r[0].r);
+ok((await vu(U.entries, { email: "cm1@x.com", full_name: "Cam One", committee: true })).email === "cm1@x.com" && (await q(`select committee, committee_from is not null f, committee_until from public.vol_people where email = 'cm1@x.com'`))[0].f, "ticking the box starts committee service today");
+await vu(U.entries, { email: "cm2@x.com", full_name: "Cam Two", committee: true });
+ok((await cp("2026-12-30")).awarded === 0, "nothing before the end of this quarter (31 December 2026)");
+await db.exec(`update public.vol_people set committee_from = '2026-11-01' where email in ('cm1@x.com', 'cm2@x.com')`);
+let cr1 = await cp("2026-12-31");
+ok(cr1.awarded === 2 && (await bal("cm1@x.com")) === 3 && (await q(`select reason, earned_at::date d from public.points_ledger where email = 'cm1@x.com' and import_key like 'committee:%'`))[0].reason === "Committee service: Q4 2026", "on 31 December each ticked member gets 3 points: " + JSON.stringify(cr1));
+ok((await cp("2027-01-15")).awarded === 0 && (await bal("cm1@x.com")) === 3, "running it again awards nothing twice");
+await vu(U.entries, { email: "cm2@x.com", full_name: "Cam Two", committee: false });
+await vu(U.entries, { email: "cm3@x.com", full_name: "Cam Three", committee: true });
+await db.exec(`update public.vol_people set committee_from = '2027-04-02' where email = 'cm3@x.com'; update public.vol_people set committee_until = '2027-03-30' where email = 'cm2@x.com'`);
+let cr2 = await cp("2027-06-30");
+ok(cr2.people.map((x) => x.email + x.quarter).sort().join() === "cm1@x.comQ1 2027,cm1@x.comQ2 2027,cm3@x.comQ2 2027", "a missed quarter is caught up, someone who left before the quarter end gets nothing, a new member starts at the next quarter end: " + JSON.stringify(cr2.people));
+ok((await bal("cm2@x.com")) === 3 && (await bal("cm1@x.com")) === 9, "balances add up");
+const nm = await vu(U.entries, { email: "brand.new@x.com", full_name: "Brand New", committee: true, create: true });
+ok(nm.email === "brand.new@x.com" && (await q(`select committee from public.vol_people where email = 'brand.new@x.com'`))[0].committee === true, "a committee member who has never volunteered can be added");
+ok((await vu(U.entries, { email: "ghost2@x.com", full_name: "Ghost Two" })).error?.includes("not_found"), "without the create flag an unknown person is still refused");
+await db.exec("set role anon"); ok(!(await can(`select public.committee_points_award('2027-01-01')`)) && !(await can(`select public.points_codes_expire()`)), "the public cannot award points or sweep codes"); await db.exec("reset role");
+
+// ---- give an unused code's points back
+await db.exec(`select public.points_insert('rel@x.com', 8, 'Volunteered: test', 'earned', now(), null, null, 'r22:a'); insert into public.vol_people (email, full_name) values ('rel@x.com', 'Rel Ease') on conflict do nothing;`);
+const rl_lg = async (c) => q(`select public.points_login_start('rel@x.com', $1) r`, [await hash(c)]);
+await rl_lg("888888");
+const rl_a = await q(`select public.points_redeem('rel@x.com', $1, '${PD}'::uuid, 1) r`, [await hash("888888")]).then((r) => r[0].r);
+await rl_lg("888888b");
+const rl_o = await q(`select public.points_options('rel@x.com', $1) r`, [await hash("888888b")]).then((r) => r[0].r);
+ok(rl_a.ok && rl_o.available === 4 && rl_o.reserved === 4 && rl_o.codes.length === 1 && rl_o.codes[0].code === rl_a.code && rl_o.codes[0].points === 4 && rl_o.codes[0].competition === "Discount Open", "an unused code is listed with the points it holds: " + JSON.stringify(rl_o.codes));
+const release = async (id, c) => q(`select public.points_release('rel@x.com', $1, $2::uuid) r`, [await hash(c), id]).then((r) => r[0].r);
+ok((await release(rl_o.codes[0].id, "000000")).error === "code", "releasing needs the emailed code");
+const rl_done = await release(rl_o.codes[0].id, "888888b");
+ok(rl_done.ok && rl_done.points === 4 && rl_done.available === 8 && rl_done.balance === 8, "releasing frees the points, nothing is spent: " + JSON.stringify(rl_done));
+ok((await release(rl_o.codes[0].id, "888888b")).error === "not_found", "and it cannot be done twice");
+ok((await q(`select active from public.discount_codes where code = $1`, [rl_a.code]))[0].active === false && (await bal("rel@x.com")) === 8, "the code is off and the balance is untouched");
+await rl_lg("999999");
+const rl_b = await q(`select public.points_redeem('rel@x.com', $1, '${PD}'::uuid, 1) r`, [await hash("999999")]).then((r) => r[0].r);
+const rl_e = await s3_sp({ competition_id: PD, email: "rel@x.com", full_name: "Rel Ease", discount_code: rl_b.code, date_of_birth: "1993-05-05" });
+await rl_lg("121212");
+const rl_o2 = await q(`select public.points_options('rel@x.com', $1) r`, [await hash("121212")]).then((r) => r[0].r);
+ok(rl_e.entry_id && rl_o2.codes.length === 0 && (await release((await q(`select id from public.discount_codes where code = $1`, [rl_b.code]))[0].id, "121212")).error === "in_use", "a code that is on an entry cannot be released");
+await q(`select public.confirm_entry_payment('${rl_e.entry_id}')`);
+ok((await bal("rel@x.com")) === 4, "once the entry is confirmed the points are spent and stay spent");
+// a code nobody uses gives its points back by itself when it expires
+await rl_lg("343434");
+const rl_c = await q(`select public.points_redeem('rel@x.com', $1, '${PC}'::uuid, 1) r`, [await hash("343434")]).then((r) => r[0].r);
+await db.exec(`update public.discount_codes set expires_at = now() - interval '1 minute' where code = '${rl_c.code}'`);
+await db.exec("delete from public.points_login"); await rl_lg("565656");
+ok((await q(`select public.points_options('rel@x.com', $1) r`, [await hash("565656")]).then((r) => r[0].r)).available === 4, "an expired unused code holds nothing: the points are free again");
+
+// ---- a hand-added priority link can be marked "costs 1 point"
+await db.exec(`select public.points_insert('tick@x.com', 2, 'Volunteered: test', 'earned', now(), null, null, 'pa:a'); select public.points_insert('free@x.com', 2, 'Volunteered: test', 'earned', now(), null, null, 'pa:b');`);
+await db.exec(`update public.competitions set entry_opens = now() + interval '5 hours' where id = '${PC}'`);
+await asUser(U.entries, async () => {
+  await db.query(`select public.priority_add('${PC}'::uuid, $1::jsonb)`, [JSON.stringify([{ email: "tick@x.com", name: "Tick Box", from_points: true }, { email: "free@x.com", name: "Free Link" }])]);
+});
+const pa = (await q(`select email, from_points from public.invites where competition_id = '${PC}' and email in ('tick@x.com','free@x.com') order by email`));
+ok(pa[0].email === "free@x.com" && pa[0].from_points === false && pa[1].from_points === true, "Add people: only the ticked link costs a point");
+for (const [em, nm] of [["tick@x.com", "Tick Box"], ["free@x.com", "Free Link"]]) {
+  const iid = (await q(`select id from public.invites where competition_id = '${PC}' and email = $1`, [em]))[0].id;
+  await q(`select public.priority_issue('${iid}', $1)`, [await hash("tok-" + em)]);
+  const en = await s3_sp({ email: em, full_name: nm, invite: "tok-" + em, date_of_birth: "1994-04-04" });
+  await q(`select public.confirm_entry_payment('${en.entry_id}')`);
+}
+ok((await bal("tick@x.com")) === 1 && (await bal("free@x.com")) === 2, "after confirming, the ticked link took one point and the free one took none");
+
+// ---- the history tells the whole story of a points code
+const hist = async (em) => (await q(`select kind, delta, reason from public.points_ledger where email = $1 and kind in ('note', 'spent') and (reason like 'Discount%') order by id`, [em]));
+const h_rel = await hist("rel@x.com");
+ok(h_rel.some((x) => x.kind === "note" && x.delta === 0 && /^Discount code made: RELEASE-20OFF-/.test(x.reason) && /4 points held for Discount Open/.test(x.reason)), "making a code leaves a note in the history: " + JSON.stringify(h_rel.map((x) => x.reason)));
+ok(h_rel.some((x) => x.kind === "note" && /^Discount code released: /.test(x.reason)), "giving a code back leaves a 'released' note");
+ok(h_rel.some((x) => x.kind === "spent" && x.delta === -4 && /^Discount used: RELEASE-20OFF-.* \(Discount Open\)$/.test(x.reason)), "spending it when the entry is confirmed leaves the deduction, naming the code");
+ok((await bal("rel@x.com")) === 4 && (await q(`select count(*)::int n from public.points_ledger where email = 'rel@x.com' and kind = 'note' and delta <> 0`))[0].n === 0, "notes never move the balance");
+await db.exec(`select public.points_insert('del@x.com', 4, 'Volunteered: test', 'earned', now(), null, null, 'n23:a'); insert into public.discount_codes (code, recipient_email, kind, value, points_cost) values ('DEL-20OFF-AAAAAA', 'del@x.com', 'amount', 2000, 4);`);
+await db.exec(`delete from public.discount_codes where code = 'DEL-20OFF-AAAAAA'`);
+ok((await hist("del@x.com")).some((x) => x.kind === "note" && /^Discount code released: DEL-20OFF-AAAAAA/.test(x.reason)), "deleting an unused points code on the Codes tab leaves a 'released' note too");
+
+// ---- an unused points code that runs out leaves an "expired" line, once
+await db.exec(`select public.points_insert('exp@x.com', 4, 'Volunteered: test', 'earned', now(), null, null, 'x24:a');
+ insert into public.discount_codes (code, recipient_email, kind, value, points_cost, expires_at) values ('EXP-20OFF-AAAAAA', 'exp@x.com', 'amount', 2000, 4, now() + interval '1 hour'), ('EXP-20OFF-BBBBBB', 'exp@x.com', 'amount', 2000, 0, now() - interval '1 hour');`);
+await q(`select public.points_codes_expire()`);          // notes for codes that expired earlier in this test run
+ok((await q(`select public.points_codes_expire() n`))[0].n === 0, "a code that has not run out gets no line");
+await db.exec(`update public.discount_codes set expires_at = now() - interval '1 minute' where code = 'EXP-20OFF-AAAAAA'`);
+ok((await q(`select public.points_codes_expire() n`))[0].n === 1 && (await hist("exp@x.com")).some((x) => x.kind === "note" && /^Discount code expired: EXP-20OFF-AAAAAA \(4 points no longer held\)/.test(x.reason)), "a points code that ran out unused leaves an expired line");
+ok((await q(`select public.points_codes_expire() n`))[0].n === 0 && (await bal("exp@x.com")) === 4, "only once, and the balance is untouched");
 // who may do what
 await db.exec("set role anon");
 ok(!(await can(`select public.waitlist_join('{}'::jsonb)`)) && !(await can(`select public.waitlist_sweep('${W}')`)) && !(await can(`select public.waitlist_make_offer('${W}'::uuid, 'x')`)), "the public cannot call the waiting list functions (only our server can)");
