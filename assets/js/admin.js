@@ -54,6 +54,7 @@
     form.appendChild(errBox);
 
     opt.fields.forEach(function (f) {
+      if (f.sub) { grid = null; form.appendChild(el("h3", { class: "form-sub" }, f.sub)); return; }          // a small heading between groups of fields
       var c = makeControl(f, vals[f.name], editors);
       controls[f.name] = c;
       if (f.half) {
@@ -82,6 +83,7 @@
       var out = {};
       for (var i = 0; i < opt.fields.length; i++) {
         var f = opt.fields[i];
+        if (f.sub) continue;
         out[f.name] = controls[f.name].get();
         var empty = out[f.name] === "" || out[f.name] === null;
         if (f.required && empty) return fail(f.label + " is required.", controls[f.name].input);
@@ -1424,7 +1426,7 @@
       var out = [];
       list.forEach(function (r) {
         out.push(el("tr", null, el("th", { scope: "row" }, r.name, state.committee && state.committee[r.email] ? el("span", { class: "tag tag-position", style: "margin-left:var(--space-2)" }, "Committee") : null, el("small", null, r.email)), el("td", { class: "num" }, String(r.balance)), el("td", { class: "nowrap" }, r.expiring ? r.expiring + " by " + when(r.next_expiry) : "–"), el("td", { class: "num" }, String(r.earned)), el("td", { class: "num" }, String(r.spent)),
-          el("td", { class: "col-actions" }, el("span", { class: "actions" }, btn("History", function () { showHistory(r); }), btn("Edit", function () { editVolunteer({ email: r.email, name: r.name }, function () { load().then(function () { drawRows(); }); }, r.balance > 0 ? [{ label: "Take points away", onclick: function () { adjust(-1, r); } }] : []); }, "btn-ghost", { "aria-label": "Edit " + r.name })))));
+          el("td", { class: "col-actions" }, el("span", { class: "actions" }, btn("History", function () { showHistory(r); }), btn("Edit", function () { editVolunteer({ email: r.email, name: r.name }, function () { load().then(function () { drawRows(); }); }, [{ label: "Add points", onclick: function () { adjust(1, r); } }].concat(r.balance > 0 ? [{ label: "Take points away", onclick: function () { adjust(-1, r); } }] : [])); }, "btn-ghost", { "aria-label": "Edit " + r.name })))));
         if (state.hist && state.hist.email === r.email) out.push(el("tr", { class: "row-detail" }, el("td", { colspan: "6" }, el("div", { class: "row-detail-inner" }, state.hist.node))));
       });
       tbody.replaceChildren.apply(tbody, out);
@@ -1445,9 +1447,9 @@
     }
     function adjust(sign, who) {
       var add = sign > 0;
-      openForm({ title: add ? "Add points" : who ? "Take points away from " + (who.name || who.email) : "Take points away", saveLabel: add ? "Add points" : "Take points away",
-        intro: who && !add ? (who.name || who.email) + " has " + (who.balance === undefined ? "" : who.balance + " points. ") + "For a spend (priority entry 1, £20 off 4, £40 off 8, half price BP membership 5, free membership 10) or a correction. It cannot take them below zero." : add ? "A thank you, a correction, or points earned somewhere we did not tick off. It goes in the ledger with your name, so there is a record." : "For a spend (priority entry 1, £20 off 4, £40 off 8, half price BP membership 5, free membership 10) or a correction. It cannot take someone below zero.",
-        values: who ? { email: who.email } : {}, fields: [{ name: "email", label: "Their email address", type: "email", required: true }].concat(add ? [{ name: "name", label: "Their name (only for someone new)", help: "Leave empty for someone who already has points." }] : [])
+      openForm({ title: add ? (who ? "Add points for " + (who.name || who.email) : "Add points") : who ? "Take points away from " + (who.name || who.email) : "Take points away", saveLabel: add ? "Add points" : "Take points away",
+        intro: who && add ? "Adding points for " + (who.name || who.email) + ". It goes in the ledger with your name, so there is a record." : who && !add ? (who.name || who.email) + " has " + (who.balance === undefined ? "" : who.balance + " points. ") + "For a spend (priority entry 1, £20 off 4, £40 off 8, half price BP membership 5, free membership 10) or a correction. It cannot take them below zero." : add ? "A thank you, a correction, or points earned somewhere we did not tick off. It goes in the ledger with your name, so there is a record." : "For a spend (priority entry 1, £20 off 4, £40 off 8, half price BP membership 5, free membership 10) or a correction. It cannot take someone below zero.",
+        values: who ? { email: who.email } : {}, fields: [{ name: "email", label: "Their email address", type: "email", required: true }].concat(add && !who ? [{ name: "name", label: "Their name (only for someone new)", help: "Leave empty for someone who already has points." }] : [])
           .concat([{ name: "points", label: "Points", type: "number", required: true, min: "1", max: "100", half: true }, { name: "date", label: "Date (optional)", type: "date", half: true, help: "For adding points retroactively. Points expire 24 months after this date." }, { name: "reason", label: "What is it for?", required: true, help: add ? "For example: Helped with the livestream." : "For example: Priority entry, March Open." }]),
         validate: function (v) { var n = Number(v.points); return !n || n < 1 || n > 100 || Math.round(n) !== n ? "Enter a whole number of points from 1 to 100." : null; },
         onSave: function (v) {
@@ -1566,7 +1568,7 @@
     load().then(function () {
       var search = el("input", { class: "control", type: "search", id: "pts-q", placeholder: "Search by name or email", "aria-label": "Search by name or email", style: "max-width:22rem" });
       search.addEventListener("input", function () { state.q = search.value; drawRows(); });
-      panel.replaceChildren(panelHead("Volunteer points", el("span", { class: "actions" }, btn("Add points", function () { adjust(1); }, "btn-primary"), btn("Add a person", function () { addVolunteer(function () { load().then(function () { drawRows(); }); }); }, "btn-ghost"))),
+      panel.replaceChildren(panelHead("Volunteer points", el("span", { class: "actions" }, btn("Add someone new", function () { addVolunteer(function () { load().then(function () { drawRows(); }); }); }, "btn-primary"))),
         summary, el("div", { class: "control-row" }, search),
         el("div", { class: "table-scroll" }, el("table", { class: "admin-table" }, el("caption", { class: "visually-hidden" }, "Volunteer points"),
           el("thead", null, el("tr", null, ["Name", "Points", "Expiring soon", "Earned", "Spent", ""].map(function (h, i) { return el("th", { scope: "col", class: i === 1 || i === 3 || i === 4 ? "num" : i === 5 ? "col-actions" : null }, h || el("span", { class: "visually-hidden" }, "Actions")); }))), tbody)),
@@ -1587,19 +1589,31 @@
     for (var y = t.getFullYear(); y <= t.getFullYear() + 1; y++) for (var i = 0; i < 4; i++) { var d = Date.UTC(y, ends[i][0], ends[i][1]); if (d >= today && d >= first) return new Date(d).toLocaleDateString("en-GB", { timeZone: "UTC", day: "numeric", month: "long", year: "numeric" }); }
     return "";
   }
-  // Add someone who is not in the system yet (for example a committee member who has never volunteered).
+  // Add someone new: set them up (name, email, committee) and give them their first points in the same step.
   function addVolunteer(done) {
-    openForm({ title: "Add a person", saveLabel: "Add person", values: { committee: true },
-      intro: "For someone who is not in the points list yet. Tick the box if they are part of the committee or executive.",
+    openForm({ title: "Add someone new", saveLabel: "Add them", values: {},
+      intro: "For someone who is not in the points list yet, for example a committee member or a volunteer from another host. You can give them points now, or later from their row.",
       fields: [{ name: "full_name", label: "Name", required: true }, { name: "email", label: "Email address", type: "email", required: true, help: "Points are tied to this address." }, { name: "mobile", label: "Mobile number (optional)" },
-        { name: "committee", label: "Part of the committee", type: "checkbox", help: "They earn 3 points at the end of every quarter, starting 31 December 2026, while part of it. Not for referees." }],
-      validate: function (v) { return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(v.email || "").trim()) ? null : "That email address does not look right."; },
+        { name: "committee", label: "Part of the committee", type: "checkbox", help: "Executive and supporting committee members earn 3 points at the end of every quarter. Untick when they step down." },
+        { sub: "Points to give them now (optional)" },
+        { name: "points", label: "Points", type: "number", min: "1", max: "100", half: true }, { name: "date", label: "Date earned (optional)", type: "date", half: true },
+        { name: "reason", label: "What are they for?", help: "Needed if you add points, for example: Volunteered at the March Open. Points expire 24 months after the date earned." }],
+      validate: function (v) {
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(v.email || "").trim())) return "That email address does not look right.";
+        var has = v.points !== "" && v.points !== null && v.points !== undefined;
+        if (has) { var n = Number(v.points); if (!n || n < 1 || n > 100 || Math.round(n) !== n) return "Enter a whole number of points from 1 to 100, or leave it empty."; if (!String(v.reason || "").trim()) return "Say what the points are for."; }
+        return null;
+      },
       onSave: function (v) {
-        var email = String(v.email).trim().toLowerCase();
-        return sb.rpc("vol_person_update", { p: { email: email, full_name: String(v.full_name).trim(), mobile: String(v.mobile || "").trim(), committee: !!v.committee, create: true } }).then(function (res) {
+        var email = String(v.email).trim().toLowerCase(), name = String(v.full_name).trim(), n = Math.round(Number(v.points)) || 0;
+        return sb.rpc("vol_person_update", { p: { email: email, full_name: name, mobile: String(v.mobile || "").trim(), committee: !!v.committee, create: true } }).then(function (res) {
           if (res.error) throw new Error(/exists/.test(String(res.error.message)) ? "That person is already in the system. Find them in the list and press Edit." : friendly(res.error));
-          toast("Added."); if (done) done();
-        });
+          if (!n) { toast("Added."); return; }
+          return sb.rpc("points_adjust", { p: { email: email, name: name, delta: n, reason: String(v.reason).trim(), date: v.date || "" } }).then(function (r) {
+            if (r.error) throw new Error("They were added, but the points were not: " + String((r.error && r.error.message) || "").replace(/^.*?ERROR:\s*/s, "").split("\n")[0].trim() + " Find them in the list and use Edit, then Add points.");
+            toast("Added, with " + n + (n === 1 ? " point." : " points."));
+          });
+        }).then(function () { if (done) done(); });
       } });
   }
   function editVolunteer(person, done, extraActions) {

@@ -317,3 +317,6 @@ details.ol-settings ~ .callout { margin-top: var(--space-4); max-width: none; }
 .entry-row > summary::before { margin-left: 0; left: var(--space-4); top: 50%; transform: translateY(-50%); }
 .entry-flags { display: flex; flex-wrap: wrap; gap: var(--space-1); justify-content: flex-end; }
 @media (max-width: 52em) { .entry-row > summary { grid-template-columns: 1fr auto; } .entry-flags { justify-content: flex-start; } }
+
+/* A small heading between groups of fields in a dialog (for example "Points to give them now"). */
+.admin-dialog .form-sub { margin: var(--space-5) 0 var(--space-2); padding-top: var(--space-4); border-top: 1px solid var(--navy-50); }
