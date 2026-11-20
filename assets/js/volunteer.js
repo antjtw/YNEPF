@@ -53,29 +53,30 @@
     var editing = !!mine, have = {};
     if (editing) (mine.choices || []).forEach(function (c) { have[c.session_id + "|" + c.role_id] = 1; });
     var sessionBoxes = data.sessions.map(function (s) {
-      return el("fieldset", { class: "field", "data-field": "choices", style: "border:0;padding:0;margin:0 0 var(--space-5)" },
-        el("legend", { style: "font-weight:700;margin-bottom:var(--space-2)" }, s.label + (s.when_text ? ": " + s.when_text : "")),
-        s.roles.map(function (r) { var b = check("c-" + s.id + "-" + r.id, r.name, "choice", s.id + "|" + r.id); if (have[s.id + "|" + r.id]) b.querySelector("input").checked = true; return b; }));
+      return el("fieldset", { class: "session-group", "data-field": "choices" },
+        el("legend", null, s.label, s.when_text ? el("span", null, s.when_text) : null),
+        el("div", { class: "session-roles" }, s.roles.map(function (r) { var b = check("c-" + s.id + "-" + r.id, r.name, "choice", s.id + "|" + r.id); if (have[s.id + "|" + r.id]) b.querySelector("input").checked = true; return b; })));
     });
     var shirt = el("select", { id: "tshirt", name: "tshirt", autocomplete: "off" }, el("option", { value: "" }, "Choose a size"), SIZES.map(function (z) { return el("option", { value: z }, z); }));
     var emailInput = el("input", { id: "email", name: "email", type: "email", autocomplete: "email", spellcheck: "false", maxlength: "200" });
     form = el("form", { class: "contact-card form-touch", novalidate: "" },
-      editing ? el("p", { class: "callout", role: "status" }, "You are changing your answers. Tick or untick the roles, then save. We will email you a copy.") : null,
+      editing ? el("p", { class: "form-note", role: "status" }, "You are changing your answers. Tick or untick the roles, then save. We will email you a copy.") : null,
       data.intro ? el("p", null, data.intro) : null,
       el("p", null, "You will earn points for each session you help with. Points can be spent on priority entry and discounts. ", el("a", { href: "faqs#how-do-i-earn-points" }, "How points work"), "."),
-      el("p", { class: "callout" }, el("strong", null, "Please tell us in advance if you cannot make it. "), "If you do not turn up and have not let us know, you lose your volunteer points."),
+      el("p", { class: "form-note" }, el("strong", null, "Please tell us in advance if you cannot make it. "), "If you do not turn up and have not let us know, you lose your volunteer points."),
       field("name", "Your first and last name", el("input", { id: "name", name: "name", type: "text", autocomplete: "name", maxlength: "120" })),
       field("email", "Your email address", emailInput, editing ? "This is the address you signed up with. It cannot be changed here." : "We use this to contact you about the rota, and to keep your points."),
       field("mobile", "Mobile number", el("input", { id: "mobile", name: "mobile", type: "tel", autocomplete: "tel", maxlength: "20" }), "We may add you to a WhatsApp group for the competition.", true),
       data.offer_tshirts ? field("tshirt", "T-shirt size", shirt, "Unisex sizes. We usually get a T-shirt for each volunteer.") : null,
-      el("h2", { style: "font-size:var(--fs-24);margin-top:var(--space-6)" }, "When can you help?"),
+      el("h2", { class: "form-part" }, "When can you help?"),
       el("p", null, "Tick every role you would be happy to do. We will only give you a role you ticked."),
       el("div", { "data-field": "choices-wrap" }, el("p", { class: "field-error", id: "choices-error", hidden: "" }), sessionBoxes),
       field("note", "Anything else we should know?", el("textarea", { id: "note", name: "note", rows: "3", maxlength: "500" }), null, true),
-      el("div", { class: "field", "data-field": "over18" }, el("p", { class: "field-error", id: "over18-error", hidden: "" }), check("over18", "I am 18 or over", "over18")),
-      el("div", { class: "hp-field", "aria-hidden": "true" }, el("label", { for: "website" }, "Leave this field empty"), el("input", { id: "website", name: "website", type: "text", tabindex: "-1", autocomplete: "off" })),
-      el("p", { class: "small" }, "We use your details to run the rota and the points scheme. Read our ", el("a", { href: "privacy" }, "privacy policy"), "."),
-      el("button", { class: "btn btn-primary", type: "submit", id: "send" }, editing ? "Save my answers" : "Sign up"));
+      el("div", { class: "form-consent" },
+        el("div", { class: "field", "data-field": "over18" }, el("p", { class: "field-error", id: "over18-error", hidden: "" }), check("over18", "I am 18 or over", "over18")),
+        el("div", { class: "hp-field", "aria-hidden": "true" }, el("label", { for: "website" }, "Leave this field empty"), el("input", { id: "website", name: "website", type: "text", tabindex: "-1", autocomplete: "off" })),
+        el("p", { class: "small" }, "We use your details to run the rota and the points scheme. Read our ", el("a", { href: "privacy" }, "privacy policy"), "."),
+        el("button", { class: "btn btn-primary", type: "submit", id: "send" }, editing ? "Save my answers" : "Sign up")));
     form.addEventListener("submit", submit);
     root.replaceChildren(form);
     if (editing) {

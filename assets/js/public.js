@@ -715,12 +715,12 @@
   // Priority entry needs nothing here: it arrives by email by itself, and costs 1 point when the entry is confirmed.
   function spendPoints() {
     var CFG = window.YNEPF_CONFIG || {}, email = el("input", { type: "email", id: "sp-email", autocomplete: "email", required: true }), code = el("input", { type: "text", id: "sp-code", inputmode: "numeric", autocomplete: "one-time-code", maxlength: "6" });
-    var msg = el("p", { role: "status", "aria-live": "polite", class: "help" }), step2 = el("div", { hidden: "" }), step3 = el("div", { hidden: "" });
+    var msg = el("p", { role: "status", "aria-live": "polite", class: "help form-status" }), step2 = el("div", { hidden: "" }), step3 = el("div", { hidden: "" });
     function post(action, payload) {
       return fetch((CFG.supabaseUrl || "").replace(/\/$/, "") + "/functions/v1/waitlist", { method: "POST", headers: { "Content-Type": "application/json", apikey: CFG.supabaseAnonKey || "", Authorization: "Bearer " + (CFG.supabaseAnonKey || "") },
         body: JSON.stringify(Object.assign({ action: action, email: email.value.trim() }, payload)) }).then(function (r) { return r.json().catch(function () { return {}; }); }).catch(function () { return { ok: false, message: "We could not reach the server. Please try again." }; });
     }
-    function say(t, bad) { msg.textContent = t || ""; msg.className = bad ? "form-error" : "help"; }
+    function say(t, bad) { msg.textContent = t || ""; msg.className = (bad ? "form-error" : "help") + " form-status"; }
     var send = el("button", { type: "button", class: "btn btn-secondary" }, "Email me a code");
     send.addEventListener("click", function () {
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.value.trim())) return say("Enter the email address you volunteered with.", true);
@@ -741,11 +741,12 @@
       var comp = el("select", { class: "control", id: "sp-comp" }, o.competitions.map(function (c) { return el("option", { value: c.id }, c.name); }));
       var steps = el("select", { class: "control", id: "sp-steps" }); for (var k = 1; k <= Math.max(max, 1); k++) steps.appendChild(el("option", { value: String(k) }, k + (k === 1 ? " discount: £" : " discounts: £") + (k * o.step_pence / 100) + " off for " + (k * o.points_per_step) + " points"));
       var go = el("button", { type: "button", class: "btn btn-primary" }, "Get my discount code");
-      var lines = [el("p", null, (o.name ? o.name + ", you" : "You") + " have ", el("strong", null, o.balance + (o.balance === 1 ? " point" : " points")), o.reserved ? ", and " + o.reserved + " " + (o.reserved === 1 ? "is" : "are") + " already set aside (a priority link or a discount code you have not used yet). That leaves " : ". That leaves ", o.reserved ? el("strong", null, o.available + " to spend") : el("strong", null, o.available + " to spend"), "."),
-        el("p", { class: "help" }, "Priority entry (1 point) needs nothing from you: the link arrives by email before entry opens, and the point is only taken when your entry is confirmed. A discount costs 4 points for every £20 off the entry fee, and the points are taken when your entry is confirmed.")];
+      var lines = [el("h3", { class: "flow-step-title" }, el("span", { class: "step-num", "aria-hidden": "true" }, "3"), "Your points"), el("p", { class: "flow-hello" }, o.name ? "Hello " + o.name + "." : "Hello."),
+        el("div", { class: "flow-stats" }, el("p", null, el("strong", null, String(o.balance)), o.balance === 1 ? " point" : " points"), el("p", null, el("strong", null, String(o.reserved || 0)), " set aside"), el("p", { class: "is-key" }, el("strong", null, String(o.available)), " to spend")),
+        el("p", { class: "help" }, "Set aside means points already promised to a priority link or to a discount code you have not used yet. Priority entry (1 point) needs nothing from you: the link arrives by email before entry opens. A discount costs 4 points for every £20 off the entry fee. Points are only taken when your entry is confirmed.")];
       if ((o.codes || []).length) {
-        lines.push(el("h3", null, "Your unused discount codes"), el("p", { class: "help" }, "Changed your mind? Give a code back and its points are free to spend again. A code that is never used frees its points by itself when entry closes."),
-          el("ul", { class: "item-list" }, o.codes.map(function (c) {
+        lines.push(el("h3", { class: "flow-sub" }, "Your unused discount codes"), el("p", { class: "help" }, "Changed your mind? Give a code back and its points are free to spend again. A code that is never used frees its points by itself when entry closes."),
+          el("ul", { class: "flow-list" }, o.codes.map(function (c) {
             var give = el("button", { type: "button", class: "btn btn-secondary btn-sm", "aria-label": "Give back " + c.code }, "Give the points back");
             give.addEventListener("click", function () {
               give.disabled = true; say("Giving the points back…");
@@ -754,7 +755,7 @@
                 post("points_options", { code: code.value }).then(function (o2) { say("Done: " + b.points + " points are free again."); if (o2.ok) drawOptions(o2); });
               });
             });
-            return el("li", { class: "item-row" }, el("div", { class: "item-main" }, el("p", { class: "item-title" }, c.code), el("p", { class: "item-sub" }, "£" + (c.pence / 100) + " off " + (c.competition || "a competition") + ", holding " + c.points + " points")), give);
+            return el("li", { class: "flow-row" }, el("div", { class: "flow-row-main" }, el("p", { class: "flow-row-title" }, c.code), el("p", { class: "flow-row-sub" }, "£" + (c.pence / 100) + " off " + (c.competition || "a competition") + ", holding " + c.points + " points")), give);
           })));
       }
       if (!o.competitions.length) lines.push(el("p", null, "No competition is open for entry right now. Come back when entry opens."));
@@ -772,10 +773,14 @@
       }
       step3.hidden = false; step3.replaceChildren.apply(step3, lines);
     }
-    return el("section", { "aria-labelledby": "sp-h", style: "margin-top:var(--space-7);max-width:var(--measure)" }, el("h2", { id: "sp-h" }, "Spend your points"),
-      el("p", null, "Enter the email address you volunteered with and we will email you a code. Then you can see your points and turn them into a discount on your entry."),
-      el("div", { class: "field" }, el("label", { for: "sp-email" }, "Your email address"), email), el("div", { class: "actions" }, send), msg,
-      (function () { step2.replaceChildren(el("div", { class: "field" }, el("label", { for: "sp-code" }, "The code we emailed you"), code), el("div", { class: "actions" }, show)); return step2; })(), step3);
+    var s1 = el("div", { class: "flow-step" }, el("h3", { class: "flow-step-title" }, el("span", { class: "step-num", "aria-hidden": "true" }, "1"), "Get a code"),
+      el("p", null, "Enter the email address you volunteered with and we will email you a code."),
+      el("div", { class: "field" }, el("label", { for: "sp-email" }, "Your email address"), email), el("div", { class: "actions" }, send), msg);
+    step2.className = "flow-step";
+    step2.replaceChildren(el("h3", { class: "flow-step-title" }, el("span", { class: "step-num", "aria-hidden": "true" }, "2"), "Enter the code"), el("div", { class: "field" }, el("label", { for: "sp-code" }, "The code we emailed you"), code), el("div", { class: "actions" }, show));
+    step3.className = "flow-step";
+    return el("section", { class: "panel flow", "aria-labelledby": "sp-h" }, el("h2", { id: "sp-h" }, "Spend your points"),
+      el("p", { class: "flow-intro" }, "See your points and turn them into a discount on your entry."), s1, step2, step3);
   }
 
   // The volunteer rota (/rota?c=<address>): who is helping in each session. Names and roles only. With ?preview=1 a signed-in entries team
@@ -802,7 +807,7 @@
         order.forEach(function (s) {
           s.ro.sort(function (a, b) { return a.n - b.n; });
           kids.push(el("section", { class: "lo-session" }, el("h2", null, s.label), s.when ? el("p", { class: "lo-times" }, s.when) : null,
-            el("div", { class: "table-wrap" }, el("table", { class: "data" }, el("caption", { class: "visually-hidden" }, s.label),
+            el("div", { class: "table-wrap" }, el("table", { class: "data rota-table" }, el("caption", { class: "visually-hidden" }, s.label),
               el("thead", null, el("tr", null, el("th", { scope: "col" }, "Role"), el("th", { scope: "col" }, "Volunteers"))),
               el("tbody", null, s.ro.map(function (ro) { ro.people.sort(function (a, b) { return a.n - b.n; }); return el("tr", null, el("th", { scope: "row" }, ro.name), el("td", null, ro.people.map(function (p) { return p.name + (p.level ? " (" + p.level + ")" : ""); }).join(", "))); }))))));
         });
