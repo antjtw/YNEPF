@@ -320,3 +320,27 @@ details.ol-settings ~ .callout { margin-top: var(--space-4); max-width: none; }
 
 /* A small heading between groups of fields in a dialog (for example "Points to give them now"). */
 .admin-dialog .form-sub { margin: var(--space-5) 0 var(--space-2); padding-top: var(--space-4); border-top: 1px solid var(--navy-50); }
+
+/* On a phone: every editor table becomes a list of cards, so nothing (least of all the buttons) sits off the edge of the screen. */
+@media (max-width: 40rem) {
+  .table-scroll { overflow-x: visible; }
+  table.table-cards, table.table-cards tbody { display: block; background: transparent; box-shadow: none; }
+  table.table-cards thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  table.table-cards tbody { display: grid; gap: var(--space-2); }
+  table.table-cards tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-1) var(--space-4); background: var(--surface-raised); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); padding: var(--space-3) var(--space-4); }
+  table.table-cards tbody tr + tr > * { box-shadow: none; }
+  table.table-cards th, table.table-cards td { display: block; padding: 0; min-width: 0; background: transparent; text-align: left; border: 0; }
+  table.table-cards th[scope="row"], table.table-cards td[colspan], table.table-cards td.col-actions { grid-column: 1 / -1; }
+  table.table-cards td[data-label] { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-2); font-variant-numeric: tabular-nums; }
+  table.table-cards td[data-label]::before { content: attr(data-label); color: var(--text-muted); font-size: 0.85rem; font-weight: 600; }
+  table.table-cards td.num, table.table-cards td.nowrap { white-space: normal; }
+  table.table-cards td.col-actions { margin-top: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--navy-50); }
+  table.table-cards td.col-actions .actions { flex-wrap: wrap; justify-content: flex-start; margin-left: calc(-1 * var(--space-2)); }
+  table.table-cards tr.row-detail { padding: 0; background: transparent; box-shadow: none; }
+  table.table-cards small { margin-top: var(--space-1); }
+}
+@media (max-width: 40rem) {
+  table.table-cards td.wide[data-label] { grid-column: 1 / -1; display: block; }
+  table.table-cards td.wide[data-label]::before { display: block; margin-bottom: 2px; }
+}
+@media (max-width: 40rem) { table.table-cards td, table.table-cards th { overflow-wrap: anywhere; } }

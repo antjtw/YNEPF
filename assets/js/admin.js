@@ -3379,6 +3379,29 @@
     account: ["admin", "entries", "editor", "contributor"]
   };
   function canSee(tab) { return (TAB_ROLES[tab] || []).indexOf(state.role) >= 0; }
+  // On a phone a wide table would scroll sideways and hide its buttons. Every editor table is given labels on its cells here, so the stylesheet
+  // can show each row as a small card (name on top, the figures labelled, the buttons underneath). Done as tables appear, because tabs fill in after loading.
+  function cardify(table) {
+    if (table.classList.contains("lab-table")) return;
+    table.classList.add("table-cards"); table.setAttribute("role", "table");
+    var heads = Array.prototype.map.call(table.querySelectorAll(":scope > thead th"), function (h) { return (h.textContent || "").trim(); });
+    Array.prototype.forEach.call(table.querySelectorAll("tr"), function (tr) {
+      if (tr.closest("table") !== table || tr.getAttribute("role")) return;                  // a table inside this one is done on its own; rows come and go as lists are searched or opened
+      tr.setAttribute("role", "row");
+      Array.prototype.forEach.call(tr.children, function (cell, i) {
+        var inHead = !!cell.closest("thead"), colspan = cell.getAttribute("colspan");
+        cell.setAttribute("role", inHead ? "columnheader" : cell.tagName === "TH" ? "rowheader" : "cell");
+        if (inHead || colspan || cell.tagName === "TH") return;
+        var label = heads[i] || "";
+        if (!label || label === "Actions") cell.classList.add("col-actions");
+        else { cell.setAttribute("data-label", label); if (cell.querySelector("small") || (cell.textContent || "").trim().length > 18 || /@/.test(cell.textContent || "")) cell.classList.add("wide"); }          // long cells get the label above them, full width
+      });
+    });
+  }
+  function cardifyAll(root) { Array.prototype.forEach.call((root || document).querySelectorAll("table.admin-table"), cardify); }
+  var cardsPending = false;
+  new MutationObserver(function () { if (cardsPending) return; cardsPending = true; requestAnimationFrame(function () { cardsPending = false; cardifyAll($("panel")); }); }).observe(document.getElementById("panel") || document.body, { childList: true, subtree: true });
+
   function route() {
     var parts = (location.hash || "").replace("#", "").split("/");
     var tab = parts[0];
