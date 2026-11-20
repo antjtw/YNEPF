@@ -2826,5 +2826,7 @@ grant select on public.universities to anon;
 grant select, insert, update, delete on public.universities to authenticated;
 insert into public.universities (name) values
   ('Newcastle University'), ('Northumbria University'), ('Durham University'), ('University of Leeds'), ('Leeds Beckett University'),
-  ('Sheffield Hallam University'), ('University of Sheffield'), ('University of York'), ('York St John University'), ('Aston University'), ('Teesside University')
+  ('Sheffield Hallam University'), ('University of Sheffield'), ('University of York'), ('York St John University'), ('Askham Bryan College'), ('Teesside University')
 on conflict (name_key) do nothing;
+-- (An earlier version of this file seeded "Aston University" by mistake: it was meant to be Askham Bryan College, York.)
+update public.universities set name = 'Askham Bryan College' where name_key = 'aston university' and not exists (select 1 from public.universities where name_key = 'askham bryan college');
