@@ -14,8 +14,9 @@
   var summary = document.getElementById("error-summary"), list = document.getElementById("error-list");
   var lede = document.getElementById("enter-lede"), title = document.getElementById("enter-title");
   var ctx = null;                               // competition, settings, price rules, classes, divisions
-  var step = "about", preview = false, invite = "", offer = "", offerInfo = null, countdown = null;
-  var v = { sex: "", event: "", equipment: "", weight_class_id: "", division_id: "", dd: "", mm: "", yyyy: "" };
+  var step = "about", preview = false, dryRun = false, invite = "", offer = "", offerInfo = null, countdown = null;
+  function freshValues() { return { sex: "", event: "", equipment: "", weight_class_id: "", division_id: "", dd: "", mm: "", yyyy: "" }; }
+  var v = freshValues();
   var EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
   var EVENT_NAMES = { full_power: "Full power", bench_only: "Bench only" };
   var EVENT_HINTS = { full_power: "Squat, bench press and deadlift.", bench_only: "Bench press only." };
@@ -73,7 +74,7 @@
   // time zone is not told that entry is closed (or not open yet) when it is not. The skew is measured when the page loads.
   var clockSkew = 0;
   function nowDate() { return new Date(Date.now() + clockSkew); }
-  function guestBlocked() { var t = guestOpensAt(); return !!t && t > nowDate(); }
+  function guestBlocked() { if (dryRun) return false; var t = guestOpensAt(); return !!t && t > nowDate(); }          // a preview lets you click through whatever the dates are
   function whenText(d) { return d.toLocaleString("en-GB", { timeZone: Y.TZ, dateStyle: "full", timeStyle: "short" }); }
   // Classes this lifter may enter: men's 53 and women's 43 are for sub-juniors only (the database checks this too).
   function allowedClasses() {
@@ -412,7 +413,19 @@
       document.head.appendChild(s);
     });
   }
+  // The end of a preview: the form is checked all the way through, but nothing is saved and nobody is charged.
+  function showPreviewEnd() {
+    if (countdown) clearInterval(countdown);
+    app.innerHTML = "";
+    app.appendChild(el("div", { class: "success-panel", tabindex: "-1" },
+      el("h2", { style: "margin-top:0" }, "Preview complete"),
+      el("p", null, "This is the point where a lifter would be taken to pay" + (totalNow() ? " " + pounds(totalNow()) : "") + ". Nothing has been saved or charged, and no place was held."),
+      el("p", { class: "actions" }, el("button", { class: "btn btn-primary", type: "button", onclick: function () { step = "check"; render(); } }, "Back to the form"),
+        el("button", { class: "btn btn-secondary", type: "button", onclick: function () { v = freshValues(); step = "about"; render(); } }, "Start again"))));
+    var panel = app.querySelector(".success-panel"); if (panel) panel.focus();
+  }
   function pay(btn) {
+    if (dryRun) return showPreviewEnd();
     var err = document.getElementById("submit-error");
     err.hidden = true; btn.disabled = true; btn.textContent = "Holding your place…";
     Y.db().auth.getSession().then(function (s) {
@@ -524,7 +537,7 @@
     var before = document.getElementById("enter-before"); if (before) before.hidden = true;      // "your place is held for N minutes" means nothing on a page with no form
   }
   function init() {
-    var q = new URLSearchParams(location.search), slug = q.get("c") || ""; invite = q.get("invite") || ""; offer = q.get("offer") || "";
+    var q = new URLSearchParams(location.search), slug = q.get("c") || "", wantPreview = q.get("preview") === "1"; invite = q.get("invite") || ""; offer = q.get("offer") || "";
     var db = Y.db();
     if (!db || !slug) return stop("Enter a competition", "<p>Choose a competition from the <a href='calendar.html'>calendar</a> to enter.</p>");
     var cols = "*";          // everything the public view holds, including whether this is a university competition
@@ -549,28 +562,47 @@
         comp.is_university ? db.from("universities").select("name").eq("active", true).order("name") : db.from("clubs").select("name,region").eq("active", true).order("name"),
         db.from("addons").select("id,kind,name,description,price_pence,stock,sort_order,addon_options(id,label,sort_order)").eq("competition_id", comp.id).order("sort_order").order("name"),
         Promise.resolve(db.rpc("server_time")).then(function (t) { return t; }, function () { return {}; }),
-        found.preview ? Promise.resolve(db.rpc("is_entries")).then(function (t) { return t; }, function () { return {}; }) : Promise.resolve({ data: true })
+        found.preview || wantPreview ? Promise.resolve(db.rpc("is_entries")).then(function (t) { return t; }, function () { return {}; }) : Promise.resolve({ data: true })
       ]).then(function (a) {
         var st = a[0].data, settings = a[1].data;
         if (a[9] && a[9].data) { var serverMs = new Date(a[9].data).getTime(); if (isFinite(serverMs)) clockSkew = serverMs - Date.now(); }
         if (st) st.places_left = a[6].data;
         preview = found.preview;
+        // ?preview=1 is for the entries team: click through the whole form whatever the dates say, with nothing saved or charged.
+        if (wantPreview) {
+          if (!a[10] || a[10].data !== true) { title.textContent = comp.name; return stop("Preview is for the entries team", "<p>Sign in to the site editor on this address with an entries team account, then open the preview link again.</p>"); }
+          dryRun = true;
+        }
         // An unpublished (test) competition can be opened by anyone who can read it in the editor, but only the entries team can enter it.
         // Say so plainly, instead of letting the payment step answer "closed".
         if (found.preview && a[10] && a[10].data !== true) { title.textContent = comp.name; return stop("This competition is not open to the public yet", "<p>It is a test competition that has not been published, so only the entries team can enter it. If you should be able to, sign out of the site editor and back in with your entries account.</p>"); }
         title.textContent = "Enter " + comp.name;
         lede.textContent = Y.dateRange(comp.start_date, comp.end_date) + (comp.venue_name ? " at " + comp.venue_name : "");
+        if (dryRun) {
+          // say what is still missing, so a half-built competition explains itself instead of showing an empty form
+          var missing = [];
+          if (!st || st.entry_method !== "yne") missing.push("Set “How are entries taken?” to “On this website” on the Details tab.");
+          if (!settings) missing.push("Save the entry settings (events, equipment and prices) on the Details tab.");
+          else {
+            if (!(settings.events || []).length) missing.push("Choose at least one event.");
+            if (!(settings.equipment || []).length) missing.push("Choose at least one kind of equipment.");
+          }
+          if (!(a[3].data || []).length) missing.push("Set a price: a full power or bench only price on the Details tab.");
+          if (!(a[4].data || []).length) missing.push("There are no weight classes set up yet.");
+          if (!(a[5].data || []).length) missing.push("There are no federations or divisions set up yet.");
+          if (missing.length) return stop("Preview needs a bit more set up", "<p>A lifter could not enter yet. Still to do:</p><ul>" + missing.map(function (m) { return "<li>" + m + "</li>"; }).join("") + "</ul>");
+        }
         if (!st || !settings || st.entry_method !== "yne")
           return stop("Enter " + comp.name, "<p>Entries for this competition are not taken on this page." + (comp.entry_url ? " <a href='" + encodeURI(comp.entry_url) + "'>Enter here</a>." : "") + "</p>");
         var now = nowDate();
-        if (st.entries_closed_manually || (comp.entry_closes && new Date(comp.entry_closes) <= now)) return stop("Entries are closed", "<p>Entries for " + Y.el("span", null, comp.name).textContent + " are closed.</p>");
+        if (!dryRun && (st.entries_closed_manually || (comp.entry_closes && new Date(comp.entry_closes) <= now))) return stop("Entries are closed", "<p>Entries for " + Y.el("span", null, comp.name).textContent + " are closed.</p>");
         var opensAt = comp.entry_opens ? new Date(comp.entry_opens) : null, priority = false;
-        if (opensAt && opensAt > now) {
+        if (!dryRun && opensAt && opensAt > now) {
           var priorityFrom = new Date(opensAt.getTime() - (settings.priority_hours || 24) * 3600 * 1000), when = function (d) { return d.toLocaleString("en-GB", { timeZone: Y.TZ, dateStyle: "full", timeStyle: "short" }); };
           if (!(invite && now >= priorityFrom)) return stop("Entries are not open yet", "<p>Entries open on " + when(opensAt) + ".</p>" + (invite ? "<p>Your priority link works from " + when(priorityFrom) + ".</p>" : ""));
           priority = true;
         }
-        var full = st.places_left < 1;
+        var full = !dryRun && st.places_left < 1;
         return checkOffer(comp.id).then(function (o) {
           if (o.ok) offerInfo = o;
           // Full: the waiting list opens by itself (unless this person has a personal link that still works).
@@ -583,6 +615,16 @@
           if (priority) { status.hidden = false; status.innerHTML = "<p><strong>Priority entry.</strong> You are using a personal priority link. General entry opens on " + new Date(comp.entry_opens).toLocaleString("en-GB", { timeZone: Y.TZ, dateStyle: "full", timeStyle: "short" }) + ".</p>"; }
           if (offerInfo) { status.hidden = false; status.replaceChildren(el("p", null, el("strong", null, "A place is being held for you"), " until " + whenText(new Date(offerInfo.expires_at)) + ". Complete your entry and payment before then, or it goes to the next person on the waiting list.")); }
           if (preview) status.hidden = false, status.innerHTML = "<p><strong>Preview.</strong> This competition is not published. You can enter it because you are signed in to the site editor. Use Stripe test cards only.</p>";
+          if (dryRun) {
+            var when2 = function (d) { return d.toLocaleString("en-GB", { timeZone: Y.TZ, dateStyle: "full", timeStyle: "short" }); }, parts = [];
+            if (found.preview) parts.push("It is not published yet.");
+            if (st.entries_closed_manually) parts.push("Entries are closed by hand.");
+            else if (comp.entry_closes && new Date(comp.entry_closes) <= nowDate()) parts.push("Entry has closed.");
+            else if (opensAt && opensAt > nowDate()) parts.push("Entry opens on " + when2(opensAt) + ".");
+            else parts.push("Entry is open.");
+            if (st.places_left < 1) parts.push("It is full, so lifters would see the waiting list.");
+            status.hidden = false; status.replaceChildren(el("p", null, el("strong", null, "Preview. "), "Click through the whole form. Nothing is saved or charged. " + parts.join(" ")));
+          }
           app.hidden = false; render();
         });
       });
