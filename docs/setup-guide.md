@@ -323,3 +323,11 @@ Needs the latest all-in-one SQL (new `vol_` tables, the sign-up functions and th
 - **Calendar buttons and sign-up closing.** While sign-up is open, the competition's card on the calendar has a **Volunteer** button. Once the rota is published it has **View volunteer rota**. On the Volunteers tab you can set **Close sign-up automatically** to a date and time, and the button disappears then. Opening sign-up again clears a date that has passed.
 - **FAQ wording:** run `docs/entry-system/faq-points-update.sql` once in the Supabase SQL editor to update the two FAQ answers ("How do I spend points?" and "How do I check my points?"). You can still edit them afterwards in the editor.
 - Needs the latest all-in-one SQL, and the updated `waitlist` Edge Function deployed (it now creates the priority list from points and sends the one-time codes and discount emails).
+
+### University competitions
+
+- **Making one:** on a competition's Details tab (including when you set it up from the Calendar), tick **University competition**. The entry form then asks for **University** instead of **Club**: lifters pick the university they represent from a drop-down. It is optional, like the club.
+- **Where it shows:** the university is stored where the club is stored, so it shows on the entries list, the entries desk (labelled University), the public lifting order (column header University), and the printed weigh-in and score sheets. The OpenLifter export keeps it in the Team column.
+- **The list of universities:** the Calendar page has a **Universities** panel under the Club list. **Add a university** adds one. **Switch off** hides one from new entries and leaves it on entries already made. The list starts with Newcastle, Northumbria, Durham, Leeds, Leeds Beckett, Sheffield Hallam, Sheffield, York, York St John, Aston and Teesside: check the names and add or switch off to suit.
+- **Entries at a university competition** can only use a university from the list (the database checks this), and the desk's Add entry and Edit entry forms offer the same list.
+- Needs the latest all-in-one SQL.
