@@ -340,3 +340,10 @@ Needs the latest all-in-one SQL (new `vol_` tables, the sign-up functions and th
 - **If it is not set up yet,** the preview lists what is missing (the entry method, saved entry settings, a price, weight classes) instead of showing an empty form. You can use it as you go.
 - **Only the entries team** can use the link: anyone else who opens it is told it is for the entries team. You need to be signed in to the editor on the same address.
 - To try the real thing end to end with a Stripe test card, use the competition's normal entry link while it is unpublished (see Part 6).
+
+### OpenIPF link and qualifying standards
+
+- When a competition has a **minimum GL score** or a **qualifying total**, the OpenIPF profile link is **required** on the entry form (and the database refuses an entry without one).
+- The form explains why, using the competition's own standard: for a minimum GL, "This competition has a minimum of 70 GL points. We use your OpenIPF profile to check your GL points."; for qualifying totals, "This competition has a qualifying total for each weight class. We use your OpenIPF profile to check your total."
+- **OpenIPF link required, nothing checked** also makes it mandatory, with the plain line "This competition needs your OpenIPF profile link." **None** leaves it optional.
+- Needs the latest all-in-one SQL (it makes the rule hold for older competitions saved before this).
