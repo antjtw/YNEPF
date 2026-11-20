@@ -532,7 +532,9 @@
     var role = state.role;
     var online = c.entry_method === "yne";
     var title = isNew ? (isEvent ? "Add another event" : "Add competition") : c.name;
-    var head = panelHead(title);
+    // The entries team can click through the entry form at any time, whatever the dates say, with nothing saved or charged.
+    var previewLink = !isNew && !isEvent && canEntry() && c.slug ? el("a", { class: "btn btn-sm btn-secondary", href: new URL("../enter?c=" + encodeURIComponent(c.slug) + "&preview=1", location.href).href, target: "_blank", rel: "noopener" }, "Preview entry form ", el("span", { class: "visually-hidden" }, "(opens in a new tab)")) : null;
+    var head = panelHead(title, previewLink);
     var view = el("div");
     panel.replaceChildren(backLink(), head);
     if (!isNew && !isEvent) {

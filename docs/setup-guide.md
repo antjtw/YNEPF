@@ -331,3 +331,12 @@ Needs the latest all-in-one SQL (new `vol_` tables, the sign-up functions and th
 - **The list of universities:** the Calendar page has a **Universities** panel under the Club list. **Add a university** adds one. **Switch off** hides one from new entries and leaves it on entries already made. The list starts with Newcastle, Northumbria, Durham, Leeds University, Leeds Beckett, Sheffield Hallam, Sheffield, York, York St John, Askham Bryan College and Teesside: check the names and add or switch off to suit.
 - **Entries at a university competition** can only use a university from the list (the database checks this), and the desk's Add entry and Edit entry forms offer the same list.
 - Needs the latest all-in-one SQL.
+
+### Previewing the entry form
+
+- **Preview entry form** is a button at the top of every competition's page (entries team and admins). It opens the real entry form in a new tab, whatever the competition's dates and state: not open yet, closed, full, or not published.
+- **Nothing is saved or charged.** Click through all three steps; the last button says what a lifter would pay and then shows **Preview complete**. No place is held and no payment starts. Use **Start again** to go round again.
+- **A banner at the top** says it is a preview and what state the competition is in (for example "Entry opens on ...", "It is not published yet", "It is full, so lifters would see the waiting list").
+- **If it is not set up yet,** the preview lists what is missing (the entry method, saved entry settings, a price, weight classes) instead of showing an empty form. You can use it as you go.
+- **Only the entries team** can use the link: anyone else who opens it is told it is for the entries team. You need to be signed in to the editor on the same address.
+- To try the real thing end to end with a Stripe test card, use the competition's normal entry link while it is unpublished (see Part 6).
