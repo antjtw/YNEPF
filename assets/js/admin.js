@@ -68,7 +68,7 @@
     var save = el("button", { class: "btn " + (opt.danger ? "btn-danger-solid" : "btn-primary"), type: "submit" }, opt.saveLabel || "Save");
     form.appendChild(el("div", { class: "dialog-actions" }, save,
       el("button", { class: "btn btn-secondary", type: "button", onclick: function () { dlg.close(); } }, "Cancel"),
-      (opt.extra || []).map(function (x) { return el("button", { class: "btn btn-ghost", type: "button", onclick: function () { dlg.close(); x.onclick(); } }, x.label); })));
+      (opt.extra || []).map(function (x) { return el("button", { class: "btn btn-ghost", type: "button", onclick: function () { dlg.addEventListener("close", function after() { dlg.removeEventListener("close", after); x.onclick(); }); dlg.close(); } }, x.label); })));         // run it once this dialog has finished closing, so a dialog it opens is not wiped by the close
 
     var api = {
       get: function (n) { return controls[n].get(); },
@@ -1424,7 +1424,7 @@
       var out = [];
       list.forEach(function (r) {
         out.push(el("tr", null, el("th", { scope: "row" }, r.name, state.committee && state.committee[r.email] ? el("span", { class: "tag tag-position", style: "margin-left:var(--space-2)" }, "Committee") : null, el("small", null, r.email)), el("td", { class: "num" }, String(r.balance)), el("td", { class: "nowrap" }, r.expiring ? r.expiring + " by " + when(r.next_expiry) : "–"), el("td", { class: "num" }, String(r.earned)), el("td", { class: "num" }, String(r.spent)),
-          el("td", { class: "col-actions" }, el("span", { class: "actions" }, btn("History", function () { showHistory(r); }), btn("Edit", function () { editVolunteer({ email: r.email, name: r.name }, function () { load().then(function () { drawRows(); }); }); }, "btn-ghost", { "aria-label": "Edit " + r.name })))));
+          el("td", { class: "col-actions" }, el("span", { class: "actions" }, btn("History", function () { showHistory(r); }), btn("Edit", function () { editVolunteer({ email: r.email, name: r.name }, function () { load().then(function () { drawRows(); }); }, r.balance > 0 ? [{ label: "Take points away", onclick: function () { adjust(-1, r); } }] : []); }, "btn-ghost", { "aria-label": "Edit " + r.name })))));
         if (state.hist && state.hist.email === r.email) out.push(el("tr", { class: "row-detail" }, el("td", { colspan: "6" }, el("div", { class: "row-detail-inner" }, state.hist.node))));
       });
       tbody.replaceChildren.apply(tbody, out);
@@ -1443,11 +1443,11 @@
         var h = document.getElementById("pts-history-h"); if (h) { h.scrollIntoView({ block: "nearest" }); h.focus(); }
       }).catch(function (e) { node.replaceChildren(el("p", { class: "form-error" }, friendly(e))); });
     }
-    function adjust(sign) {
+    function adjust(sign, who) {
       var add = sign > 0;
-      openForm({ title: add ? "Add points" : "Take points away", saveLabel: add ? "Add points" : "Take points away",
-        intro: add ? "A thank you, a correction, or points earned somewhere we did not tick off. It goes in the ledger with your name, so there is a record." : "For a spend (priority entry 1, £20 off 4, £40 off 8, half price BP membership 5, free membership 10) or a correction. It cannot take someone below zero.",
-        values: {}, fields: [{ name: "email", label: "Their email address", type: "email", required: true }].concat(add ? [{ name: "name", label: "Their name (only for someone new)", help: "Leave empty for someone who already has points." }] : [])
+      openForm({ title: add ? "Add points" : who ? "Take points away from " + (who.name || who.email) : "Take points away", saveLabel: add ? "Add points" : "Take points away",
+        intro: who && !add ? (who.name || who.email) + " has " + (who.balance === undefined ? "" : who.balance + " points. ") + "For a spend (priority entry 1, £20 off 4, £40 off 8, half price BP membership 5, free membership 10) or a correction. It cannot take them below zero." : add ? "A thank you, a correction, or points earned somewhere we did not tick off. It goes in the ledger with your name, so there is a record." : "For a spend (priority entry 1, £20 off 4, £40 off 8, half price BP membership 5, free membership 10) or a correction. It cannot take someone below zero.",
+        values: who ? { email: who.email } : {}, fields: [{ name: "email", label: "Their email address", type: "email", required: true }].concat(add ? [{ name: "name", label: "Their name (only for someone new)", help: "Leave empty for someone who already has points." }] : [])
           .concat([{ name: "points", label: "Points", type: "number", required: true, min: "1", max: "100", half: true }, { name: "date", label: "Date (optional)", type: "date", half: true, help: "For adding points retroactively. Points expire 24 months after this date." }, { name: "reason", label: "What is it for?", required: true, help: add ? "For example: Helped with the livestream." : "For example: Priority entry, March Open." }]),
         validate: function (v) { var n = Number(v.points); return !n || n < 1 || n > 100 || Math.round(n) !== n ? "Enter a whole number of points from 1 to 100." : null; },
         onSave: function (v) {
@@ -1566,7 +1566,7 @@
     load().then(function () {
       var search = el("input", { class: "control", type: "search", id: "pts-q", placeholder: "Search by name or email", "aria-label": "Search by name or email", style: "max-width:22rem" });
       search.addEventListener("input", function () { state.q = search.value; drawRows(); });
-      panel.replaceChildren(panelHead("Volunteer points", el("span", { class: "actions" }, btn("Add points", function () { adjust(1); }, "btn-primary"), btn("Take points away", function () { adjust(-1); }, "btn-ghost"), btn("Add a person", function () { addVolunteer(function () { load().then(function () { drawRows(); }); }); }, "btn-ghost"))),
+      panel.replaceChildren(panelHead("Volunteer points", el("span", { class: "actions" }, btn("Add points", function () { adjust(1); }, "btn-primary"), btn("Add a person", function () { addVolunteer(function () { load().then(function () { drawRows(); }); }); }, "btn-ghost"))),
         summary, el("div", { class: "control-row" }, search),
         el("div", { class: "table-scroll" }, el("table", { class: "admin-table" }, el("caption", { class: "visually-hidden" }, "Volunteer points"),
           el("thead", null, el("tr", null, ["Name", "Points", "Expiring soon", "Earned", "Spent", ""].map(function (h, i) { return el("th", { scope: "col", class: i === 1 || i === 3 || i === 4 ? "num" : i === 5 ? "col-actions" : null }, h || el("span", { class: "visually-hidden" }, "Actions")); }))), tbody)),
@@ -1602,7 +1602,7 @@
         });
       } });
   }
-  function editVolunteer(person, done) {
+  function editVolunteer(person, done, extraActions) {
     sb.from("vol_people").select("email,full_name,mobile,tshirt,committee").eq("email", person.email).maybeSingle().then(function (r) {
       var row = (r && r.data) || {};
       openForm({ title: "Edit " + (person.name || person.email), saveLabel: "Save changes",
@@ -1612,6 +1612,7 @@
           { name: "mobile", label: "Mobile number (optional)", half: true }, { name: "tshirt", label: "T-shirt size (optional)", type: "select", half: true, options: [{ value: "", label: "Not given" }].concat(SIZES.map(function (z) { return { value: z, label: z }; })) },
           { name: "committee", label: "Part of the committee", type: "checkbox", help: "Executive and supporting committee members earn 3 points at the end of every quarter. Untick when they step down." }],
         validate: function (v) { return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(v.email || "").trim()) ? null : "That email address does not look right."; },
+        extra: extraActions || [],
         onSave: function (v) {
           return sb.rpc("vol_person_update", { p: { email: person.email, new_email: String(v.email).trim().toLowerCase(), full_name: String(v.full_name).trim(), mobile: String(v.mobile || "").trim(), tshirt: v.tshirt || "", committee: !!v.committee } }).then(function (res) {
             if (res.error) {
