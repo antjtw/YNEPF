@@ -1841,10 +1841,18 @@
     function addSession() {
       openForm({ title: "Add a session", saveLabel: "Add session", values: { area: "session" }, fields: [{ name: "label", label: "Name", required: true }, { name: "area", label: "What is it?", type: "select", options: [{ value: "session", label: "A lifting session" }, { value: "setup", label: "Set up" }, { value: "teardown", label: "Tear down" }] }],
         onSave: function (v) {
-          var last = V.sessions.reduce(function (m, x) { return Math.max(m, x.sort_order); }, 0) + 10;
-          return sb.from("vol_sessions").insert({ competition_id: c.id, area: v.area, label: String(v.label).trim(), sort_order: last }).select().then(ok).then(function (ss) {
+          // Where it goes: set up first, lifting sessions after the last lifting session (before tear down), tear down last. So a third or fourth
+          // session, or a second day, added later still lands before "Tear down".
+          function top(list) { return list.reduce(function (m, x) { return Math.max(m, x.sort_order); }, 0); }
+          var tear = V.sessions.filter(function (x) { return x.area === "teardown"; }).sort(function (a, b) { return a.sort_order - b.sort_order; });
+          var others = V.sessions.filter(function (x) { return x.area !== "teardown"; });
+          var order = v.area === "setup" ? V.sessions.reduce(function (m, x) { return Math.min(m, x.sort_order); }, 10) - 10 : v.area === "teardown" ? top(V.sessions) + 10 : top(others) + 10;
+          var bump = v.area === "session" ? tear.filter(function (x, i) { return x.sort_order <= order; }) : [];          // tear down moves after the new session
+          return Promise.all(bump.map(function (x, i) { var n = order + 10 * (tear.indexOf(x) + 1); return sb.from("vol_sessions").update({ sort_order: n }).eq("id", x.id).then(ok).then(function () { x.sort_order = n; }); })).then(function () {
+            return sb.from("vol_sessions").insert({ competition_id: c.id, area: v.area, label: String(v.label).trim(), sort_order: order }).select().then(ok);
+          }).then(function (ss) {
             var rows = []; V.roles.filter(function (r) { return r.area === v.area; }).forEach(function (r) { for (var k = 1; k <= r.default_places; k++) rows.push({ vol_session_id: ss[0].id, role_id: r.id, position: k }); });
-            return (rows.length ? sb.from("vol_places").insert(rows).select().then(ok) : Promise.resolve([])).then(function (pl) { ss[0].vol_places = pl; V.sessions.push(ss[0]); draw(); });
+            return (rows.length ? sb.from("vol_places").insert(rows).select().then(ok) : Promise.resolve([])).then(function (pl) { ss[0].vol_places = pl; V.sessions.push(ss[0]); V.sessions.sort(function (a, b) { return a.sort_order - b.sort_order; }); draw(); });
           });
         } });
     }
