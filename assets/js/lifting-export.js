@@ -140,7 +140,7 @@
     return shell(comp.name + ": weigh-in", sessions.map(function (s) {
       var rows = inOrder(s, people).sort(function (a, b) { return byLot(a.l, b.l); });
       return "<section class=\"page port\">" + head("<span>" + esc(comp.name) + "</span><span>" + esc(sessionTitle(s)) + "</span>", comp, s.day) +
-        "<table><thead><tr><th class=\"tick c\">&#10003;</th><th class=\"c\">Lot</th><th>Lifter name</th><th>Class</th><th>Age</th><th>Club / Team</th><th style=\"width:42%\">Comments</th></tr></thead><tbody>" +
+        "<table><thead><tr><th class=\"tick c\">&#10003;</th><th class=\"c\">Lot</th><th>Lifter name</th><th>Class</th><th>Age</th><th>" + (comp.is_university ? "University" : "Club / Team") + "</th><th style=\"width:42%\">Comments</th></tr></thead><tbody>" +
         rows.map(function (r) { return "<tr><td class=\"c\"></td><td class=\"c\">" + esc(r.l.lot || "") + "</td><td>" + esc(who(r.e)) + "</td><td>" + esc(cls(r.e)) + "</td><td class=\"c\">" + esc(r.e.ageCat || "") + "</td><td>" + esc(r.e.club || "") + "</td><td></td></tr>"; }).join("") +
         "</tbody></table>" + sign(["Weigh in Official 1", "Weigh in Official 2"]) + "</section>";
     }).join(""));
@@ -154,7 +154,7 @@
         var rows = f.lifters.filter(function (l) { return people[l.id]; });
         var att = function (t) { return "<th class=\"c\">" + t + "</th><th class=\"c\">2</th><th class=\"c\">3</th>"; };
         pages.push("<section class=\"page land\">" + head("<span>Flight " + esc(f.letter) + "</span><span>" + esc(comp.name) + "</span><span>" + esc(sessionTitle(s)) + "</span>", comp, s.day) +
-          "<table><thead><tr><th>Lifter name</th><th>Club</th><th class=\"c\">Lot</th><th class=\"c\">Weight class</th><th class=\"c\">Age</th><th class=\"c\">Body weight</th>" + att("Squat<br>1") + att("Bench<br>1") + "<th class=\"c\">Sub total</th>" + att("Deadlift<br>1") + "<th class=\"c\">Total</th><th class=\"c\">GLP</th><th class=\"c\">BWT cl. placing</th></tr></thead><tbody>" +
+          "<table><thead><tr><th>Lifter name</th><th>" + (comp.is_university ? "University" : "Club") + "</th><th class=\"c\">Lot</th><th class=\"c\">Weight class</th><th class=\"c\">Age</th><th class=\"c\">Body weight</th>" + att("Squat<br>1") + att("Bench<br>1") + "<th class=\"c\">Sub total</th>" + att("Deadlift<br>1") + "<th class=\"c\">Total</th><th class=\"c\">GLP</th><th class=\"c\">BWT cl. placing</th></tr></thead><tbody>" +
           rows.map(function (l) { var e = people[l.id]; return "<tr><td>" + esc(who(e)) + "</td><td>" + esc(e.club || "") + "</td><td class=\"c\">" + esc(l.lot || "") + "</td><td class=\"c\">" + esc(cls(e)) + "</td><td class=\"c\">" + esc(e.ageCat || "") + "</td>" + blank(1) + blank(3) + blank(3) + blank(1) + blank(3) + blank(3) + "</tr>"; }).join("") +
           "</tbody></table>" + sign(["Centre Referee", "Side Referee", "Side Referee"]) + "</section>");
       });

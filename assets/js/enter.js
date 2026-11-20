@@ -260,19 +260,22 @@
         el("option", { value: "" }, "Choose your federation or division"),
         ctx.divisions.map(function (d) { return el("option", { value: d.id, selected: v.division_id === d.id }, d.name); })));
   }
+  function isUni() { return !!(ctx && ctx.comp && ctx.comp.is_university); }
+  // A university competition asks for the university they represent instead of a club (stored in the same place).
   function clubField() {
-    if (!ctx.clubs.length) return null;      // nothing to choose from until the club list has been imported
+    if (!ctx.clubs.length) return null;      // nothing to choose from until the list has been imported
+    var uni = isUni();
     return el("div", { class: "field", "data-field": "club" },
-      el("label", { for: "club" }, "Club (optional)"),
-      el("p", { class: "help", id: "club-help" }, "Select your club from the list of English Powerlifting Association (EPA) approved clubs."),
+      el("label", { for: "club" }, uni ? "University (optional)" : "Club (optional)"),
+      el("p", { class: "help", id: "club-help" }, uni ? "Select the university you are representing." : "Select your club from the list of English Powerlifting Association (EPA) approved clubs."),
       el("p", { class: "field-error", id: "club-error", hidden: true }),
       el("select", { id: "club", name: "club", "aria-describedby": "club-help", onchange: function (e) { v.club = e.target.value; } },
-        el("option", { value: "" }, "Select your club"),
+        el("option", { value: "" }, uni ? "Select your university" : "Select your club"),
         ctx.clubs.map(function (c) { return el("option", { value: c.name, selected: v.club === c.name }, c.name); })));
   }
   function stepAbout() {
     return [
-      text("full_name", "First and last name", { autocomplete: "name", help: "Your name, club and weight class are shown on the entries list and the lifting order." }),
+      text("full_name", "First and last name", { autocomplete: "name", help: "Your name, " + (isUni() ? "university" : "club") + " and weight class are shown on the entries list and the lifting order." }),
       text("email", "Email address", { type: "email", autocomplete: "email", max: 254, readonly: !!offerInfo, help: offerInfo ? "Your place was offered to this address, so it cannot be changed." : "We send your confirmation here." }),
       dobField(),
       el("p", { class: "callout", id: "cat-note", role: "status", hidden: myCategory() === null }, catNote()),
@@ -336,7 +339,7 @@
       row("Category", (v.sex === "M" ? "Men's" : "Women's") + (myCategory() !== null ? ", " + CAT_SHORT[myCategory()] : ""), "about"),
       row("Federation or division", d ? d.name + (d.is_home ? "" : " (guest)") : "", "about")
     ];
-    if (ctx.clubs.length) rows.push(row("Club", v.club, "about"));
+    if (ctx.clubs.length) rows.push(row(isUni() ? "University" : "Club", v.club, "about"));
     rows.push(row("Membership number", v.bp_number, "about"), row("Instagram handle", trim(v.instagram) ? "@" + trim(v.instagram).replace(/^@/, "") : "", "about"));
     if (age !== null && age < 18) rows.push(row("Parent or guardian", trim(v.guardian_name), "guardian"), row("Their phone number", trim(v.guardian_phone), "guardian"), row("Their email address", trim(v.guardian_email), "guardian"));
     rows.push(row("Photos and videos", PHOTO_NAMES[v.photo_choice], "about"),
@@ -524,12 +527,12 @@
     var q = new URLSearchParams(location.search), slug = q.get("c") || ""; invite = q.get("invite") || ""; offer = q.get("offer") || "";
     var db = Y.db();
     if (!db || !slug) return stop("Enter a competition", "<p>Choose a competition from the <a href='calendar.html'>calendar</a> to enter.</p>");
-    var cols = "id,name,start_date,end_date,venue_name,slug,entry_url,waitlist_url,entry_opens,entry_closes";
+    var cols = "*";          // everything the public view holds, including whether this is a university competition
     // The public sees published competitions only. A signed-in entries team member can also open an unpublished one
     // (a TEST competition) to try it. The payment function re-checks their login before allowing it.
     db.from("competitions_public").select(cols).eq("slug", slug).maybeSingle().then(function (r) {
       if (r.data) return { comp: r.data, preview: false };
-      return db.from("competitions").select(cols + ",entry_method,entries_closed_manually").eq("slug", slug).maybeSingle().then(function (r2) {
+      return db.from("competitions").select("*").eq("slug", slug).maybeSingle().then(function (r2) {
         return r2.data ? { comp: r2.data, preview: true } : { comp: null };
       });
     }).then(function (found) {
@@ -543,7 +546,7 @@
         db.from("weight_classes").select("*").eq("active", true).order("sort_order"),
         db.from("divisions").select("*").order("sort_order"),
         db.rpc("places_open", { c: comp.id }),
-        db.from("clubs").select("name,region").eq("active", true).order("name"),
+        comp.is_university ? db.from("universities").select("name").eq("active", true).order("name") : db.from("clubs").select("name,region").eq("active", true).order("name"),
         db.from("addons").select("id,kind,name,description,price_pence,stock,sort_order,addon_options(id,label,sort_order)").eq("competition_id", comp.id).order("sort_order").order("name"),
         Promise.resolve(db.rpc("server_time")).then(function (t) { return t; }, function () { return {}; }),
         found.preview ? Promise.resolve(db.rpc("is_entries")).then(function (t) { return t; }, function () { return {}; }) : Promise.resolve({ data: true })

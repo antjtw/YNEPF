@@ -360,10 +360,37 @@
       panel.appendChild(current.length ? compTable(current, taken) : el("p", { class: "empty" }, "Nothing upcoming."));
       if (past.length) { panel.appendChild(el("h2", null, "Past")); panel.appendChild(compTable(past, taken)); }
       if (canEntry()) panel.appendChild(feesPanel());
-      if (canEntry()) panel.appendChild(clubsPanel());
+      if (canEntry()) { panel.appendChild(clubsPanel()); panel.appendChild(universitiesPanel()); }
     }).catch(function (e) { panel.lastChild.textContent = friendly(e); });
   }
 
+  // The universities lifters choose from at a university competition, in place of a club. The entries team keeps this list.
+  function universitiesPanel() {
+    var box = el("div", { class: "panel", style: "margin-top:var(--space-6)" }, el("h2", { style: "margin-top:0" }, "Universities"), el("p", null, "Loading…"));
+    function draw() {
+      sb.from("universities").select("*").order("name").then(ok).then(function (rows) {
+        var live = rows.filter(function (r) { return r.active; }).length;
+        box.replaceChildren(el("div", { class: "section-head is-first", style: "margin-top:0" }, el("h2", null, "Universities"), btn("Add a university", addUni, "btn-secondary")),
+          el("p", { class: "panel-intro" }, "For a university competition (tick the box on its Details tab), lifters choose the university they represent from this list, instead of a club. " + live + (live === 1 ? " university is" : " universities are") + " on the list. Switching one off hides it from new entries and keeps it on past ones."),
+          rows.length ? el("ul", { class: "item-list" }, rows.map(function (r) {
+            return el("li", { class: "item-row" }, el("div", { class: "item-main" }, el("p", { class: "item-title" }, r.name, r.active ? null : el("span", { class: "tag tag-closed", style: "margin-left:var(--space-2)" }, "Switched off"))),
+              el("span", { class: "actions" }, btn(r.active ? "Switch off" : "Switch on", function () { sb.from("universities").update({ active: !r.active }).eq("id", r.id).then(ok).then(draw).catch(function (e) { toast(friendly(e), "error"); }); }, r.active ? "btn-ghost" : "btn-secondary", { "aria-label": (r.active ? "Switch off " : "Switch on ") + r.name })));
+          })) : el("div", { class: "empty-state" }, el("p", null, "No universities yet.")));
+      }).catch(function (e) { box.replaceChildren(el("h2", { style: "margin-top:0" }, "Universities"), el("p", { class: "form-error" }, friendly(e))); });
+    }
+    function addUni() {
+      openForm({ title: "Add a university", saveLabel: "Add it", values: {}, fields: [{ name: "name", label: "Name", required: true, help: "As lifters should see it on the entry form and the lifting order, for example Bradford University." }],
+        onSave: function (v) {
+          var name = String(v.name).trim();
+          return sb.from("universities").insert({ name: name, active: true }).then(function (r) {
+            if (r.error) throw new Error(/duplicate|unique/i.test(String(r.error.message)) ? "That university is already on the list." : friendly(r.error));
+            toast("Added."); draw();
+          });
+        } });
+    }
+    draw();
+    return box;
+  }
   // The list of clubs people choose from on the entry form, imported from the EPA and British Powerlifting websites.
   function clubsPanel() {
     var box = el("div", { class: "panel", style: "margin-top:var(--space-6)" }, el("h2", { style: "margin-top:0" }, "Club list"), el("p", null, "Loading…"));
@@ -587,6 +614,7 @@
         C({ name: "label", label: "Tag (optional)", help: "A small label next to the name, for example “Sponsor TBD”.", half: true }),
         C({ name: "slug", label: "Web address ending", help: "Made from the year and name if you leave it blank. Lower case letters, numbers and hyphens only. It is also the end of the entry and lifting order addresses.", half: true }),
         C({ name: "description", label: "Description", type: "textarea", rows: 5, help: "Plain text. Start lines with “- ” for bullet points. Links look like [text](https://…)." }),
+        C({ name: "is_university", label: "University competition", type: "checkbox", help: "Lifters choose the university they represent instead of a club, and it shows in place of the club on the entries and the lifting order. The list of universities is on the Calendar page." }),
         { heading: "When and where" },
         C({ name: "start_date", label: "First day", type: "date", required: true, half: true }),
         C({ name: "end_date", label: "Last day (if more than one day)", type: "date", half: true }),
@@ -707,6 +735,7 @@
           entry_opens: opens ? Y.fromLondonInput(opens) : null, entry_closes: closes ? Y.fromLondonInput(closes) : null,
           entries_full: v.entries_full, published: v.published
         };
+        if (!!v.is_university !== !!c.is_university) row.is_university = !!v.is_university;          // only sent when it changes, so saving a competition never depends on it
         var step = Promise.resolve(c.id);
         if (canComp()) {
           var q = isNew ? sb.from("competitions").insert(row).select("id").single() : sb.from("competitions").update(row).eq("id", c.id);
@@ -806,9 +835,9 @@
       sb.from("entries").select("*, weight_classes(label), divisions(name,is_home), entry_private(*), entry_addons(price_pence, addons(name), addon_options(label)), payments(*, refunds(*))").eq("competition_id", c.id).order("created_at", { ascending: true }),
       sb.from("divisions").select("id,name").order("sort_order"),
       sb.from("weight_classes").select("id,sex,label,sort_order").order("sort_order"),
-      sb.from("clubs").select("name").eq("active", true).order("name")
+      sb.from(c.is_university ? "universities" : "clubs").select("name").eq("active", true).order("name")          // a university competition picks universities instead of clubs
     ]).then(function (res) {
-      var rows = ok(res[0]), refs = { divisions: res[1].data || [], classes: res[2].data || [], clubs: res[3].data || [] };
+      var rows = ok(res[0]), refs = { divisions: res[1].data || [], classes: res[2].data || [], clubs: res[3].data || [], clubLabel: c.is_university ? "University" : "Club" };
       var dup = duplicateIds(rows), now = new Date();
       var S = { q: "", status: "entered", guests: false, dupes: false, sort: "newest" };
       var live = rows.filter(function (e) { return e.status === "paid" || e.status === "comped"; });
@@ -899,7 +928,7 @@
           dlRows([["Category", e.sex === "M" ? "Men's" : "Women's"], ["Weight class", wc ? wc.label + " kg" : ""], ["Event", e.event === "bench_only" ? "Bench only" : "Full power"], ["Equipment", e.equipment === "equipped" ? "Equipped" : "Classic"]
             ].concat(openipfPairs(e), [["Can break records", e.can_break_records ? "Yes" : "No"]])),
           el("h3", null, "Federation and membership"),
-          dlRows([["Federation or division", dv ? dv.name + (dv.is_home ? "" : " (guest)") : ""], ["Club", e.club], ["Membership number", e.bp_number],
+          dlRows([["Federation or division", dv ? dv.name + (dv.is_home ? "" : " (guest)") : ""], [refs.clubLabel, e.club], ["Membership number", e.bp_number],
             e.is_guest ? ["Membership checked", e.membership_checked ? "Yes" : "Not yet"] : null]),
           priv && priv.guardian_name ? el("div", null, el("h3", null, "Parent or guardian"), dlRows([["Name", priv.guardian_name], ["Phone", priv.guardian_phone], ["Email", priv.guardian_email], ["Consent given", priv.guardian_consent ? "Yes" : "No"]])) : null,
           el("h3", null, "Payment"),
@@ -921,7 +950,7 @@
       }
 
       // Toolbar
-      var q = el("input", { class: "control", type: "search", id: "entry-search", placeholder: "Search name, email or club", "aria-label": "Search entries", oninput: function (ev) { S.q = ev.target.value.trim(); draw(); } });
+      var q = el("input", { class: "control", type: "search", id: "entry-search", placeholder: "Search name, email or " + refs.clubLabel.toLowerCase(), "aria-label": "Search entries", oninput: function (ev) { S.q = ev.target.value.trim(); draw(); } });
       var st = el("select", { class: "control", id: "entry-status", "aria-label": "Show", onchange: function (ev) { S.status = ev.target.value; draw(); } },
         [["entered", "Entered (paid and free)"], ["paying", "Paying now"], ["gone", "Cancelled and refunded"], ["all", "Everything"]].map(function (o) { return el("option", { value: o[0] }, o[1]); }));
       var so = el("select", { class: "control", id: "entry-sort", "aria-label": "Sort by", onchange: function (ev) { S.sort = ev.target.value; draw(); } },
@@ -2345,7 +2374,7 @@
         { name: "weight_class_id", label: "Weight class", type: "select", options: classOptions, half: true }, { name: "division_id", label: "Federation or division", type: "select", options: refs.divisions.map(function (d) { return { value: d.id, label: d.name }; }), half: true },
         { name: "event", label: "Event", type: "select", options: [{ value: "full_power", label: "Full power" }, { value: "bench_only", label: "Bench only" }], half: true },
         { name: "equipment", label: "Equipment", type: "select", options: [{ value: "classic", label: "Classic" }, { value: "equipped", label: "Equipped" }], half: true },
-        { name: "club", label: "Club (optional)", type: "select", options: [{ value: "", label: "No club" }].concat(refs.clubs.map(function (x) { return { value: x.name, label: x.name }; })), half: true },
+        { name: "club", label: refs.clubLabel + " (optional)", type: "select", options: [{ value: "", label: "No " + refs.clubLabel.toLowerCase() }].concat(refs.clubs.map(function (x) { return { value: x.name, label: x.name }; })), half: true },
         { name: "bp_number", label: "Membership number", half: true }, { name: "instagram", label: "Instagram handle (no @)", half: true },
         { name: "photo", label: "Photos and videos", type: "select", options: [{ value: "yes", label: "Consents to promotional use" }, { value: "no", label: "Does not consent" }, { value: "never", label: "Do not photograph or film" }], half: true },
         { name: "guardian_name", label: "Parent or guardian name (if under 18)", half: true }, { name: "guardian_phone", label: "Their phone", half: true }, { name: "guardian_email", label: "Their email", type: "email" }
@@ -2444,7 +2473,7 @@
       { name: "event", label: "Event", type: "select", options: [{ value: "full_power", label: "Full power" }, { value: "bench_only", label: "Bench only" }], half: true },
       { name: "equipment", label: "Equipment", type: "select", options: [{ value: "classic", label: "Classic" }, { value: "equipped", label: "Equipped" }], half: true },
       { name: "division_id", label: "Federation or division", type: "select", options: refs.divisions.map(function (d) { return { value: d.id, label: d.name }; }), half: true },
-      { name: "club", label: "Club", type: "select", options: [{ value: "", label: "No club" }].concat(clubs.map(function (n) { return { value: n, label: n }; })), half: true },
+      { name: "club", label: refs.clubLabel, type: "select", options: [{ value: "", label: "No " + refs.clubLabel.toLowerCase() }].concat(clubs.map(function (n) { return { value: n, label: n }; })), half: true },
       { name: "bp_number", label: "Membership number", half: true },
       { name: "instagram", label: "Instagram handle (no @)", half: true },
       { name: "openipf_url", label: "OpenIPF link", type: "url" },

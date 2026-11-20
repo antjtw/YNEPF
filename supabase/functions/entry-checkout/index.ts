@@ -25,6 +25,7 @@ export const MESSAGES: Record<string, string> = {
   guest_not_open: "Entries from outside the Yorkshire & North East division have not opened yet. Please come back later.",
   "invalid:division": "Please choose the federation or division you are part of.",
   "invalid:club": "Please choose your club from the list, or choose unattached.",
+  "invalid:university": "Please choose your university from the list.",
   discount_invalid: "That discount code was not recognised. Please check it and try again.",
   discount_expired: "That discount code has expired.",
   discount_used: "That discount code has already been used.",

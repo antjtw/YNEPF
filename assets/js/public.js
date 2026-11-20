@@ -175,6 +175,7 @@
   // The name cell carries everything about the person: the name (a link to their
   // OpenIPF profile when they have one), an Instagram icon when the handle is valid,
   // and their club underneath when there is one.
+  var uniLabel = false;           // set while a university competition's lifting order is drawn: the "club" column then says University
   function loCell(col, l) {
     if (col === "name") {
       var top = el("span", { class: "lo-person" },
@@ -186,9 +187,10 @@
       }
       return el("th", { scope: "row", class: "c-name" }, top);
     }
-    return el("td", { class: "c-" + col, "data-label": { club: "Club", ageClass: "Age", cls: "Class", glp: "GLP", total: "Total" }[col] || "" }, col === "glp" ? fmtGlp(l.glp) : l[col]);
+    return el("td", { class: "c-" + col, "data-label": { club: uniLabel ? "University" : "Club", ageClass: "Age", cls: "Class", glp: "GLP", total: "Total" }[col] || "" }, col === "glp" ? fmtGlp(l.glp) : l[col]);
   }
   function renderLiftingOrder(host, c, lifters) {
+    uniLabel = !!(c && c.is_university);
     var cols = LO_TABLE.filter(function (col) {
       if (col.key === "name") return true;
       if (col.key === "ageClass") return lifters.some(function (l) { return l.ageClass !== "Open"; });   // all blank = everyone is Open
@@ -227,7 +229,7 @@
             el("p", { class: "lo-flight-label" }, "Flight " + f),
             el("div", { class: "table-wrap" }, el("table", { class: "data lifters" },
               el("caption", { class: "visually-hidden" }, "Flight " + f + " lifting order"),
-              el("thead", null, el("tr", null, cols.map(function (col) { return el("th", { scope: "col", class: "c-" + col.key }, col.label); }))),
+              el("thead", null, el("tr", null, cols.map(function (col) { return el("th", { scope: "col", class: "c-" + col.key }, col.key === "club" && c && c.is_university ? "University" : col.label); }))),
               el("tbody", null, rows.map(function (l) { return el("tr", null, cols.map(function (col) { return loCell(col.key, l); })); }))))));
         });
         sec.appendChild(block);

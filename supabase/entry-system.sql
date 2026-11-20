@@ -235,6 +235,7 @@ create table if not exists public.addon_images (            -- up to 4 per add-o
 -- Franchise competitions are run by a host, who is paid the entry fee less the federation's fixed amount. Competitions the
 -- federation runs itself are not: the federation keeps the whole entry fee (less nothing but Stripe's fees).
 alter table public.competitions add column if not exists is_franchise boolean not null default true;
+alter table public.competitions add column if not exists is_university boolean not null default false;      -- a university competition: lifters pick the university they represent instead of a club
 
 -- What the federation keeps from each entry: a fixed amount, 30% of the standard YNE entry prices, whatever the host charges.
 -- The host receives the rest of the entry fee (before any discount). Sub-junior entries pay the sub-junior amount; bench only
@@ -1057,6 +1058,7 @@ select
   k.slug,
   exists (select 1 from public.lifting_orders lo where lo.competition_id = k.id and lo.status = 'published') as lifting_published,
   k.entries_closed_manually,
+  k.is_university,
   exists (select 1 from public.vol_rota v where v.competition_id = k.id and v.signup_open and coalesce(v.signup_closes_at, 'infinity') > now()) as volunteers_open,
   exists (select 1 from public.vol_rota v where v.competition_id = k.id and v.status = 'published') as rota_published
 from (
@@ -1239,7 +1241,11 @@ begin
   -- Club: optional, and only ever one from the EPA list (so it is stored exactly as the list spells it).
   v_club := btrim(coalesce(p->>'club', ''));
   if lower(v_club) = 'unattached' then v_club := ''; end if;
-  if v_club <> '' then
+  if v_club <> '' and c.is_university then
+    -- a university competition: the "club" is the university they represent, from our list of universities
+    select name into v_club from public.universities where name_key = lower(v_club) and active;
+    if not found then raise exception 'invalid:university'; end if;
+  elsif v_club <> '' then
     select name into v_club from public.clubs where name_key = lower(v_club) and active;
     if not found then raise exception 'invalid:club'; end if;
   end if;
@@ -2797,3 +2803,31 @@ do $$ begin
     grant execute on function public.points_codes_expire() to service_role;
   end if;
 end $$;
+
+
+-- ---------------------------------------------------------------------------
+-- 24. University competitions: a list of universities, used in place of the club list
+-- ---------------------------------------------------------------------------
+-- When a competition is marked as a university competition (Details tab), lifters pick the university they represent instead of a club. It is stored
+-- in the entry's club field, so it shows wherever the club shows (entries, lifting order). The entries team can add and switch off universities.
+create table if not exists public.universities (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  name_key text generated always as (lower(btrim(name))) stored unique,
+  active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+alter table public.universities enable row level security;
+drop policy if exists "public read" on public.universities;
+create policy "public read" on public.universities for select to anon, authenticated using (true);
+drop policy if exists "entries write" on public.universities;
+create policy "entries write" on public.universities for all to authenticated using (public.is_entries()) with check (public.is_entries());
+grant select on public.universities to anon;
+grant select, insert, update, delete on public.universities to authenticated;
+insert into public.universities (name) values
+  ('Newcastle University'), ('Northumbria University'), ('Durham University'), ('Leeds University'), ('Leeds Beckett University'),
+  ('Sheffield Hallam University'), ('University of Sheffield'), ('University of York'), ('York St John University'), ('Askham Bryan College'), ('Teesside University')
+on conflict (name_key) do nothing;
+update public.universities set name = 'Leeds University' where name_key = 'university of leeds' and not exists (select 1 from public.universities where name_key = 'leeds university');       -- the name lifters have used in past years
+-- (An earlier version of this file seeded "Aston University" by mistake: it was meant to be Askham Bryan College, York.)
+update public.universities set name = 'Askham Bryan College' where name_key = 'aston university' and not exists (select 1 from public.universities where name_key = 'askham bryan college');

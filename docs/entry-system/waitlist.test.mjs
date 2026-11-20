@@ -644,6 +644,27 @@ ok((await q(`select public.points_codes_expire() n`))[0].n === 0, "a code that h
 await db.exec(`update public.discount_codes set expires_at = now() - interval '1 minute' where code = 'EXP-20OFF-AAAAAA'`);
 ok((await q(`select public.points_codes_expire() n`))[0].n === 1 && (await hist("exp@x.com")).some((x) => x.kind === "note" && /^Discount code expired: EXP-20OFF-AAAAAA \(4 points no longer held\)/.test(x.reason)), "a points code that ran out unused leaves an expired line");
 ok((await q(`select public.points_codes_expire() n`))[0].n === 0 && (await bal("exp@x.com")) === 4, "only once, and the balance is untouched");
+
+// ---- university competitions: the club field becomes a university
+const UC = "a3a3a3a3-0000-4000-8000-000000000005";
+await db.exec(`insert into public.competitions (id,name,start_date,capacity,published,slug,entry_method,entry_opens,is_university) values ('${UC}','Uni Open','2027-08-14',50,true,'uni-open','yne', now() - interval '1 day', true);
+ insert into public.entry_settings (competition_id) values ('${UC}');
+ insert into public.price_rules (competition_id,sort_order,label,event,age_category,price_pence) values ('${UC}',1,'Full power','full_power',null,3000);
+ insert into public.clubs (name, source) values ('Iron Works Gym', 'manual') on conflict do nothing;`);
+const un = (o) => q(`select public.start_entry($1::jsonb) r`, [JSON.stringify({ ...good, competition_id: UC, ...o })]).then((r) => r[0].r).catch((e) => ({ error: e.message }));
+ok((await q(`select count(*)::int n from public.universities where active`))[0].n === 11 && (await q(`select is_university u from public.competitions_public where id = '${UC}'`))[0].u === true, "eleven universities to start with, and the public calendar view carries the flag");
+const u1 = await un({ email: "uni1@x.com", full_name: "Una Student", club: "durham university" });
+ok(u1.entry_id && (await q(`select club from public.entries where id = '${u1.entry_id}'`))[0].club === "Durham University", "a university competition stores the university, spelled as on our list: " + JSON.stringify(u1));
+ok((await un({ email: "uni2@x.com", full_name: "Una Two", club: "Iron Works Gym" })).error?.includes("invalid:university"), "a club is not accepted at a university competition");
+ok((await un({ email: "uni3@x.com", full_name: "Una Three", club: "" })).entry_id, "and the university is optional, like a club");
+ok((await start({ email: "club1@x.com", full_name: "Clive Club", club: "Durham University" })).error?.includes("invalid:club"), "a university is not accepted at an ordinary competition (it is not on the club list)");
+await db.exec(`update public.universities set active = false where name = 'Teesside University'`);
+ok((await un({ email: "uni4@x.com", full_name: "Una Four", club: "Teesside University" })).error?.includes("invalid:university"), "a university that has been switched off is not accepted");
+await db.exec("set role anon");
+ok((await q(`select count(*)::int n from public.universities`))[0].n >= 11 && !(await can(`insert into public.universities (name) values ('Hacked University')`)), "anyone can read the list, nobody but the entries team can change it");
+await db.exec("reset role");
+await asUser(U.entries, async () => { ok(await can(`insert into public.universities (name) values ('Bradford University')`) && !(await can(`insert into public.universities (name) values ('Bradford University')`)), "the entries team can add a university (and not the same one twice)"); });
+await asUser(U.editor, async () => { ok(!(await can(`insert into public.universities (name) values ('Editor University')`)), "an editor cannot change the list"); });
 // who may do what
 await db.exec("set role anon");
 ok(!(await can(`select public.waitlist_join('{}'::jsonb)`)) && !(await can(`select public.waitlist_sweep('${W}')`)) && !(await can(`select public.waitlist_make_offer('${W}'::uuid, 'x')`)), "the public cannot call the waiting list functions (only our server can)");
