@@ -2825,8 +2825,9 @@ create policy "entries write" on public.universities for all to authenticated us
 grant select on public.universities to anon;
 grant select, insert, update, delete on public.universities to authenticated;
 insert into public.universities (name) values
-  ('Newcastle University'), ('Northumbria University'), ('Durham University'), ('University of Leeds'), ('Leeds Beckett University'),
+  ('Newcastle University'), ('Northumbria University'), ('Durham University'), ('Leeds University'), ('Leeds Beckett University'),
   ('Sheffield Hallam University'), ('University of Sheffield'), ('University of York'), ('York St John University'), ('Askham Bryan College'), ('Teesside University')
 on conflict (name_key) do nothing;
+update public.universities set name = 'Leeds University' where name_key = 'university of leeds' and not exists (select 1 from public.universities where name_key = 'leeds university');       -- the name lifters have used in past years
 -- (An earlier version of this file seeded "Aston University" by mistake: it was meant to be Askham Bryan College, York.)
 update public.universities set name = 'Askham Bryan College' where name_key = 'aston university' and not exists (select 1 from public.universities where name_key = 'askham bryan college');
