@@ -1,10 +1,19 @@
 // Sample emails with realistic data, for the mockups. The wording here is the proposed new copy.
-import { b } from "./email-template.mjs";
+import { b, link } from "./email-template.mjs";
 const entries = "competitions@ynepf.co.uk";
+
+// Shown in every email that comes before competition day (the confirmation and the lifting order). The links are the same pages the site already uses.
+const TECH_RULES = "https://www.powerlifting.sport/rules/codes/info/technical-rules", APPROVED_LIST = "https://www.powerlifting.sport/rules/codes/info/approved-list";
+export const RULES_AND_KIT = [
+  ["h2", "Before competition day"],
+  ["p", `Please make sure you know the current ${link(TECH_RULES, "IPF Technical Rules")}. It is up to you to have read and understood them before you lift.`],
+  ["p", `Please also check that your kit is on the ${link(APPROVED_LIST, "IPF approved list")}. Any kit that is not compliant will be rejected, and referees will not make exceptions, so check it now rather than at weigh-in.`],
+  ["p", `Not sure about something? Email us at ${link("mailto:info@ynepf.co.uk", "info@ynepf.co.uk")} and we will help.`],
+];
 
 export const SAMPLES = {
   confirmation: {
-    label: "Entry confirmation", to: "the lifter", subject: "You're in: NESC Open 2027", entriesEmail: entries,
+    label: "Entry confirmation", noQuestions: true, to: "the lifter", subject: "You're in: NESC Open 2027", entriesEmail: entries,
     preheader: "Your entry for NESC Open 2027 on 27 February 2027 is confirmed and paid.",
     why: "You are getting this email because you entered a YNEPF competition.",
     blocks: [
@@ -16,7 +25,20 @@ export const SAMPLES = {
       ["p", "Refunds are available until entries close on Saturday 13 February 2027, 6:00 pm. After that, we cannot refund entries."],
       ["p", "<b>Need to change something, or pull out?</b> Email us and the entries team will sort it. You cannot edit an entry yourself yet, so please get in touch before entries close."],
       ["button2", "Email us about your entry", "mailto:competitions@ynepf.co.uk?subject=Changing%20my%20entry%3A%20NESC%20Open%202027"],
+      ...RULES_AND_KIT,
       ["small", "Your name, club and weight class are shown on the entries list and the lifting order. Your date of birth is never published. If anything is wrong, or you want us to change or delete what we hold about you, just reply to this email."],
+    ],
+  },
+  liftingOrder: {
+    label: "Lifting order shared", noQuestions: true, to: "every entered lifter", subject: "The provisional lifting order: NESC Open 2027", entriesEmail: entries,
+    preheader: "Check your flight and session. Entry is still open, so it may change.",
+    why: "You are getting this email because you are entered in this competition.",
+    blocks: [
+      ["h1", "The lifting order is online"],
+      ["p", `Hi Sam, the provisional lifting order for ${b("NESC Open 2027")} (27 February 2027) is now online.`],
+      ["button", "See the lifting order", "https://www.ynepf.co.uk/lifting/?c=nesc-open-2027"],
+      ["note", "<b>This is the provisional order.</b> Entry is still open, so it may change before the competition. Please check your flight and session, and reply to this email if anything looks wrong.", "warn"],
+      ...RULES_AND_KIT,
     ],
   },
   priority: {

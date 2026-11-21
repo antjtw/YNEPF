@@ -22,6 +22,9 @@ export const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "
 export const h1 = (t) => `<h1 style="margin:0 0 16px;font-family:${FONT};font-size:24px;line-height:1.3;font-weight:700;color:${BRAND.navy};">${esc(t)}</h1>`;
 export const p = (t, o = {}) => `<p style="margin:0 0 16px;font-family:${FONT};font-size:16px;line-height:1.6;color:${o.muted ? BRAND.muted : BRAND.text};">${t}</p>`;
 export const small = (t) => `<p style="margin:0 0 12px;font-family:${FONT};font-size:14px;line-height:1.6;color:${BRAND.muted};">${t}</p>`;
+export const h2 = (t) => `<h2 style="margin:8px 0 12px;font-family:${FONT};font-size:18px;line-height:1.3;font-weight:700;color:${BRAND.navy};">${esc(t)}</h2>`;
+// A link inside a paragraph. In the plain text version it becomes "text (address)".
+export const a = (href, text) => `<a class="lnk" href="${esc(href)}" target="_blank" style="color:${BRAND.navy};font-weight:600;text-decoration:underline;">${esc(text)}</a>`;
 export const strong = (t) => `<strong style="color:${BRAND.navy};">${esc(t)}</strong>`;
 
 // The main call to action. The cell carries the colour and size, so it still looks like a button with images blocked.
@@ -123,7 +126,7 @@ export function layout(o) {
     </td></tr>
     <!-- sign off -->
     <tr><td class="bg-card pad t-body" bgcolor="#FFFFFF" style="background-color:#FFFFFF;padding:0 32px 32px;border-radius:0 0 14px 14px;">
-      ${p("Any questions? Just reply to this email" + (o.entriesEmail ? ` or write to <a class="lnk" href="mailto:${esc(o.entriesEmail)}" style="color:${BRAND.navy};font-weight:600;">${esc(o.entriesEmail)}</a>` : "") + ".")}
+      ${o.noQuestions ? "" : p("Any questions? Just reply to this email" + (o.entriesEmail ? ` or write to <a class="lnk" href="mailto:${esc(o.entriesEmail)}" style="color:${BRAND.navy};font-weight:600;">${esc(o.entriesEmail)}</a>` : "") + ".")}
       <p style="margin:0;font-family:${FONT};font-size:16px;line-height:1.6;color:${BRAND.text};">Thanks,<br><strong style="color:${BRAND.navy};">The YNEPF team</strong></p>
     </td></tr>
     <!-- footer -->
@@ -141,7 +144,8 @@ export function layout(o) {
 //   ["h1", "text"] ["p", "text with <b>html</b>"] ["details", [[label, value], ...]] ["button", label, href] ["code", "ABC123"]
 //   ["note", "html", "info" | "warn" | "good"] ["bullets", [..]] ["small", "html"]
 // Inline html allowed in p / note / small: <b>, <a>. The text version strips it.
-const plain = (h) => String(h).replace(/<br\s*\/?>/gi, "\n").replace(/<a [^>]*href="([^"]+)"[^>]*>([^<]*)<\/a>/gi, (_, u, t) => (t && t !== u ? `${t} (${u})` : u)).replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&nbsp;/g, " ");
+const plain = (h) => String(h).replace(/<br\s*\/?>/gi, "\n").replace(/<a [^>]*href="([^"]+)"[^>]*>([^<]*)<\/a>/gi, (_, u, t) => (u.startsWith("mailto:") ? t : t && t !== u ? `${t} (${u})` : u)).replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&nbsp;/g, " ");
+export const link = a;
 export const b = (t) => `<strong style="color:${BRAND.navy};">${esc(t)}</strong>`;
 
 export function render(e) {
@@ -149,6 +153,7 @@ export function render(e) {
   for (const k of e.blocks) {
     const [t, a, c] = k;
     if (t === "h1") { html.push(h1(a)); text.push(a, ""); }
+    else if (t === "h2") { html.push(h2(a)); text.push(a.toUpperCase(), ""); }
     else if (t === "p") { html.push(p(a)); text.push(plain(a), ""); }
     else if (t === "small") { html.push(small(a)); text.push(plain(a), ""); }
     else if (t === "details") { html.push(details(a, { boldLast: c === "boldLast" })); text.push(...a.filter(Boolean).map(([x, y]) => `${x}: ${y}`), ""); }
@@ -159,7 +164,7 @@ export function render(e) {
     else if (t === "bullets") { html.push(bullets(a)); text.push(...a.map((x) => `- ${x}`), ""); }
   }
   const siteUrl = e.siteUrl || "https://www.ynepf.co.uk";
-  const outHtml = layout({ title: e.subject, preheader: e.preheader, body: html.join("\n"), entriesEmail: e.entriesEmail, siteUrl, why: e.why });
-  const outText = [...text, `Any questions? Just reply to this email${e.entriesEmail ? ` or write to ${e.entriesEmail}` : ""}.`, "", "Thanks,", "The YNEPF team", "", e.why || "", `${BRAND.name} - www.ynepf.co.uk`].join("\n");
+  const outHtml = layout({ title: e.subject, preheader: e.preheader, body: html.join("\n"), entriesEmail: e.entriesEmail, siteUrl, why: e.why, noQuestions: e.noQuestions });
+  const outText = [...text, ...(e.noQuestions ? [] : [`Any questions? Just reply to this email${e.entriesEmail ? ` or write to ${e.entriesEmail}` : ""}.`, ""]), "Thanks,", "The YNEPF team", "", e.why || "", `${BRAND.name} - www.ynepf.co.uk`].join("\n");
   return { subject: e.subject, html: outHtml, text: outText };
 }
