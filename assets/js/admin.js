@@ -645,7 +645,7 @@
         E({ name: "qualification", label: "Qualifying standard", type: "select", show: isOnline, options: [
           { value: "none", label: "None: the OpenIPF link is optional" }, { value: "link", label: "OpenIPF link required, nothing checked" },
           { value: "glp", label: "A minimum GL score" }, { value: "totals", label: "A qualifying total for each weight class" }],
-          help: "Lifters give their OpenIPF link when they enter. Once they have paid, the site reads their results from OpenIPF (their best total and GL points in the 12 months before the competition, for the same event and kit) and checks them against this. You see the result on each entry." }),
+          help: "With a minimum GL score or a qualifying total, the OpenIPF link is required on the entry form, and the form explains that we use it to check their GL points or total. Lifters give their OpenIPF link when they enter. Once they have paid, the site reads their results from OpenIPF (their best total and GL points in the 12 months before the competition, for the same event and kit) and checks them against this. You see the result on each entry." }),
         E({ name: "qualification_glp", label: "Minimum GL points", type: "number", min: "1", show: function (v) { return isOnline(v) && v.qualification === "glp"; } }),
         E({ name: "qualifying_totals_text", label: "Qualifying totals", type: "textarea", rows: 8, show: function (v) { return isOnline(v) && v.qualification === "totals"; },
           help: "One per line: M or F, the weight class, then the total in kg. For example M 83: 450 or F 63: 300. Classes you leave out are not checked." }),

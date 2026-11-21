@@ -670,6 +670,19 @@ ok((await q(`select count(*)::int n from public.universities`))[0].n >= 11 && !(
 await db.exec("reset role");
 await asUser(U.entries, async () => { ok(await can(`insert into public.universities (name) values ('Bradford University')`) && !(await can(`insert into public.universities (name) values ('Bradford University')`)), "the entries team can add a university (and not the same one twice)"); });
 await asUser(U.editor, async () => { ok(!(await can(`insert into public.universities (name) values ('Editor University')`)), "an editor cannot change the list"); });
+
+// ---- a qualifying standard makes the OpenIPF link mandatory, even if an older save left the mode as optional
+const QC = "a3a3a3a3-0000-4000-8000-000000000006";
+await db.exec(`insert into public.competitions (id,name,start_date,capacity,published,slug,entry_method,entry_opens) values ('${QC}','Qualifier','2027-09-11',50,true,'qualifier','yne', now() - interval '1 day');
+ insert into public.entry_settings (competition_id, openipf_mode, qualification_mode, qualification_glp) values ('${QC}', 'optional', 'glp', 70);
+ insert into public.price_rules (competition_id,sort_order,label,event,age_category,price_pence) values ('${QC}',1,'Full power','full_power',null,3000);`);
+const qe = (o) => q(`select public.start_entry($1::jsonb) r`, [JSON.stringify({ ...good, competition_id: QC, ...o })]).then((r) => r[0].r).catch((e) => ({ error: e.message }));
+ok((await qe({ email: "q1@x.com", full_name: "Q One" })).error?.includes("invalid:openipf"), "a minimum GL makes the OpenIPF link mandatory, even where the mode was left as optional");
+ok((await qe({ email: "q2@x.com", full_name: "Q Two", openipf_url: "https://www.openipf.org/u/qtwo" })).entry_id, "and a link is accepted");
+await db.exec(`update public.entry_settings set qualification_mode = 'totals', qualification_glp = null where competition_id = '${QC}'`);
+ok((await qe({ email: "q3@x.com", full_name: "Q Three" })).error?.includes("invalid:openipf"), "a qualifying total makes it mandatory too");
+await db.exec(`update public.entry_settings set qualification_mode = 'none' where competition_id = '${QC}'`);
+ok((await qe({ email: "q4@x.com", full_name: "Q Four" })).entry_id, "with no standard and the mode optional, the link is optional");
 // who may do what
 await db.exec("set role anon");
 ok(!(await can(`select public.waitlist_join('{}'::jsonb)`)) && !(await can(`select public.waitlist_sweep('${W}')`)) && !(await can(`select public.waitlist_make_offer('${W}'::uuid, 'x')`)), "the public cannot call the waiting list functions (only our server can)");

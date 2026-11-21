@@ -1229,7 +1229,8 @@ begin
   if v_sex not in ('M', 'F') then raise exception 'invalid:sex'; end if;
   if not (v_event = any (s.events)) then raise exception 'invalid:event'; end if;
   if not (v_equip = any (s.equipment)) then raise exception 'invalid:equipment'; end if;
-  if s.openipf_mode = 'required' and coalesce(p->>'openipf_url', '') !~* '^https://(www\.)?openipf\.org/.+' then raise exception 'invalid:openipf'; end if;
+  -- Needed whenever the competition asks for it, or checks a minimum GL or a qualifying total (even if an older save left the mode as optional).
+  if (s.openipf_mode = 'required' or s.qualification_mode in ('glp', 'totals')) and coalesce(p->>'openipf_url', '') !~* '^https://(www\.)?openipf\.org/.+' then raise exception 'invalid:openipf'; end if;
   if v_class is null or not exists (select 1 from public.weight_classes w where w.id = v_class and w.sex = v_sex and w.active
       and (w.min_age_category = '' or w.min_age_category = public.age_category_on(v_dob, c.start_date))) then
     raise exception 'invalid:weight_class';

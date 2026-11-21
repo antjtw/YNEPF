@@ -315,6 +315,15 @@
   // The fee line is always on the page; only its words change when the event and equipment are chosen.
   function feeText() { var p = priceNow(), x = extrasNow(); return p === null ? "Your entry fee: choose an event and equipment." : "Your entry fee: " + pounds(p) + (x ? ". With extras: " + pounds(p + x) : ""); }
   function updateFee() { var n = document.getElementById("fee-line"); if (n) n.textContent = feeText(); }
+  // The OpenIPF link is required whenever the competition checks a qualifying standard (a minimum GL or a qualifying total), or asks for it outright.
+  function ipfRequired() { var st = ctx.settings; return st.openipf_mode === "required" || st.qualification_mode === "glp" || st.qualification_mode === "totals"; }
+  // Why we ask, in words that match the standard this competition uses.
+  function ipfWhy() {
+    var st = ctx.settings;
+    if (st.qualification_mode === "totals") return "This competition has a qualifying total for each weight class. We use your OpenIPF profile to check your total.";
+    if (st.qualification_mode === "glp") return "This competition has a minimum of " + (st.qualification_glp || "a set number of") + " GL points. We use your OpenIPF profile to check your GL points.";
+    return "This competition needs your OpenIPF profile link.";
+  }
   function stepLifting() {
     var allowed = allowedClasses();
     if (v.weight_class_id && !allowed.some(function (c) { return c.id === v.weight_class_id; })) v.weight_class_id = "";
@@ -324,9 +333,9 @@
       radios("equipment", "Equipment", ctx.settings.equipment.map(function (e) { return [e, EQUIP_NAMES[e] || e, EQUIP_HINTS[e]]; })),
       select("weight_class_id", "Weight class", classes, classes.length ? "Choose your class" : "Choose men's or women's first",
         "The weight class you intend to compete in on the day. If you miss weight on the day, you can still compete as a guest."),
-      ctx.settings.openipf_mode === "hidden" ? null : text("openipf_url", "OpenIPF profile link", ctx.settings.openipf_mode === "required"
-        ? { max: 300, help: "Entry to this competition needs a qualifying total, so we need your link from openipf.org (it looks like https://www.openipf.org/u/yourname)." }
-        : { optional: true, max: 300, help: "If you have one, paste your link from openipf.org. We use it to check qualification." }),
+      ctx.settings.openipf_mode === "hidden" && !ipfRequired() ? null : text("openipf_url", "OpenIPF profile link", ipfRequired()
+        ? { max: 300, help: ipfWhy() + " It looks like https://www.openipf.org/u/yourname." }
+        : { optional: true, max: 300, help: "If you have one, paste your link from openipf.org. It looks like https://www.openipf.org/u/yourname." }),
       extrasField(),
       el("p", { class: "lede", id: "fee-line", role: "status" }, feeText())
     ];
@@ -397,7 +406,7 @@
       if (!v.guardian_consent) e.push(["guardian_consent", "A parent or guardian must consent to this entry"]);
     }
     if (n === "lifting") {
-      if (ctx.settings.openipf_mode === "required" && !/^https:\/\/(www\.)?openipf\.org\/.+/i.test(trim(v.openipf_url))) e.push(["openipf_url", "Enter your OpenIPF profile link, starting https://www.openipf.org/"]);
+      if (ipfRequired() && !/^https:\/\/(www\.)?openipf\.org\/.+/i.test(trim(v.openipf_url))) e.push(["openipf_url", "Enter your OpenIPF profile link, starting https://www.openipf.org/"]);
       if (!v.event) e.push(["event", "Choose an event"]);
       if (!v.equipment) e.push(["equipment", "Choose your equipment"]);
       if (!v.weight_class_id || !allowedClasses().some(function (c) { return c.id === v.weight_class_id; })) e.push(["weight_class_id", "Choose your weight class"]);
