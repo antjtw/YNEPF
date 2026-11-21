@@ -322,7 +322,7 @@
       radios("equipment", "Equipment", ctx.settings.equipment.map(function (e) { return [e, EQUIP_NAMES[e] || e, EQUIP_HINTS[e]]; })),
       select("weight_class_id", "Weight class", classes, classes.length ? "Choose your class" : "Choose men's or women's first",
         "The weight class you intend to compete in on the day. If you miss weight on the day, you can still compete as a guest."),
-      ctx.settings.openipf_mode === "hidden" ? null : text("openipf_url", "OpenIPF profile link", ipfRequired()
+      ctx.settings.openipf_mode === "hidden" && !ipfRequired() ? null : text("openipf_url", "OpenIPF profile link", ipfRequired()
         ? { max: 300, help: ipfWhy() + " It looks like https://www.openipf.org/u/yourname." }
         : { optional: true, max: 300, help: "If you have one, paste your link from openipf.org. It looks like https://www.openipf.org/u/yourname." }),
       extrasField(),
@@ -392,7 +392,7 @@
       if (!v.guardian_consent) e.push(["guardian_consent", "A parent or guardian must consent to this entry"]);
     }
     if (n === "lifting") {
-      if (ctx.settings.openipf_mode !== "hidden" && ipfRequired() && !/^https:\/\/(www\.)?openipf\.org\/.+/i.test(trim(v.openipf_url))) e.push(["openipf_url", "Enter your OpenIPF profile link, starting https://www.openipf.org/"]);
+      if (ipfRequired() && !/^https:\/\/(www\.)?openipf\.org\/.+/i.test(trim(v.openipf_url))) e.push(["openipf_url", "Enter your OpenIPF profile link, starting https://www.openipf.org/"]);
       if (!v.event) e.push(["event", "Choose an event"]);
       if (!v.equipment) e.push(["equipment", "Choose your equipment"]);
       if (!v.weight_class_id || !allowedClasses().some(function (c) { return c.id === v.weight_class_id; })) e.push(["weight_class_id", "Choose your weight class"]);
