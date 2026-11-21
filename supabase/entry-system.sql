@@ -345,6 +345,8 @@ create table if not exists public.entries (
 -- (waiting_list is created further down, so the column and its link are added after it exists; see section 7.)
 -- Added for the entries desk: whether the entries team has checked the membership number (for guests), and a private note.
 alter table public.entries add column if not exists membership_checked boolean not null default false;
+-- A university competition entry where the lifter chose "other" and typed their university: the entries team checks it (then clears this).
+alter table public.entries add column if not exists club_unlisted boolean not null default false;
 alter table public.entries add column if not exists discount_code_id uuid references public.discount_codes (id) on delete set null;
 alter table public.entries add column if not exists discount_pence integer not null default 0;
 -- The entry fee before any discount, which is what the host's share is worked out from (the federation absorbs discounts).
@@ -1173,6 +1175,7 @@ declare
   v_d public.divisions%rowtype;
   v_guest boolean;
   v_club text;
+  v_unlisted boolean := false;
   v_disc jsonb;
   v_code_id uuid;
   v_discount integer := 0;
@@ -1241,10 +1244,18 @@ begin
   -- Club: optional, and only ever one from the EPA list (so it is stored exactly as the list spells it).
   v_club := btrim(coalesce(p->>'club', ''));
   if lower(v_club) = 'unattached' then v_club := ''; end if;
-  if v_club <> '' and c.is_university then
-    -- a university competition: the "club" is the university they represent, from our list of universities
-    select name into v_club from public.universities where name_key = lower(v_club) and active;
-    if not found then raise exception 'invalid:university'; end if;
+  if c.is_university then
+    -- a university competition: lifters must be a university member. They pick from our list, or choose "other" and type the
+    -- name, which the entries team then checks (club_unlisted).
+    if lower(v_club) = '__other__' then
+      v_club := btrim(coalesce(p->>'club_other', ''));
+      if v_club = '' or length(v_club) > 120 then raise exception 'invalid:university_other'; end if;
+      v_unlisted := true;
+    else
+      if v_club = '' then raise exception 'invalid:university'; end if;
+      select name into v_club from public.universities where name_key = lower(v_club) and active;
+      if not found then raise exception 'invalid:university'; end if;
+    end if;
   elsif v_club <> '' then
     select name into v_club from public.clubs where name_key = lower(v_club) and active;
     if not found then raise exception 'invalid:club'; end if;
@@ -1323,10 +1334,10 @@ begin
 
   v_expires := now() + make_interval(mins => s.hold_minutes);
   insert into public.entries (competition_id, status, source, stage_id, email, full_name, display_name, bp_number, date_of_birth, sex,
-      division_id, club, instagram, photo_ok, photo_opt_out, eligibility_confirmed, weight_class_id, equipment, event,
+      division_id, club, club_unlisted, instagram, photo_ok, photo_opt_out, eligibility_confirmed, weight_class_id, equipment, event,
       openipf_url, price_pence, hold_expires_at, is_guest, paid_at, discount_code_id, discount_pence, list_price_pence)
     values (c.id, case when v_free then 'comped' else 'held' end, case when v_offer is not null then 'offer' else 'web' end, v_stage, v_email, v_name, trim(coalesce(p->>'display_name', '')), trim(coalesce(p->>'bp_number', '')), v_dob, v_sex,
-      v_d.id, v_club, trim(coalesce(p->>'instagram', '')),
+      v_d.id, v_club, v_unlisted, trim(coalesce(p->>'instagram', '')),
       coalesce((p->>'photo_ok')::boolean, false), coalesce((p->>'photo_opt_out')::boolean, false), coalesce((p->>'eligibility_confirmed')::boolean, false), v_class, v_equip, v_event,
       trim(coalesce(p->>'openipf_url', '')), v_price, case when v_free then null else v_expires end, v_guest, case when v_free then now() end, v_code_id, v_discount, v_entry_price + v_discount)
     returning id into v_entry;

@@ -191,9 +191,12 @@
 
   // ---- the steps. A lifter under 18 on the day gets an extra "Parent or guardian" step, so nothing is added into a page
   // while it is being filled in.
-  var STEP_NAMES = { about: "About you", guardian: "Parent or guardian", lifting: "Your lifting", check: "Check your answers" };
+  var STEP_NAMES = { about: "About you", guardian: "Parent or guardian", university: "Your university", lifting: "Your lifting", check: "Check your answers" };
   function needGuardian() { var a = ageOnDay(); return a !== null && a < 18; }
-  function stepList() { return needGuardian() ? ["about", "guardian", "lifting", "check"] : ["about", "lifting", "check"]; }
+  var OTHER_UNI = "__other__";
+  function needUniversity() { return isUni() && v.club === OTHER_UNI; }
+  function stepList() { return ["about"].concat(needUniversity() ? ["university"] : [], needGuardian() ? ["guardian"] : [], ["lifting", "check"]); }
+  function clubName() { return v.club === OTHER_UNI ? trim(v.club_other) + " (to be checked)" : v.club; }
   function goStep(key) { step = key; render(); window.scrollTo(0, 0); }
 
   // ---- little form builders --------------------------------------------------------------------
@@ -264,15 +267,16 @@
   function isUni() { return !!(ctx && ctx.comp && ctx.comp.is_university); }
   // A university competition asks for the university they represent instead of a club (stored in the same place).
   function clubField() {
-    if (!ctx.clubs.length) return null;      // nothing to choose from until the list has been imported
+    if (!ctx.clubs.length && !isUni()) return null;      // nothing to choose from until the list has been imported
     var uni = isUni();
     return el("div", { class: "field", "data-field": "club" },
-      el("label", { for: "club" }, uni ? "University (optional)" : "Club (optional)"),
-      el("p", { class: "help", id: "club-help" }, uni ? "Select the university you are representing." : "Select your club from the list of English Powerlifting Association (EPA) approved clubs."),
+      el("label", { for: "club" }, uni ? "University" : "Club (optional)"),
+      el("p", { class: "help", id: "club-help" }, uni ? "You need to be a member of a university to enter. Select yours, or choose Other if it is not on the list." : "Select your club from the list of English Powerlifting Association (EPA) approved clubs."),
       el("p", { class: "field-error", id: "club-error", hidden: true }),
       el("select", { id: "club", name: "club", "aria-describedby": "club-help", onchange: function (e) { v.club = e.target.value; } },
         el("option", { value: "" }, uni ? "Select your university" : "Select your club"),
-        ctx.clubs.map(function (c) { return el("option", { value: c.name, selected: v.club === c.name }, c.name); })));
+        ctx.clubs.map(function (c) { return el("option", { value: c.name, selected: v.club === c.name }, c.name); }),
+        uni ? el("option", { value: OTHER_UNI, selected: v.club === OTHER_UNI }, "Other (not on this list)") : null));
   }
   function stepAbout() {
     return [
@@ -288,6 +292,13 @@
       text("instagram", "Instagram handle (optional)", { max: 60, help: "This will be displayed next to your name on the lifting order, and will be public." }),
       radios("photo_choice", "Do you consent to photos or videos of you being used in YNEPF promotional material?",
         [["yes", PHOTO_NAMES.yes], ["no", PHOTO_NAMES.no], ["never", PHOTO_NAMES.never]])
+    ];
+  }
+  function stepUniversity() {
+    return [
+      el("h2", { class: "form-heading", style: "margin-top:0" }, "Your university"),
+      el("p", null, "Your university was not on our list. Please tell us its name. The entries team will check that you are a member before your place is confirmed, and will email you if they have a question."),
+      text("club_other", "Name of your university", { max: 120, autocomplete: "off" })
     ];
   }
   function stepGuardian() {
@@ -340,7 +351,8 @@
       row("Category", (v.sex === "M" ? "Men's" : "Women's") + (myCategory() !== null ? ", " + CAT_SHORT[myCategory()] : ""), "about"),
       row("Federation or division", d ? d.name + (d.is_home ? "" : " (guest)") : "", "about")
     ];
-    if (ctx.clubs.length) rows.push(row(isUni() ? "University" : "Club", v.club, "about"));
+    if (isUni()) rows.push(row("University", clubName(), needUniversity() ? "university" : "about"));
+    else if (ctx.clubs.length) rows.push(row("Club", v.club, "about"));
     rows.push(row("Membership number", v.bp_number, "about"), row("Instagram handle", trim(v.instagram) ? "@" + trim(v.instagram).replace(/^@/, "") : "", "about"));
     if (age !== null && age < 18) rows.push(row("Parent or guardian", trim(v.guardian_name), "guardian"), row("Their phone number", trim(v.guardian_phone), "guardian"), row("Their email address", trim(v.guardian_email), "guardian"));
     rows.push(row("Photos and videos", PHOTO_NAMES[v.photo_choice], "about"),
@@ -376,6 +388,8 @@
       else if (guestBlocked()) e.push(["division_id", "Entries from outside the Yorkshire & North East division open on " + whenText(guestOpensAt())]);
       if (!v.photo_choice) e.push(["photo_choice", "Choose whether you consent to photos and videos being used"]);
     }
+    if (n === "about" && isUni() && !v.club) e.push(["club", "Choose your university, or Other if it is not on the list"]);
+    if (n === "university" && !trim(v.club_other)) e.push(["club_other", "Enter the name of your university"]);
     if (n === "guardian") {
       if (!trim(v.guardian_name)) e.push(["guardian_name", "Enter your parent or guardian's name"]);
       if (!trim(v.guardian_phone)) e.push(["guardian_phone", "Enter your parent or guardian's phone number"]);
@@ -395,7 +409,7 @@
   // ---- payment ---------------------------------------------------------------------------------
   function payload() {
     var o = { competition_id: ctx.comp.id, email: trim(v.email), full_name: trim(v.full_name), date_of_birth: dobISO(), sex: v.sex,
-      bp_number: trim(v.bp_number), club: trim(v.club), division_id: v.division_id, instagram: trim(v.instagram).replace(/^@/, ""), event: v.event, equipment: v.equipment,
+      bp_number: trim(v.bp_number), club: trim(v.club), club_other: needUniversity() ? trim(v.club_other) : "", division_id: v.division_id, instagram: trim(v.instagram).replace(/^@/, ""), event: v.event, equipment: v.equipment,
       weight_class_id: v.weight_class_id, openipf_url: trim(v.openipf_url),
       photo_ok: v.photo_choice === "yes", photo_opt_out: v.photo_choice === "never" };
     if (invite) o.invite = invite;
@@ -472,7 +486,7 @@
       el("p", { class: "step-label" }, el("span", null, "Step " + (at + 1) + " of " + list.length), " ", el("strong", null, STEP_NAMES[step])),
       el("ol", { class: "step-bar", "aria-hidden": "true" }, list.map(function (k, i) { return el("li", { class: i < at ? "is-done" : i === at ? "is-now" : "" }); }))));
     var last = step === "check";
-    var body = step === "about" ? stepAbout() : step === "guardian" ? stepGuardian() : step === "lifting" ? stepLifting() : stepCheck();
+    var body = step === "about" ? stepAbout() : step === "guardian" ? stepGuardian() : step === "university" ? stepUniversity() : step === "lifting" ? stepLifting() : stepCheck();
     var form = el("form", { novalidate: true, onsubmit: function (ev) {
       ev.preventDefault();
       if (last) return pay(form.querySelector("button[type=submit]"));

@@ -656,7 +656,12 @@ ok((await q(`select count(*)::int n from public.universities where active`))[0].
 const u1 = await un({ email: "uni1@x.com", full_name: "Una Student", club: "durham university" });
 ok(u1.entry_id && (await q(`select club from public.entries where id = '${u1.entry_id}'`))[0].club === "Durham University", "a university competition stores the university, spelled as on our list: " + JSON.stringify(u1));
 ok((await un({ email: "uni2@x.com", full_name: "Una Two", club: "Iron Works Gym" })).error?.includes("invalid:university"), "a club is not accepted at a university competition");
-ok((await un({ email: "uni3@x.com", full_name: "Una Three", club: "" })).entry_id, "and the university is optional, like a club");
+ok((await un({ email: "uni3@x.com", full_name: "Una Three", club: "" })).error?.includes("invalid:university"), "a university competition cannot be entered without a university");
+const uo = await un({ email: "uni3b@x.com", full_name: "Una Other", club: "__other__", club_other: "  University of Bradford " });
+const uor = (await q(`select club, club_unlisted from public.entries where id = '${uo.entry_id}'`))[0];
+ok(uo.entry_id && uor.club === "University of Bradford" && uor.club_unlisted === true, "choosing other stores the typed name and flags it for the entries team to check: " + JSON.stringify(uor));
+ok((await un({ email: "uni3c@x.com", full_name: "Una Blank", club: "__other__", club_other: "  " })).error?.includes("invalid:university_other"), "other with no name typed is refused");
+ok((await q(`select club_unlisted from public.entries where id = '${u1.entry_id}'`))[0].club_unlisted === false, "a university from the list is not flagged");
 ok((await start({ email: "club1@x.com", full_name: "Clive Club", club: "Durham University" })).error?.includes("invalid:club"), "a university is not accepted at an ordinary competition (it is not on the club list)");
 await db.exec(`update public.universities set active = false where name = 'Teesside University'`);
 ok((await un({ email: "uni4@x.com", full_name: "Una Four", club: "Teesside University" })).error?.includes("invalid:university"), "a university that has been switched off is not accepted");

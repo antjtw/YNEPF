@@ -880,6 +880,7 @@
           el("span", { class: "entry-lift" }, [(e.sex === "M" ? "Men's " : "Women's ") + (wc ? wc.label + " kg" : ""), cat, e.event === "bench_only" ? "Bench only" : "Full power", e.equipment === "equipped" ? "Equipped" : "Classic"].filter(Boolean).join(" · ")),
           el("span", { class: "entry-flags" }, el("span", { class: STATUS_TAG[e.status] || "tag" }, ENTRY_STATUS[e.status] || e.status),
             e.is_guest && !e.membership_checked ? [" ", el("span", { class: "tag tag-position" }, "Guest: check")] : null,
+            e.club_unlisted ? [" ", el("span", { class: "tag tag-position" }, "University: check")] : null,
             dup[e.id] ? [" ", el("span", { class: "tag tag-full" }, "Possible duplicate")] : null,
             e.qualification === "not_met" && (e.status === "paid" || e.status === "comped") ? [" ", el("span", { class: "tag tag-full" }, "Below qualifying standard")] : null),
           el("span", { class: "entry-money" }, entryMoney(e.price_pence)));
@@ -930,7 +931,7 @@
           dlRows([["Category", e.sex === "M" ? "Men's" : "Women's"], ["Weight class", wc ? wc.label + " kg" : ""], ["Event", e.event === "bench_only" ? "Bench only" : "Full power"], ["Equipment", e.equipment === "equipped" ? "Equipped" : "Classic"]
             ].concat(openipfPairs(e), [["Can break records", e.can_break_records ? "Yes" : "No"]])),
           el("h3", null, "Federation and membership"),
-          dlRows([["Federation or division", dv ? dv.name + (dv.is_home ? "" : " (guest)") : ""], [refs.clubLabel, e.club], ["Membership number", e.bp_number],
+          dlRows([["Federation or division", dv ? dv.name + (dv.is_home ? "" : " (guest)") : ""], [refs.clubLabel, e.club + (e.club_unlisted ? " (typed in by the lifter, not on the list)" : "")], ["Membership number", e.bp_number],
             e.is_guest ? ["Membership checked", e.membership_checked ? "Yes" : "Not yet"] : null]),
           priv && priv.guardian_name ? el("div", null, el("h3", null, "Parent or guardian"), dlRows([["Name", priv.guardian_name], ["Phone", priv.guardian_phone], ["Email", priv.guardian_email], ["Consent given", priv.guardian_consent ? "Yes" : "No"]])) : null,
           el("h3", null, "Payment"),
@@ -944,6 +945,9 @@
           el("div", { class: "actions", style: "margin-top:var(--space-4)" },
             btn("Edit", function () { editEntry(e, c, refs, reload); }, "btn-secondary"),
             e.openipf_url && (e.status === "paid" || e.status === "comped") ? btn("Check OpenIPF again", function () { recheckOpenipf(e); }) : null,
+            e.club_unlisted ? btn("Mark university as checked", function () {
+              sb.from("entries").update({ club_unlisted: false }).eq("id", e.id).then(ok).then(function () { toast("Updated."); reload(); }).catch(function (er) { toast(friendly(er), "error"); });
+            }) : null,
             e.is_guest ? btn(e.membership_checked ? "Mark membership unchecked" : "Mark membership checked", function () {
               sb.from("entries").update({ membership_checked: !e.membership_checked }).eq("id", e.id).then(ok).then(function () { toast("Updated."); reload(); }).catch(function (er) { toast(friendly(er), "error"); });
             }) : null,
