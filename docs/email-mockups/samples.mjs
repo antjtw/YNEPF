@@ -1,6 +1,6 @@
 // Sample emails with realistic data, for the mockups. The wording here is the proposed new copy.
 import { b } from "./email-template.mjs";
-const entries = "entries@ynepf.co.uk";
+const entries = "competitions@ynepf.co.uk";
 
 export const SAMPLES = {
   confirmation: {
