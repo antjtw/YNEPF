@@ -186,6 +186,6 @@ console.log("function helper tests passed");
   assert(!en.html.includes("<script>") && en.html.includes("&lt;script&gt;") && en.text.includes("<script>"), "names and clubs typed by lifters are escaped in the HTML");
   const ce = sc.buildEmail({ name: evil, email: "pat@example.com", subject: "Hello <b>", message: "Line one\n<img src=x onerror=alert(1)>" }, { from: "f", to: "t" });
   assert(!ce.html.includes("<img src=x") && ce.html.includes("&lt;img") && ce.html.includes("white-space:pre-wrap") && ce.text.includes("> Line one") && ce.subject === "[Website] Hello <b>" && ce.reply_to === "pat@example.com", "a contact form message is shown safely, quoted, and replying goes to the sender");
-  assert(ce.html.includes('<html lang="en-GB"') && ce.html.includes("Internal") && ce.html.includes("email-logo.png") && /^[\x00-\x7F]*$/.test(ce.subject), "branded, marked internal, with a plain subject line");
+  assert(ce.html.includes('<html lang="en-GB"') && ce.html.includes("Website message") && !ce.html.includes("entries team") && ce.html.includes("email-logo.png") && /^[\x00-\x7F]*$/.test(ce.subject), "branded, marked internal, with a plain subject line");
   assert(wl.renderEmail({ blocks: [["h1", "Hi"]] }).html.includes("prefers-color-scheme: dark"), "dark mode styles are included");
 }
