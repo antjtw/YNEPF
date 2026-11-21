@@ -689,21 +689,27 @@
 
   // The points list: names and points only (emails are never sent to this page). Points expire 24 months after they were earned.
   function points(root) {
-    Y.db().rpc("points_public_list").then(function (r) {
+    Y.db().rpc("points_public_count").then(function (r) {
       if (r.error) throw r.error;
-      var rows = (r.data || []).slice().sort(function (a, b) { return b.points - a.points || (a.name < b.name ? -1 : 1); });
-      if (!rows.length) { root.replaceChildren(el("p", null, "Nobody has any points yet.")); return; }
+      var total = Number(r.data) || 0;
+      if (!total) { root.replaceChildren(el("p", null, "Nobody has any points yet.")); return; }
       var q = el("input", { type: "search", id: "points-q", placeholder: "Search by name", "aria-label": "Search by name", style: "max-width:22rem" }), tbody = el("tbody");
-      // The list is long, so it stays hidden until someone searches: it shows only the people who match.
+      // The list is never sent to the page. Someone searches (three letters or more) and only the people who match come back, a few at a time.
       var hint = el("p", { class: "help", role: "status", "aria-live": "polite" }), tableWrap;
+      var rows = [], timer = null, seq = 0;
       function draw() {
-        var t = q.value.trim().toLowerCase();
-        if (!t) { tbody.replaceChildren(); tableWrap.hidden = true; hint.textContent = rows.length + (rows.length === 1 ? " person has" : " people have") + " points. Type a name above to see someone's points."; return; }
-        var hits = rows.filter(function (x) { return x.name.toLowerCase().indexOf(t) >= 0; });
-        tbody.replaceChildren.apply(tbody, hits.map(function (x) { return el("tr", null, el("th", { scope: "row" }, x.name), el("td", null, String(x.points))); }));
-        tableWrap.hidden = !hits.length; hint.textContent = hits.length ? hits.length + (hits.length === 1 ? " match." : " matches.") : "Nobody with that name has points yet.";
+        var t = q.value.trim();
+        if (t.length < 3) { tbody.replaceChildren(); tableWrap.hidden = true; hint.textContent = total + (total === 1 ? " person has" : " people have") + " points. Type at least three letters of a name above to see someone's points."; return; }
+        var mine = ++seq; hint.textContent = "Searching…";
+        Y.db().rpc("points_public_search", { q: t }).then(function (res) {
+          if (mine !== seq) return;
+          if (res.error) throw res.error;
+          var hits = res.data || [];
+          tbody.replaceChildren.apply(tbody, hits.map(function (x) { return el("tr", null, el("th", { scope: "row" }, x.name), el("td", null, String(x.points))); }));
+          tableWrap.hidden = !hits.length; hint.textContent = hits.length ? hits.length + (hits.length === 1 ? " match." : " matches.") + (hits.length >= 25 ? " Showing the first 25: type more of the name to narrow it down." : "") : "Nobody with that name has points yet.";
+        }).catch(function () { if (mine === seq) hint.textContent = "We could not search just now. Please try again in a moment."; });
       }
-      q.addEventListener("input", draw);
+      q.addEventListener("input", function () { clearTimeout(timer); timer = setTimeout(draw, 250); });
       root.replaceChildren(el("p", null, "Volunteers earn points for every session or set up and tear down they help with. Points can be spent on priority entry and discounts, and last 24 months. ", el("a", { href: "faqs#how-do-i-earn-points" }, "How points work"), "."),
         el("div", { class: "field" }, el("label", { for: "points-q" }, "Find a name"), q),
         hint,

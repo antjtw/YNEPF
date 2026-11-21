@@ -470,7 +470,7 @@ export function rotaSharedNotification(o: { competition: string; sent: number; f
 // ---- OpenIPF -------------------------------------------------------------------------------------------------------------
 // A lifter's profile address looks like https://www.openipf.org/u/agatasitko. Their results are a CSV at /api/liftercsv/<name>.
 export function openipfSlug(url: string): string | null {
-  const m = String(url ?? "").trim().match(/^https?:\/\/(?:www\.)?openipf\.org\/u\/([A-Za-z0-9._-]+)\/?(?:[?#].*)?$/i);
+  const m = String(url ?? "").trim().match(/^https?:\/\/(?:www\.)?openipf\.org\/u\/([A-Za-z0-9][A-Za-z0-9._-]*)\/?(?:[?#].*)?$/i);
   return m ? m[1].toLowerCase() : null;
 }
 
@@ -557,11 +557,21 @@ if (typeof Deno !== "undefined") {
     const H = { apikey: svc, authorization: `Bearer ${svc}`, "content-type": "application/json" };
     const rpc = (fn: string, args: Record<string, unknown>) => fetch(`${url}/rest/v1/rpc/${fn}`, { method: "POST", headers: H, body: JSON.stringify(args) });
     const from = Deno.env.get("MAIL_FROM") ?? "YNEPF <onboarding@resend.dev>", copy = Deno.env.get("NOTIFY_TO") ?? "competitions@ynepf.co.uk";
+    // Email services limit how fast you can send (usually a few a second), and a bulk send (entries closed, the lifting order, the rota) goes to
+    // everyone in turn. So sends are paced, and one the service turns away for going too fast is tried again after a pause instead of being lost.
+    let lastSent = 0;
     const send = async (to: string, subject: string, spec: EmailSpec): Promise<boolean> => {
       const { html, text } = renderEmail({ ...spec, title: subject, siteUrl });
-      const r = await fetch("https://api.resend.com/emails", { method: "POST", headers: { authorization: `Bearer ${Deno.env.get("RESEND_API_KEY")}`, "content-type": "application/json" }, body: JSON.stringify({ from, to: [to], reply_to: copy, subject, html, text }) });
-      if (!r.ok) console.error("Resend failed", r.status);
-      return r.ok;
+      for (let attempt = 0; attempt < 4; attempt++) {
+        const wait = lastSent + 550 - Date.now();
+        if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+        lastSent = Date.now();
+        const r = await fetch("https://api.resend.com/emails", { method: "POST", headers: { authorization: `Bearer ${Deno.env.get("RESEND_API_KEY")}`, "content-type": "application/json" }, body: JSON.stringify({ from, to: [to], reply_to: copy, subject, html, text }) });
+        if (r.status !== 429) { if (!r.ok) console.error("Resend failed", r.status); return r.ok; }
+        await new Promise((res) => setTimeout(res, 1500 * (attempt + 1)));
+      }
+      console.error("Resend kept refusing (rate limit)");
+      return false;
     };
     const comp = async (id: string) => {
       const r = await fetch(`${url}/rest/v1/competitions?id=eq.${encodeURIComponent(id)}&select=id,name,slug,start_date,entry_opens`, { headers: H });
@@ -610,7 +620,9 @@ if (typeof Deno !== "undefined") {
 
     // ---- someone joins ----------------------------------------------------------------------------------------
     if (action === "join") {
-      if (!allowTry(ip + "|" + String(body.email ?? "").toLowerCase())) return reply(429, { error: "slow_down", message: "Too many tries. Please wait a few minutes and try again." });
+      // Two limits: per address (so one person cannot keep retrying) and per visitor overall (so one visitor cannot join the list with endless different
+      // addresses, which would make us email strangers). Each join sends an email.
+      if (!allowTry(ip + "|" + String(body.email ?? "").toLowerCase()) || !allowTry(ip + "|join", Date.now(), 6)) return reply(429, { error: "slow_down", message: "Too many tries. Please wait a few minutes and try again." });
       // A signed-in entries team member may join an unpublished (test) competition. Decided here from their login.
       let allowUnpublished = false;
       const token = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
