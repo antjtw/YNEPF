@@ -196,7 +196,7 @@
   var OTHER_UNI = "__other__";
   function needUniversity() { return isUni() && v.club === OTHER_UNI; }
   function stepList() { return ["about"].concat(needUniversity() ? ["university"] : [], needGuardian() ? ["guardian"] : [], ["lifting", "check"]); }
-  function clubName() { return v.club === OTHER_UNI ? trim(v.club_other) + " (to be checked)" : v.club; }
+  function clubName() { return v.club === OTHER_UNI ? trim(v.club_other) : v.club; }
   function goStep(key) { step = key; render(); window.scrollTo(0, 0); }
 
   // ---- little form builders --------------------------------------------------------------------
@@ -297,7 +297,7 @@
   function stepUniversity() {
     return [
       el("h2", { class: "form-heading", style: "margin-top:0" }, "Your university"),
-      el("p", null, "Your university was not on our list. Please tell us its name. The entries team will check that you are a member before your place is confirmed, and will email you if they have a question."),
+      el("p", null, "Please enter the full name of your university."),
       text("club_other", "Name of your university", { max: 120, autocomplete: "off" })
     ];
   }
