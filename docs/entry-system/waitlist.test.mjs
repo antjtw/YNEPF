@@ -310,7 +310,7 @@ await db.exec("set role anon");
 ok((await db.query(`select * from public.lifting_order_public where competition_id = '${LO}'`)).rows.length === 0, "and the public sees nothing again");
 await db.exec("reset role");
 await db.exec(`update public.competitions set entry_closes = now() - interval '1 day' where id = '${LO}'`);
-await pubLo(U.entries, true); ok((await stLo()).pa === "final", "published after entry closes it is final");
+await pubLo(U.entries, true); ok((await stLo()).pa === "provisional", "published after entry closes it is still provisional until the entries team marks it final");
 ok((await asUser(U.entries, () => call("lifting_order_publish", [LO2, true]))).error?.includes("invalid:empty_order"), "an empty order cannot be published");
 // sharing with lifters: who gets the email, and whether it is provisional or final
 const shareInfo = async () => (await q(`select public.lifting_order_share_info('${LO}') r`))[0].r;
@@ -327,6 +327,48 @@ await q(`select public.lifting_order_mark_shared('${LO}', 'final', 3)`);
 ok((await q(`select shared_as sa, shared_count n, shared_at is not null has from public.lifting_orders where competition_id = '${LO}'`))[0].n === 3, "the share is recorded");
 await db.exec("set role authenticated");
 ok(!(await can(`select public.lifting_order_share_info('${LO}')`)) && !(await can(`select public.lifting_order_mark_shared('${LO}', 'final', 1)`)), "signed-in users cannot call the share functions (only our server can)");
+await db.exec("reset role");
+
+// marking the lifting order final, the entries-closed email, and the rota email
+const fin = (who, c) => asUser(who, () => call("lifting_order_finalise", [c]));
+await db.exec(`update public.competitions set entry_closes = now() + interval '5 days', entries_closed_manually = false where id = '${LO}'`);
+ok((await fin(U.entries, LO)).error?.includes("invalid:not_closed"), "it cannot be marked final while entry is still open");
+await db.exec(`update public.competitions set entry_closes = now() - interval '1 day' where id = '${LO}'`);
+ok((await fin(U.editor, LO)).error?.includes("forbidden"), "an editor cannot mark it final");
+await pubLo(U.entries, false);
+ok((await fin(U.entries, LO)).data === "final" || (await stLo()).pa === "final", "the entries team can mark it final, which publishes it if it was not");
+let stf = (await q(`select status, published_as pa, final_at is not null f from public.lifting_orders where competition_id = '${LO}'`))[0];
+ok(stf.status === "published" && stf.pa === "final" && stf.f === true, "it is now published as final: " + JSON.stringify(stf));
+await pubLo(U.entries, false); await pubLo(U.entries, true);
+ok((await stLo()).pa === "final", "unpublishing and publishing again keeps it final");
+ok((await shareInfo()).final === true, "the share info says it is final");
+ok((await fin(U.entries, LO2)).error?.includes("invalid:empty_order") || (await fin(U.entries, LO2)).error?.includes("invalid:not_closed"), "an empty order cannot be marked final");
+// entries closed: found once, listed with everyone entered, and not again
+await db.exec(`update public.competitions set entries_closed_emailed_at = null, entry_method = 'yne', start_date = current_date + 30 where id = '${LO}'`);
+ok((await q(`select count(*)::int n from public.entries_closed_pending() x where x = '${LO}'`))[0].n === 1, "a competition whose entry has closed is waiting for its closing email");
+const ci = (await q(`select public.entries_closed_info('${LO}') r`))[0].r;
+ok(ci.order_published === true && ci.people.length >= 1 && ci.people.every((p) => p.email), "the closing email goes to everyone entered, and knows whether an order is published: " + JSON.stringify(ci).slice(0, 100));
+await q(`select public.entries_closed_mark('${LO}')`);
+ok((await q(`select count(*)::int n from public.entries_closed_pending() x where x = '${LO}'`))[0].n === 0, "once marked it is not sent again");
+await db.exec(`update public.competitions set entries_closed_emailed_at = null, entry_closes = now() + interval '5 days' where id = '${LO}'`);
+ok((await q(`select count(*)::int n from public.entries_closed_pending() x where x = '${LO}'`))[0].n === 0, "nothing is sent while entry is still open");
+await db.exec(`update public.competitions set entries_closed_manually = true where id = '${LO}'`);
+ok((await q(`select count(*)::int n from public.entries_closed_pending() x where x = '${LO}'`))[0].n === 1, "closing entry by hand counts too");
+await db.exec(`update public.competitions set entries_closed_manually = false, entries_closed_emailed_at = null, start_date = current_date - 5, entry_closes = now() - interval '9 days' where id = '${LO}'`);
+ok((await q(`select count(*)::int n from public.entries_closed_pending() x where x = '${LO}'`))[0].n === 0, "a competition that has already happened is never emailed");
+// rota: who is emailed, what they are doing, and only once
+await db.exec(`insert into public.vol_rota (competition_id, status) values ('${LO}', 'draft') on conflict (competition_id) do update set status = 'draft', emailed_at = null`);
+await db.exec(`insert into public.vol_sessions (id, competition_id, label, when_text) values ('99999999-0000-4000-8000-000000000001', '${LO}', 'Saturday, session 1', 'Saturday morning')`);
+await db.exec(`insert into public.vol_places (vol_session_id, role_id, email, person_name, status) select '99999999-0000-4000-8000-000000000001', id, 'vic@example.com', 'Vic Vol', 'planned' from public.vol_roles where name in ('Table', 'MC')`);
+await db.exec(`insert into public.vol_places (vol_session_id, role_id, email, person_name, status) select '99999999-0000-4000-8000-000000000001', id, 'gone@example.com', 'Gone Away', 'cancelled' from public.vol_roles where name = 'Table'`);
+let rs = (await q(`select public.rota_share_info('${LO}') r`))[0].r;
+ok(rs.published === false && rs.people.length === 1 && rs.people[0].email === "vic@example.com" && rs.people[0].roles.length === 2, "the rota email goes to each person with a role, once per address, with their roles (cancelled places are left out): " + JSON.stringify(rs).slice(0, 160));
+await db.exec(`update public.vol_rota set status = 'published' where competition_id = '${LO}'`);
+await q(`select public.rota_mark_emailed('${LO}', 1)`);
+rs = (await q(`select public.rota_share_info('${LO}') r`))[0].r;
+ok(rs.published === true && rs.emailed_at, "the rota records when it was emailed, so a second publish does not email again");
+await db.exec("set role authenticated");
+ok(!(await can(`select public.rota_share_info('${LO}')`)) && !(await can(`select public.entries_closed_pending()`)) && !(await can(`select public.entries_closed_info('${LO}')`)), "signed-in users cannot call the email functions (only our server can)");
 await db.exec("reset role");
 
 // the entry page asks the database for the time (so a phone with the wrong clock is not told entry is closed)

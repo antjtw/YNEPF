@@ -1,15 +1,8 @@
 // Sample emails with realistic data, for the mockups. The wording here is the proposed new copy.
-import { b, link } from "./email-template.mjs";
+import { b, RULES } from "./email-template.mjs";
 const entries = "competitions@ynepf.co.uk";
 
-// Shown in every email that comes before competition day (the confirmation and the lifting order). The links are the same pages the site already uses.
-const TECH_RULES = "https://www.powerlifting.sport/rules/codes/info/technical-rules", APPROVED_LIST = "https://www.powerlifting.sport/rules/codes/info/approved-list";
-export const RULES_AND_KIT = [
-  ["h2", "Before competition day"],
-  ["p", `Please make sure you know the current ${link(TECH_RULES, "IPF Technical Rules")}. It is up to you to have read and understood them before you lift.`],
-  ["p", `Please also check that your kit is on the ${link(APPROVED_LIST, "IPF approved list")}. Any kit that is not compliant will be rejected, and referees will not make exceptions, so check it now rather than at weigh-in.`],
-  ["p", `Not sure about something? Email us at ${link("mailto:info@ynepf.co.uk", "info@ynepf.co.uk")} and we will help.`],
-];
+export const RULES_AND_KIT = RULES;
 
 export const SAMPLES = {
   confirmation: {
