@@ -2926,3 +2926,43 @@ do $$ begin
       public.rota_share_info(uuid), public.rota_mark_emailed(uuid, integer) to service_role;
   end if;
 end $$;
+
+-- ---------------------------------------------------------------------------
+-- 26. Security hardening (from the security review)
+-- ---------------------------------------------------------------------------
+-- (a) The volunteer points list used to be one function that handed every volunteer's full name and balance to anyone. It is replaced by a search
+--     (at least 3 letters, a few results at a time) and a count, so the whole list cannot be downloaded in one go.
+drop function if exists public.points_public_list();
+create or replace function public.points_public_search(q text) returns table (name text, points integer)
+language sql stable security definer set search_path = public
+as $$
+  select p.full_name, b.points from public.vol_people p
+  cross join lateral (select public.points_balance(p.email) as points) b
+  where length(btrim(coalesce(q, ''))) >= 3 and b.points > 0 and p.full_name ilike '%' || replace(replace(replace(btrim(q), '\', '\\'), '%', '\%'), '_', '\_') || '%'
+  order by b.points desc, p.full_name limit 25
+$$;
+create or replace function public.points_public_count() returns integer
+language sql stable security definer set search_path = public
+as $$ select count(*)::int from public.vol_people p where public.points_balance(p.email) > 0 $$;
+revoke all on function public.points_public_search(text), public.points_public_count() from public;
+grant execute on function public.points_public_search(text), public.points_public_count() to anon, authenticated;
+
+-- (b) Trigger functions are never called by hand: nobody on the public API needs to run them.
+revoke all on function public.audit_row(), public.competition_fee_snapshot(), public.discount_points_released(), public.handle_new_user() from public, anon, authenticated;
+
+-- (c) Defence in depth for tables: row security already limits who sees what, but Supabase also grants the API roles every privilege on new tables.
+--     The public never writes to a table directly (writes go through our server), and nobody on the API needs to truncate, reference or add triggers.
+revoke insert, update, delete, truncate, references, trigger on all tables in schema public from anon;
+revoke truncate, references, trigger on all tables in schema public from authenticated;
+
+-- (d) Only the entries team (and admins) can delete a competition. Content editors can still add and change them, but deleting one also removes its
+--     volunteer sign-ups, waiting list and discount codes, which is not a content edit.
+drop policy if exists "editors all" on public.competitions;
+drop policy if exists "editors read" on public.competitions;
+drop policy if exists "editors add" on public.competitions;
+drop policy if exists "editors change" on public.competitions;
+drop policy if exists "entries delete" on public.competitions;
+create policy "editors read" on public.competitions for select to authenticated using (public.is_editor());
+create policy "editors add" on public.competitions for insert to authenticated with check (public.is_editor());
+create policy "editors change" on public.competitions for update to authenticated using (public.is_editor()) with check (public.is_editor());
+create policy "entries delete" on public.competitions for delete to authenticated using (public.is_entries());
