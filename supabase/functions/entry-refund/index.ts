@@ -208,7 +208,7 @@ type Extra = { name: string; option?: string; pence: number };
 const extraLabel = (x: Extra) => `${x.name}${x.option ? ` (${x.option})` : ""}`;
 
 // ---- to the lifter ----------------------------------------------------------------------------------------------------------------------
-export function confirmationEmail(e: { name: string; competition: string; date: string; event: string; equipment: string; pence: number; under18: boolean; entriesEmail: string; refundsUntil?: string; category?: string; division?: string; club?: string; clubLabel?: string; discountPence?: number; extras?: Extra[] }): EmailSpec {
+export function confirmationEmail(e: { name: string; competition: string; date: string; event: string; equipment: string; pence: number; under18: boolean; entriesEmail: string; refundsUntil?: string; category?: string; weightClass?: string; sex?: string; division?: string; club?: string; clubLabel?: string; discountPence?: number; extras?: Extra[] }): EmailSpec {
   const first = String(e.name).trim().split(/\s+/)[0] || "there";
   return {
     entriesEmail: e.entriesEmail, noQuestions: true, why: "You are getting this email because you entered a YNEPF competition.",
@@ -216,7 +216,7 @@ export function confirmationEmail(e: { name: string; competition: string; date: 
     blocks: [
       ["h1", `You're in, ${first}.`],
       ["p", `Your entry for ${b(e.competition)} on ${esc(longDate(e.date))} is confirmed. Thank you for entering.`],
-      ["details", [["Event", e.event], ["Equipment", e.equipment], e.category ? ["Category", e.category] : null, e.division ? ["Federation or division", e.division] : null,
+      ["details", [["Event", e.event], ["Equipment", e.equipment], e.category ? ["Category", e.category] : null, e.weightClass ? ["Weight class", `${e.sex === "F" ? "Women's" : "Men's"} ${e.weightClass} kg`] : null, e.division ? ["Federation or division", e.division] : null,
         e.club ? [e.clubLabel || "Club", e.club] : null, e.discountPence ? ["Discount", `${gbp(e.discountPence)} off`] : null,
         ...(e.extras ?? []).map((x): [string, string] => [`Extra: ${extraLabel(x)}`, gbp(x.pence)]), ["Paid", gbp(e.pence)]], "boldLast"],
       ...(e.under18 ? [["note", "<b>Under 18 on the day?</b> A parent or guardian needs to be with you at the competition.", "info"] as Block] : []),

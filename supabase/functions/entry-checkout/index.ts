@@ -282,7 +282,7 @@ type Extra = { name: string; option?: string; pence: number };
 const extraLabel = (x: Extra) => `${x.name}${x.option ? ` (${x.option})` : ""}`;
 
 // ---- to the lifter ----------------------------------------------------------------------------------------------------------------------
-export function confirmationEmail(e: { name: string; competition: string; date: string; event: string; equipment: string; pence: number; under18: boolean; entriesEmail: string; refundsUntil?: string; category?: string; division?: string; club?: string; clubLabel?: string; discountPence?: number; extras?: Extra[] }): EmailSpec {
+export function confirmationEmail(e: { name: string; competition: string; date: string; event: string; equipment: string; pence: number; under18: boolean; entriesEmail: string; refundsUntil?: string; category?: string; weightClass?: string; sex?: string; division?: string; club?: string; clubLabel?: string; discountPence?: number; extras?: Extra[] }): EmailSpec {
   const first = String(e.name).trim().split(/\s+/)[0] || "there";
   return {
     entriesEmail: e.entriesEmail, noQuestions: true, why: "You are getting this email because you entered a YNEPF competition.",
@@ -290,7 +290,7 @@ export function confirmationEmail(e: { name: string; competition: string; date: 
     blocks: [
       ["h1", `You're in, ${first}.`],
       ["p", `Your entry for ${b(e.competition)} on ${esc(longDate(e.date))} is confirmed. Thank you for entering.`],
-      ["details", [["Event", e.event], ["Equipment", e.equipment], e.category ? ["Category", e.category] : null, e.division ? ["Federation or division", e.division] : null,
+      ["details", [["Event", e.event], ["Equipment", e.equipment], e.category ? ["Category", e.category] : null, e.weightClass ? ["Weight class", `${e.sex === "F" ? "Women's" : "Men's"} ${e.weightClass} kg`] : null, e.division ? ["Federation or division", e.division] : null,
         e.club ? [e.clubLabel || "Club", e.club] : null, e.discountPence ? ["Discount", `${gbp(e.discountPence)} off`] : null,
         ...(e.extras ?? []).map((x): [string, string] => [`Extra: ${extraLabel(x)}`, gbp(x.pence)]), ["Paid", gbp(e.pence)]], "boldLast"],
       ...(e.under18 ? [["note", "<b>Under 18 on the day?</b> A parent or guardian needs to be with you at the competition.", "info"] as Block] : []),
@@ -463,15 +463,15 @@ if (typeof Deno !== "undefined") {
           if (!r || !r.ok) console.error("Resend failed", r?.status);
         };
         const clubLabel = row.competitions.is_university ? "University" : "Club";
+        const wcRow = Array.isArray(row.weight_classes) ? row.weight_classes[0] : row.weight_classes;
         await mail(row.email, `Your entry: ${row.competitions.name}`, confirmationEmail({
           name: row.full_name, competition: row.competitions.name, date: row.competitions.start_date, event: row.event === "bench_only" ? "Bench only" : "Full power",
           equipment: row.equipment === "equipped" ? "Equipped" : "Classic", pence: row.price_pence, under18: exactAge(row.date_of_birth, row.competitions.start_date) < 18, entriesEmail: copy,
-          category: ageCategory(new Date(row.date_of_birth).getFullYear(), compYear), division: row.divisions ? row.divisions.name + (row.divisions.is_home ? "" : " (guest)") : undefined,
+          category: ageCategory(new Date(row.date_of_birth).getFullYear(), compYear), weightClass: wcRow?.label, sex: row.sex, division: row.divisions ? row.divisions.name + (row.divisions.is_home ? "" : " (guest)") : undefined,
           club: row.club || undefined, clubLabel, discountPence: row.discount_pence || 0, extras,
           refundsUntil: row.competitions.entry_closes ? new Date(row.competitions.entry_closes).toLocaleString("en-GB", { timeZone: "Europe/London", dateStyle: "full", timeStyle: "short" }) : undefined }));
         // A note for the competitions inbox, so the team can see each entry arrive.
         const takenRows = await (await fetch(`${url}/rest/v1/entries?competition_id=eq.${row.competition_id}&status=in.(paid,comped)&select=id`, { headers: { apikey: svc, authorization: `Bearer ${svc}` } })).json().catch(() => []);
-        const wcRow = Array.isArray(row.weight_classes) ? row.weight_classes[0] : row.weight_classes;
         await mail(copy, `New entry: ${row.full_name}, ${row.competitions.name}`, entryNotification({
           name: row.full_name, email: row.email, competition: row.competitions.name, date: row.competitions.start_date,
           event: row.event === "bench_only" ? "Bench only" : "Full power", equipment: row.equipment === "equipped" ? "Equipped" : "Classic", weightClass: wcRow?.label, sex: row.sex,
