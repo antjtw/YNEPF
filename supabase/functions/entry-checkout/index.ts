@@ -26,6 +26,7 @@ export const MESSAGES: Record<string, string> = {
   "invalid:division": "Please choose the federation or division you are part of.",
   "invalid:club": "Please choose your club from the list, or choose unattached.",
   "invalid:university": "Please choose your university from the list.",
+  "invalid:university_other": "Please tell us the name of your university.",
   discount_invalid: "That discount code was not recognised. Please check it and try again.",
   discount_expired: "That discount code has expired.",
   discount_used: "That discount code has already been used.",

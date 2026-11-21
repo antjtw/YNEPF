@@ -330,6 +330,7 @@ Needs the latest all-in-one SQL (new `vol_` tables, the sign-up functions and th
 - **Where it shows:** the university is stored where the club is stored, so it shows on the entries list, the entries desk (labelled University), the public lifting order (column header University), and the printed weigh-in and score sheets. The OpenLifter export keeps it in the Team column.
 - **The list of universities:** the Calendar page has a **Universities** panel under the Club list. **Add a university** adds one. **Switch off** hides one from new entries and leaves it on entries already made. The list starts with Newcastle, Northumbria, Durham, Leeds University, Leeds Beckett, Sheffield Hallam, Sheffield, York, York St John, Askham Bryan College and Teesside: check the names and add or switch off to suit.
 - **Entries at a university competition** can only use a university from the list (the database checks this), and the desk's Add entry and Edit entry forms offer the same list.
+- **Choosing a university is required.** Lifters pick theirs from the list, or choose **Other (not on this list)**, which adds a short **Your university** step where they type the name. The entry is accepted and shows a **University: check** tag on the entries desk. Check they are a member (email them if needed), then open the entry and press **Mark university as checked**. The box is unticked by default on every new competition.
 - Needs the latest all-in-one SQL.
 
 ### Previewing the entry form
