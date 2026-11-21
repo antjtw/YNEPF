@@ -786,7 +786,7 @@ table.lifters thead th { overflow-wrap: normal; }
 
 /* Calendar cards: the entry status is a line of its own (not another bullet), and every action reads as a button. */
 .event-entry-line { margin: var(--space-3) 0 0; font-weight: 600; color: var(--text-heading); }
-.event-actions .btn-ghost { border-color: var(--border-strong); }
+.event .event-actions .btn-ghost { border-color: var(--border-strong); }       /* calendar cards only: the thank-you page keeps its quiet text button */
 
 /* ==========================================================================
    Entry journey: a clear step marker, an error that looks like every other error, an emphasised total
