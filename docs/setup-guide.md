@@ -348,3 +348,27 @@ Needs the latest all-in-one SQL (new `vol_` tables, the sign-up functions and th
 - The form explains why, using the competition's own standard: for a minimum GL, "This competition has a minimum of 70 GL points. We use your OpenIPF profile to check your GL points."; for qualifying totals, "This competition has a qualifying total for each weight class. We use your OpenIPF profile to check your total."
 - **OpenIPF link required, nothing checked** also makes it mandatory, with the plain line "This competition needs your OpenIPF profile link." **None** leaves it optional.
 - Needs the latest all-in-one SQL (it makes the rule hold for older competitions saved before this).
+
+## Part 13: The new emails
+
+Every email the site sends is now a branded HTML email with a plain text version, instead of plain text only. There is one shared design (`supabase/email/template.ts`), and the entry, refund and confirmation wording lives in `supabase/email/entry-emails.ts`. Because Edge Functions are pasted into Supabase one at a time and cannot share code, a small script copies the design into each function. After changing either file, run `node scripts/sync-email-template.mjs` (and `node scripts/sync-email-template.mjs --check` to test the copies match). To preview all the emails, run `node docs/email-mockups/build.mjs` and open `docs/email-mockups/out/index.html`.
+
+**To switch it on** (in this order):
+
+1. Merge the branch, so the logo (`/assets/img/email-logo.png`) is live on the website before any email points at it.
+2. In the Supabase SQL editor, run the all-in-one SQL file (it is safe to run again). It adds the final lifting order, entries-closed and rota-email support.
+3. Replace these five Edge Functions with the new files, keeping **Verify JWT** exactly as it is for each today: `waitlist`, `stripe-webhook`, `entry-checkout`, `entry-refund` and `send-contact`. Nothing else changes: the secrets stay the same.
+
+**What lifters and volunteers now get**
+
+- **Entry confirmation, refunds, waiting list, priority links, volunteer and points emails:** the same events as before, with new wording, buttons for links, and details in a table.
+- **Entries closed:** when entries close (the closing date passes, or you close them by hand), everyone entered is emailed automatically, within about five minutes. It says there can be no more changes to entries, no refunds for dropouts, and that the final lifting order will follow. If a lifting order is published at that moment it links to it.
+- **The rota:** when you publish it, a window asks whether to email the volunteers who have a role. It tells each of them what they are doing and links to the rota. It goes out once: publishing again later does not email them again.
+
+**The lifting order, step by step** (on the competition's Lifting order tab, under Sharing)
+
+1. While entries are open, **Publish** asks whether to email the provisional order to the lifters in it. Choose **Publish and email** or **Publish without emailing** (handy for fixing a typo). Unpublishing and publishing again can email again.
+2. When entries close, lifters are emailed automatically (see above). After that, Publish sends nothing.
+3. When the order is ready, press **Finalise lifting order**. It marks the order final, publishes it if it was not, and emails the final order to the lifters in it. It only works once entries have closed. **Send the final order again** is there if you ever need it.
+
+**The internal notes** to the competitions inbox (new entry, refund, volunteer, points and so on) and the **contact form** messages use the same design, with a gold "Internal" tag and a button to the right page in the editor.

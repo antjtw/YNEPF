@@ -1352,46 +1352,92 @@
             sb.from("site_settings").upsert({ key: "openlifter.settings", value: JSON.stringify(next) }).then(function (r) { if (r.error) throw r.error; olSaved = next; toast("OpenLifter settings saved."); }).catch(function (e) { toast(friendly(e), "error"); });
           }, "btn-secondary"))));
       var published = row.status === "published", shareBox = el("section", { "aria-labelledby": "lo-share-h", style: "margin:var(--space-5) 0" });
-      // Sharing: only the buttons that make sense now are shown. Not published: Publish. Published: Share with lifters, and Unpublish.
+      var closed = !!c.entries_closed_manually || (!!c.entry_closes && new Date(c.entry_closes) <= new Date()), isFinal = !!row.final_at;
+      var lifters = function (n) { return n + (n === 1 ? " lifter" : " lifters"); };
+      function lifterCount() { return flightsList().reduce(function (t, x) { return t + x.f.lifters.length; }, 0); }
+      // How sharing works. While entries are open, publishing can email the provisional order to the lifters in it (you choose). When entries close,
+      // lifters are emailed automatically that entries are closed. "Finalise lifting order" then marks it final, publishes it if needed, and emails it.
       function pubStatus() {
         var when = function (iso) { return new Date(iso).toLocaleDateString("en-GB", { timeZone: Y.TZ, dateStyle: "medium" }); };
         var kids = [el("h3", { id: "lo-share-h" }, "Sharing")];
+        finalBtn.textContent = isFinal ? "Send the final order again" : "Finalise lifting order";
+        finalBtn.className = "btn " + (isFinal ? "btn-secondary" : "btn-primary");
+        finalBtn.disabled = !closed; finalBtn.title = closed ? "" : "Available once entries close";
+        var autoNote = el("p", { class: "help", id: "lo-auto-note" }, closed
+          ? (isFinal ? "This order is final. Lifters were emailed when entries closed and again when it was finalised." : "Entries have closed, so lifters have been emailed that entries are closed and the final order is coming. Finalise lifting order publishes the order as final and emails it to them.")
+          : "When entries close, everyone entered is emailed automatically: no more changes to entries, no refunds for dropouts, and the final lifting order will follow. After that, Finalise lifting order sends them the final order.");
         if (!published) {
-          kids.push(el("p", { class: "help", id: "lo-pub-note", role: "status" }, "Not published yet. Publishing puts the lifting order on the website, without lot numbers, and the calendar swaps View entries for View lifting order. Save your changes first. Use Preview above to see it before anyone else can."));
-          kids.push(el("div", { class: "actions" }, pubBtn));
+          kids.push(el("p", { class: "help", id: "lo-pub-note", role: "status" }, "Not published yet. Publishing puts the lifting order on the website, without lot numbers, and the calendar swaps View entries for View lifting order. Save your changes first. Use Preview above to see it before anyone else can."
+            + (closed ? "" : " While entries are open you can also email the provisional order to the lifters in it when you publish.")));
+          kids.push(el("div", { class: "actions" }, pubBtn, finalBtn));
         } else {
-          kids.push(el("p", { class: "help", id: "lo-pub-note", role: "status" }, "Published (" + (row.published_as === "final" ? "final" : "provisional") + "). Anyone can see it on the website, and saving changes updates it straight away. Share with lifters emails everyone in the order from the competitions address, as provisional while entry is open and as final once it has closed."
-            + (row.shared_at ? " Last shared as " + row.shared_as + " with " + row.shared_count + (row.shared_count === 1 ? " lifter" : " lifters") + " on " + when(row.shared_at) + "." : "")));
-          kids.push(el("div", { class: "actions" }, shareBtn, unpubBtn));
+          kids.push(el("p", { class: "help", id: "lo-pub-note", role: "status" }, "Published (" + (isFinal ? "final" : "provisional") + "). Anyone can see it on the website, and saving changes updates it straight away. Saving never emails anyone."
+            + (row.shared_at ? " Last emailed to " + lifters(row.shared_count || 0) + " as " + row.shared_as + " on " + when(row.shared_at) + "." : "")));
+          kids.push(el("div", { class: "actions" }, finalBtn, unpubBtn));
         }
+        kids.push(autoNote);
         shareBox.replaceChildren.apply(shareBox, kids);
       }
-      function publish() {
-        if (!published && S.dirty) { toast("Save the order first, then publish.", "error"); return; }
-        if (!published && !S.sessions.length) { toast("Sort the entries and save first.", "error"); return; }
-        if (!window.confirm(published ? "Unpublish the lifting order? The calendar goes back to View entries." : "Publish the lifting order? Anyone can see it, without lot numbers, and the calendar swaps View entries for View lifting order.")) return;
-        pubBtn.disabled = true; unpubBtn.disabled = true;
-        sb.rpc("lifting_order_publish", { c: c.id, publish: !published }).then(function (r) {
+      function busy(on) { [pubBtn, unpubBtn, finalBtn].forEach(function (x) { if (x) x.disabled = on || (x === finalBtn && !closed); }); }
+      function publishCall(flag) {
+        return sb.rpc("lifting_order_publish", { c: c.id, publish: flag }).then(function (r) {
           if (r.error) throw new Error(/invalid:empty_order/.test(r.error.message || "") ? "There is nothing saved to publish. Save the order first." : /forbidden/.test(r.error.message || "") ? "You do not have permission to publish." : friendly(r.error));
-          published = !published; row.published_as = published ? r.data : null; pubStatus(); toast(published ? "Lifting order published." : "Lifting order unpublished.");
-        }).catch(function (e) { toast(friendly(e), "error"); }).then(function () { pubBtn.disabled = false; unpubBtn.disabled = false; });
+          published = flag; row.status = flag ? "published" : "draft"; row.published_as = flag ? r.data : null;
+        });
       }
-      var pubBtn = el("button", { type: "button", class: "btn btn-primary", onclick: publish }, "Publish"), unpubBtn = iconBtn("Unpublish", '<path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>', publish);
-      var closed = !!c.entries_closed_manually || (!!c.entry_closes && new Date(c.entry_closes) <= new Date());
-      function share() {
-        if (!published) { toast("Publish the lifting order first, then share it.", "error"); return; }
-        if (S.dirty) { toast("Save your changes first, so lifters see the current order.", "error"); return; }
-        var kind = closed ? "final" : "provisional", n = flightsList().reduce(function (t, x) { return t + x.f.lifters.length; }, 0);
-        if (!window.confirm("Email the " + kind + " lifting order to everyone in it (" + n + (n === 1 ? " lifter" : " lifters") + ")? Entry is " + (closed ? "closed, so it is sent as final." : "still open, so it is sent as provisional.") + " The email comes from the competitions address." + (row.shared_at ? " It was last shared on " + new Date(row.shared_at).toLocaleDateString("en-GB", { timeZone: Y.TZ, dateStyle: "medium" }) + "." : ""))) return;
-        shareBtn.disabled = true;
-        sb.auth.getSession().then(function (g) {
+      // Emails the lifters in the order, from the competitions address. Resolves with { kind, sent, failed }.
+      function emailLifters() {
+        return sb.auth.getSession().then(function (g) {
           var token = g.data && g.data.session && g.data.session.access_token;
           return fetch((window.YNEPF_CONFIG.supabaseUrl || "").replace(/\/$/, "") + "/functions/v1/waitlist", { method: "POST", headers: { "Content-Type": "application/json", apikey: window.YNEPF_CONFIG.supabaseAnonKey || "", Authorization: "Bearer " + token }, body: JSON.stringify({ action: "share_lifting_order", competition_id: c.id }) });
-        }).then(function (r) { return r.json().catch(function () { return {}; }).then(function (b) { if (!r.ok) throw new Error(b.error === "not_published" ? "Publish the lifting order first." : b.error === "not_allowed" ? "You do not have permission to do that." : "The email function did not answer. Check that it has been updated in Supabase."); return b; }); })
-          .then(function (b) { row.shared_at = new Date().toISOString(); row.shared_as = b.kind; row.shared_count = b.sent; pubStatus(); toast("Sent the " + b.kind + " lifting order to " + b.sent + (b.sent === 1 ? " lifter" : " lifters") + (b.failed ? ", and " + b.failed + " could not be sent" : "") + "."); })
-          .catch(function (e) { toast(friendly(e), "error"); }).then(function () { shareBtn.disabled = false; });
+        }).then(function (r) { return r.json().catch(function () { return {}; }).then(function (b) { if (!r.ok) throw new Error(b.error === "not_published" ? "Publish the lifting order first." : b.error === "closed" ? "Entries have closed, so only the final order can be emailed. Use Finalise lifting order." : b.error === "not_allowed" ? "You do not have permission to do that." : "The email function did not answer. Check that it has been updated in Supabase."); return b; }); })
+          .then(function (b) { row.shared_at = new Date().toISOString(); row.shared_as = b.kind; row.shared_count = b.sent; return b; });
       }
-      var shareBtn = iconBtn("Share with lifters", ICON_MAIL, share);
+      function sentToast(b) { toast("Emailed the " + b.kind + " lifting order to " + lifters(b.sent) + (b.failed ? ", and " + b.failed + " could not be sent" : "") + "."); }
+      function doPublish(email) {
+        busy(true);
+        return publishCall(true).then(function () {
+          pubStatus();
+          if (!email) { toast("Lifting order published."); return; }
+          return emailLifters().then(function (b) { pubStatus(); sentToast(b); });
+        }).catch(function (e) { toast(friendly(e), "error"); pubStatus(); }).then(function () { busy(false); });
+      }
+      function publish() {
+        if (published) {
+          if (!window.confirm("Unpublish the lifting order? The calendar goes back to View entries.")) return;
+          busy(true); publishCall(false).then(function () { pubStatus(); toast("Lifting order unpublished."); }).catch(function (e) { toast(friendly(e), "error"); }).then(function () { busy(false); });
+          return;
+        }
+        if (S.dirty) { toast("Save the order first, then publish.", "error"); return; }
+        if (!S.sessions.length) { toast("Sort the entries and save first.", "error"); return; }
+        var n = lifterCount();
+        if (closed) {
+          // Entries have closed: publishing sends nothing. The only email left is the final order, sent by Finalise lifting order.
+          if (!window.confirm("Publish the lifting order? Anyone can see it, without lot numbers. No email goes out now: lifters are emailed the final order when you use Finalise lifting order.")) return;
+          doPublish(false); return;
+        }
+        openForm({ title: "Publish the lifting order", fields: [], saveLabel: "Publish and email " + lifters(n),
+          intro: "Publishing puts the lifting order on the website, without lot numbers, and the calendar swaps View entries for View lifting order. You can also email the provisional order to the " + lifters(n) + " in it, from the competitions address. Entry is still open, so it may change.",
+          extra: [{ label: "Publish without emailing", onclick: function () { doPublish(false); } }],
+          onSave: function () { return publishCall(true).then(function () { pubStatus(); return emailLifters().then(function (b) { pubStatus(); sentToast(b); }).catch(function (e) { toast("Published, but the email did not send: " + friendly(e) + " Unpublish and publish again to try once more.", "error"); }); }); } });
+      }
+      function finalise() {
+        if (!closed) { toast("Entries have not closed yet, so the order cannot be finalised.", "error"); return; }
+        if (S.dirty) { toast("Save your changes first, so lifters see the current order.", "error"); return; }
+        if (!published && !S.sessions.length) { toast("Sort the entries and save first.", "error"); return; }
+        var n = lifterCount();
+        openForm({ title: isFinal ? "Send the final lifting order again" : "Finalise the lifting order", fields: [], saveLabel: (isFinal ? "Send to " : "Finalise and email ") + lifters(n),
+          intro: (isFinal ? "The order is already final. This emails it again to the " + lifters(n) + " in it." : (published ? "" : "It is not published yet, so this publishes it. ") + "Entries have closed. This marks the lifting order as final and emails it to the " + lifters(n) + " in it, from the competitions address. After this, no more changes should be made."),
+          onSave: function () {
+            var first = isFinal ? Promise.resolve() : sb.rpc("lifting_order_finalise", { c: c.id }).then(function (r) {
+              if (r.error) throw new Error(/invalid:not_closed/.test(r.error.message || "") ? "Entries have not closed yet." : /invalid:empty_order/.test(r.error.message || "") ? "There is nothing saved to publish. Save the order first." : /forbidden/.test(r.error.message || "") ? "You do not have permission to do that." : friendly(r.error));
+              published = true; isFinal = true; row.status = "published"; row.published_as = "final"; row.final_at = new Date().toISOString();
+            });
+            return first.then(function () { pubStatus(); return emailLifters().then(function (b) { pubStatus(); sentToast(b); }).catch(function (e) { toast("Marked final, but the email did not send: " + friendly(e) + " Use Send the final order again.", "error"); }); });
+          } });
+      }
+      var pubBtn = el("button", { type: "button", class: "btn btn-primary", onclick: publish }, "Publish"), unpubBtn = iconBtn("Unpublish", '<path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>', publish);
+      var finalBtn = el("button", { type: "button", class: "btn btn-primary", onclick: finalise }, "Finalise lifting order");
       function previewUrl() { return "../lifting/?c=" + encodeURIComponent(c.slug || c.id) + "&preview=1"; }        // the plain address: it does not depend on the /lifting-order rewrite
       var previewLink = el("a", { class: "btn btn-sm btn-ghost", href: previewUrl(), target: "_blank", rel: "noopener" }, "Preview ", el("span", { class: "visually-hidden" }, "(opens in a new tab)"));
       var sortBtn = btn("Sort the entries", runSort, "btn-primary"), clearBtn = btn("Clear the order", clearOrder, "btn-danger"), saveBtn = btn("Save", function () { save(saveBtn); }, "btn-secondary");
@@ -1944,9 +1990,32 @@
         el("div", { class: "vol-settings" },
           el("div", { class: "field", style: "max-width:22rem;margin:0" }, el("label", { for: "vol-closes" }, "Close sign-up automatically (optional)"), el("p", { class: "help", id: "vol-closes-help" }, "UK time. Leave empty to close it yourself."), when),
           el("div", { class: "field field-check", style: "margin:0" }, shirts, el("div", null, el("label", { for: "vol-shirts" }, "Ask for a T-shirt size"), el("p", { class: "help" }, "Unisex sizes XS to 5XL. Turn it off for competitions where we are not providing T-shirts.")))));
+      // Publishing the rota can email each volunteer who has a role, once: what they are doing, with a link to the rota. Publishing again does not email again.
+      function rotaPeople() { var seen = {}; V.sessions.forEach(function (s) { (s.vol_places || []).forEach(function (p) { if (p.email && (p.status || "planned") === "planned") seen[p.email.toLowerCase()] = 1; }); }); return Object.keys(seen).length; }
+      function emailRota() {
+        return sb.auth.getSession().then(function (g) {
+          var token = g.data && g.data.session && g.data.session.access_token;
+          return fetch((window.YNEPF_CONFIG.supabaseUrl || "").replace(/\/$/, "") + "/functions/v1/waitlist", { method: "POST", headers: { "Content-Type": "application/json", apikey: window.YNEPF_CONFIG.supabaseAnonKey || "", Authorization: "Bearer " + token }, body: JSON.stringify({ action: "rota_share", competition_id: c.id }) });
+        }).then(function (r) { return r.json().catch(function () { return {}; }).then(function (b) { if (!r.ok) throw new Error(b.error === "not_published" ? "Publish the rota first." : b.error === "not_allowed" ? "You do not have permission to do that." : "The email function did not answer. Check that it has been updated in Supabase."); return b; }); });
+      }
+      function publishRota() {
+        var n = rotaPeople(), now = function () { return { status: "published", published_at: new Date().toISOString() }; };
+        if (V.rota.emailed_at || !n) { setRota(now(), "Rota published."); return; }          // already emailed once, or nobody to email: just publish
+        openForm({ title: "Publish the rota", fields: [], saveLabel: "Publish and email " + n + (n === 1 ? " volunteer" : " volunteers"),
+          intro: "Publishing puts names and roles on a public page (no emails or mobile numbers). You can also email the " + n + (n === 1 ? " volunteer" : " volunteers") + " who " + (n === 1 ? "has" : "have") + " a role, telling them what they are doing and linking to the rota, from the competitions address. This email goes out once: publishing again later does not email them again.",
+          extra: [{ label: "Publish without emailing", onclick: function () { setRota(now(), "Rota published."); } }],
+          onSave: function () {
+            var patch = now();
+            return sb.from("vol_rota").update(patch).eq("competition_id", c.id).then(ok).then(function () {
+              Object.assign(V.rota, patch);
+              return emailRota().then(function (b) { V.rota.emailed_at = new Date().toISOString(); V.rota.emailed_count = b.sent; toast("Rota published and emailed to " + b.sent + (b.sent === 1 ? " volunteer" : " volunteers") + (b.failed ? ", and " + b.failed + " could not be sent" : "") + "."); })
+                .catch(function (e) { toast("Rota published, but the email did not send: " + friendly(e) + " Unpublish and publish again to try once more.", "error"); });
+            }).then(function () { draw(); });
+          } });
+      }
       var shareBox = el("section", { class: "card vol-card", "aria-labelledby": "vol-pub-h" },
-        el("div", { class: "vol-card-head" }, el("h2", { id: "vol-pub-h" }, "Publishing"), published ? btn("Unpublish", function () { setRota({ status: "draft", published_at: null }, "Rota unpublished."); }, "btn-secondary") : el("button", { type: "button", class: "btn btn-sm btn-primary", onclick: function () { setRota({ status: "published", published_at: new Date().toISOString() }, "Rota published."); } }, "Publish")),
-        el("p", { class: "help", id: "vol-pub-note" }, published ? "The rota is published: anyone can see who is helping, by name and role. Changes show straight away." : "The rota is not published. Publishing puts names and roles on a public page (no emails or mobile numbers). Preview shows it to the entries team first."),
+        el("div", { class: "vol-card-head" }, el("h2", { id: "vol-pub-h" }, "Publishing"), published ? btn("Unpublish", function () { setRota({ status: "draft", published_at: null }, "Rota unpublished."); }, "btn-secondary") : el("button", { type: "button", class: "btn btn-sm btn-primary", onclick: publishRota }, "Publish")),
+        el("p", { class: "help", id: "vol-pub-note" }, published ? "The rota is published: anyone can see who is helping, by name and role. Changes show straight away." + (V.rota.emailed_at ? " Volunteers were emailed on " + stamp(new Date(V.rota.emailed_at)) + (V.rota.emailed_count ? " (" + V.rota.emailed_count + (V.rota.emailed_count === 1 ? " person" : " people") + ")" : "") + "." : "") : "The rota is not published. Publishing puts names and roles on a public page (no emails or mobile numbers). Preview shows it to the entries team first."),
         el("div", { class: "actions" }, el("a", { class: "btn btn-sm btn-ghost", href: rotaUrl(true), target: "_blank", rel: "noopener" }, "Preview ", el("span", { class: "visually-hidden" }, "(opens in a new tab)")),
           published ? btn("Copy the rota link", function () { copyText(rotaUrl(false)); }, "btn-ghost") : null));
       var needs = [];

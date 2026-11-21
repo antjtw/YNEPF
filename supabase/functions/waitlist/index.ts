@@ -16,6 +16,174 @@
 // text. The timer sends it so only the timer (or a signed-in entries team member) can run the list.
 // Supabase fills in SUPABASE_URL, SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY by itself.
 
+// ==== email template: copied from supabase/email/template.ts by scripts/sync-email-template.mjs. Do not edit between these markers. ====
+export const BRAND = {
+  navy: "#152C41", navyTint: "#E8EDF2", page: "#F6F8FA", iron: "#AA482C", ironDark: "#8B3C25", ironTint: "#F9EDE7",
+  gold: "#D6B778", text: "#242525", muted: "#585A5B", line: "#C9D4E0", sageBg: "#E8F6EB", sageText: "#2C5238",
+  name: "Yorkshire & North East Powerlifting Federation", short: "YNEPF",
+};
+const FONT = `-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif`;
+const SITE_DEFAULT = "https://www.ynepf.co.uk";
+
+export const esc = (s: unknown): string => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+// Bold text inside a paragraph, and a link inside a paragraph. In the plain text version a link becomes "text (address)".
+export const b = (t: unknown): string => `<strong style="color:${BRAND.navy};">${esc(t)}</strong>`;
+export const a = (href: string, text: string): string => `<a class="lnk" href="${esc(href)}" target="_blank" style="color:${BRAND.navy};font-weight:600;text-decoration:underline;">${esc(text)}</a>`;
+
+type Note = "info" | "warn" | "good";
+export type Block =
+  | ["h1", string] | ["h2", string]
+  | ["p", string] | ["small", string]                       // html allowed: escape anything typed by a person
+  | ["details", Array<[string, string] | null | false | undefined>] | ["details", Array<[string, string] | null | false | undefined>, "boldLast"]
+  | ["button", string, string] | ["button", string, string, "fallback"] | ["button2", string, string]
+  | ["code", string] | ["note", string, Note] | ["bullets", string[]] | ["quote", string];
+export interface EmailSpec {
+  preheader?: string; blocks: Block[]; entriesEmail?: string; siteUrl?: string; why?: string; title?: string;
+  noQuestions?: boolean;                                   // leave out the generic "Any questions?" line
+  internal?: boolean;                                      // a note for the team: "Internal" tag, no sign-off
+}
+
+const small = (t: string) => `<p style="margin:0 0 12px;font-family:${FONT};font-size:14px;line-height:1.6;color:${BRAND.muted};">${t}</p>`;
+const para = (t: string) => `<p style="margin:0 0 16px;font-family:${FONT};font-size:16px;line-height:1.6;color:${BRAND.text};">${t}</p>`;
+const heading = (t: string) => `<h1 style="margin:0 0 16px;font-family:${FONT};font-size:24px;line-height:1.3;font-weight:700;color:${BRAND.navy};">${esc(t)}</h1>`;
+const subheading = (t: string) => `<h2 style="margin:8px 0 12px;font-family:${FONT};font-size:18px;line-height:1.3;font-weight:700;color:${BRAND.navy};">${esc(t)}</h2>`;
+const button = (label: string, href: string) => `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 24px;"><tr>
+    <td align="center" bgcolor="${BRAND.iron}" style="border-radius:10px;background-color:${BRAND.iron};">
+      <a href="${esc(href)}" target="_blank" style="display:inline-block;padding:14px 28px;font-family:${FONT};font-size:16px;line-height:1.2;font-weight:700;color:#FFFFFF;text-decoration:none;border-radius:10px;">${esc(label)}</a>
+    </td></tr></table>`;
+const buttonSecondary = (label: string, href: string) => `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px;"><tr>
+    <td align="center" style="border:2px solid ${BRAND.iron};border-radius:10px;">
+      <a class="btn2" href="${esc(href)}" target="_blank" style="display:inline-block;padding:12px 26px;font-family:${FONT};font-size:16px;line-height:1.2;font-weight:700;color:${BRAND.ironDark};text-decoration:none;border-radius:10px;">${esc(label)}</a>
+    </td></tr></table>`;
+const linkFallback = (href: string) => small(`If the button does not work, copy this link into your browser:<br><a class="lnk" href="${esc(href)}" style="color:${BRAND.navy};word-break:break-all;">${esc(href)}</a>`);
+const codeBox = (code: string) => `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:8px 0 24px;"><tr>
+  <td class="bg-code" align="center" bgcolor="${BRAND.navyTint}" style="background-color:${BRAND.navyTint};border-radius:10px;padding:18px 16px;">
+    <span class="t-code" style="font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:28px;line-height:1.2;font-weight:700;letter-spacing:4px;color:${BRAND.navy};">${esc(code)}</span>
+  </td></tr></table>`;
+function detailsTable(rows: Array<[string, string] | null | false | undefined>, boldLast: boolean) {
+  const list = rows.filter((r): r is [string, string] => !!r);
+  const tr = list.map(([k, v], i) => {
+    const last = i === list.length - 1, line = last ? "" : `border-bottom:1px solid ${BRAND.line};`;
+    return `<tr><td valign="top" class="details-rule" style="padding:10px 12px 10px 0;${line}font-family:${FONT};font-size:14px;line-height:1.5;color:${BRAND.muted};width:38%;">${esc(k)}</td>
+      <td valign="top" class="details-rule" style="padding:10px 0;${line}font-family:${FONT};font-size:15px;line-height:1.5;color:${BRAND.text};${boldLast && last ? "font-weight:700;" : ""}">${esc(v)}</td></tr>`;
+  }).join("");
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 24px;">${tr}</table>`;
+}
+function noteBox(html: string, kind: Note) {
+  const c = kind === "good" ? [BRAND.sageBg, "#4C8F62", BRAND.sageText] : kind === "warn" ? [BRAND.ironTint, BRAND.iron, "#5A2514"] : [BRAND.navyTint, BRAND.navy, BRAND.navy];
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 24px;"><tr>
+    <td class="note-${kind}" bgcolor="${c[0]}" style="background-color:${c[0]};border-left:4px solid ${c[1]};border-radius:6px;padding:14px 16px;font-family:${FONT};font-size:15px;line-height:1.55;color:${c[2]};">${html}</td></tr></table>`;
+}
+const quoteBox = (t: string) => `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 24px;"><tr>
+  <td class="bg-code" bgcolor="${BRAND.page}" style="background-color:${BRAND.page};border-left:4px solid ${BRAND.line};border-radius:6px;padding:14px 16px;font-family:${FONT};font-size:16px;line-height:1.6;color:${BRAND.text};white-space:pre-wrap;">${esc(t)}</td></tr></table>`;
+const bulletList = (items: string[]) => `<ul style="margin:0 0 16px;padding:0 0 0 20px;font-family:${FONT};font-size:16px;line-height:1.6;color:${BRAND.text};">${items.map((i) => `<li style="margin:0 0 6px;">${esc(i)}</li>`).join("")}</ul>`;
+
+// "<a href>text</a>" -> "text (address)", other tags removed. For the plain text version.
+const plain = (h: string): string => String(h).replace(/<br\s*\/?>/gi, "\n")
+  .replace(/<a [^>]*href="([^"]+)"[^>]*>([^<]*)<\/a>/gi, (_m, u: string, t: string) => (u.startsWith("mailto:") ? t : t && t !== u ? `${t} (${u})` : u))
+  .replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&amp;/g, "&");
+
+function layout(o: { title?: string; preheader?: string; body: string; entriesEmail?: string; siteUrl: string; why?: string; noQuestions?: boolean; internal?: boolean }): string {
+  const site = o.siteUrl;
+  return `<!DOCTYPE html>
+<html lang="en-GB" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="x-apple-disable-message-reformatting">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark">
+<title>${esc(o.title || BRAND.short)}</title>
+<style>
+  body { margin:0; padding:0; -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%; }
+  table { border-collapse:collapse; }
+  img { border:0; line-height:100%; outline:none; text-decoration:none; -ms-interpolation-mode:bicubic; }
+  @media only screen and (max-width:620px) {
+    .wrap { width:100% !important; }
+    .pad { padding-left:20px !important; padding-right:20px !important; }
+  }
+  @media (prefers-color-scheme: dark) {
+    .bg-page { background-color:#0E1A26 !important; }
+    .bg-card { background-color:#16283A !important; }
+    .t-body, .t-body p, .t-body li, .t-body td { color:#E6ECF2 !important; }
+    .t-body h1, .t-body strong { color:#FFFFFF !important; }
+    .t-muted, .t-muted a { color:#AAB7C4 !important; }
+    .lnk { color:#9CC3EA !important; }
+    .btn2 { color:#F2B9A3 !important; }
+    .bg-code { background-color:#0E1A26 !important; }
+    .t-code { color:#FFFFFF !important; }
+    .note-info { background-color:#1F3A52 !important; color:#E6ECF2 !important; border-left-color:#9CC3EA !important; }
+    .note-warn { background-color:#3A2218 !important; color:#F6DDD2 !important; border-left-color:#D9825F !important; }
+    .note-good { background-color:#1D3A28 !important; color:#D7F0DE !important; border-left-color:#6BBF86 !important; }
+    .note-info b, .note-warn b, .note-good b { color:#FFFFFF !important; }
+    .details-rule { border-bottom-color:#2B4157 !important; }
+  }
+</style>
+</head>
+<body class="bg-page" style="margin:0;padding:0;background-color:${BRAND.page};">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;mso-hide:all;">${esc(o.preheader || "")}${"&nbsp;&zwnj;".repeat(40)}</div>
+<table role="presentation" class="bg-page" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:${BRAND.page};">
+<tr><td align="center" style="padding:24px 12px 32px;">
+  <table role="presentation" class="wrap" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;">
+    <tr><td bgcolor="${BRAND.navy}" style="background-color:${BRAND.navy};border-radius:14px 14px 0 0;border-bottom:4px solid ${BRAND.gold};padding:22px 32px;" class="pad">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+        <td valign="middle" style="padding-right:14px;"><img src="${esc(site)}/assets/img/email-logo.png" width="44" height="44" alt="" style="display:block;width:44px;height:44px;"></td>
+        <td valign="middle" style="font-family:${FONT};color:#FFFFFF;"><div style="font-size:18px;line-height:1.2;font-weight:700;color:#FFFFFF;">YNEPF${o.internal ? ' <span style="display:inline-block;margin-left:8px;padding:2px 8px;border-radius:999px;background-color:#D6B778;color:#07121A;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;vertical-align:2px;">Internal</span>' : ""}</div>
+          <div style="font-size:12px;line-height:1.4;color:#C9D4E0;">${o.internal ? "A note from the website for the entries team" : esc(BRAND.name)}</div></td>
+      </tr></table>
+    </td></tr>
+    <tr><td class="bg-card pad t-body" bgcolor="#FFFFFF" style="background-color:#FFFFFF;padding:32px 32px 12px;">
+      ${o.body}
+    </td></tr>
+    <tr><td class="bg-card pad t-body" bgcolor="#FFFFFF" style="background-color:#FFFFFF;padding:${o.internal ? "0 32px 8px" : "0 32px 32px"};border-radius:0 0 14px 14px;">
+      ${o.internal || o.noQuestions ? "" : para("Any questions? Just reply to this email" + (o.entriesEmail ? ` or write to <a class="lnk" href="mailto:${esc(o.entriesEmail)}" style="color:${BRAND.navy};font-weight:600;">${esc(o.entriesEmail)}</a>` : "") + ".")}
+      ${o.internal ? "" : `<p style="margin:0;font-family:${FONT};font-size:16px;line-height:1.6;color:${BRAND.text};">Thanks,<br><strong style="color:${BRAND.navy};">The YNEPF team</strong></p>`}
+    </td></tr>
+    <tr><td class="pad" style="padding:20px 32px 0;font-family:${FONT};font-size:12px;line-height:1.6;color:${BRAND.muted};text-align:center;">
+      <span class="t-muted" style="color:${BRAND.muted};">${esc(o.why || (o.internal ? "An automatic note from the YNEPF website, sent to the competitions inbox." : "You are getting this email because of something you did on our website."))}<br>
+      ${esc(BRAND.name)} &middot; <a href="${esc(site)}" style="color:${BRAND.muted};">www.ynepf.co.uk</a>${o.internal ? "" : ` &middot; <a href="${esc(site)}/privacy" style="color:${BRAND.muted};">Privacy</a>`}</span>
+    </td></tr>
+  </table>
+</td></tr></table>
+</body></html>`;
+}
+
+export function renderEmail(e: EmailSpec): { html: string; text: string } {
+  const html: string[] = [], text: string[] = [];
+  for (const k of e.blocks) {
+    const t = k[0];
+    if (t === "h1") { html.push(heading(k[1])); text.push(k[1], ""); }
+    else if (t === "h2") { html.push(subheading(k[1])); text.push(k[1].toUpperCase(), ""); }
+    else if (t === "p") { html.push(para(k[1])); text.push(plain(k[1]), ""); }
+    else if (t === "small") { html.push(small(k[1])); text.push(plain(k[1]), ""); }
+    else if (t === "details") { html.push(detailsTable(k[1], k[2] === "boldLast")); text.push(...k[1].filter((r): r is [string, string] => !!r).map(([x, y]) => `${x}: ${y}`), ""); }
+    else if (t === "button") { html.push(button(k[1], k[2])); if (k[3] === "fallback") html.push(linkFallback(k[2])); text.push(`${k[1]}: ${k[2]}`, ""); }
+    else if (t === "button2") { html.push(buttonSecondary(k[1], k[2])); text.push(`${k[1]}: ${k[2].startsWith("mailto:") ? k[2].slice(7).split("?")[0] : k[2]}`, ""); }
+    else if (t === "code") { html.push(codeBox(k[1])); text.push(`   ${k[1]}`, ""); }
+    else if (t === "quote") { html.push(quoteBox(k[1])); text.push(`> ${String(k[1]).replace(/\n/g, "\n> ")}`, ""); }
+    else if (t === "note") { html.push(noteBox(k[1], k[2])); text.push(plain(k[1]), ""); }
+    else if (t === "bullets") { html.push(bulletList(k[1])); text.push(...k[1].map((x) => `- ${x}`), ""); }
+  }
+  const siteUrl = (e.siteUrl || SITE_DEFAULT).replace(/\/$/, "");
+  const body = html.join("\n");
+  const out = layout({ title: e.title, preheader: e.preheader, body, entriesEmail: e.entriesEmail, siteUrl, why: e.why, noQuestions: e.noQuestions, internal: e.internal });
+  const why = e.why || (e.internal ? "An automatic note from the YNEPF website, sent to the competitions inbox." : "");
+  const tail = e.internal ? [why]
+    : [...(e.noQuestions ? [] : [`Any questions? Just reply to this email${e.entriesEmail ? ` or write to ${e.entriesEmail}` : ""}.`, ""]), "Thanks,", "The YNEPF team", "", why, `${BRAND.name} - www.ynepf.co.uk`];
+  return { html: out, text: [...text, ...tail].join("\n") };
+}
+
+// The reminder that goes in the confirmation, the entries-closed and the lifting order emails. The links are the IPF's own pages.
+export const TECH_RULES_URL = "https://www.powerlifting.sport/rules/codes/info/technical-rules";
+export const APPROVED_LIST_URL = "https://www.powerlifting.sport/rules/codes/info/approved-list";
+export const RULES_AND_KIT: Block[] = [
+  ["h2", "Before competition day"],
+  ["p", `Please make sure you know the current ${a(TECH_RULES_URL, "IPF Technical Rules")}. It is up to you to have read and understood them before you lift.`],
+  ["p", `Please also check that your kit is on the ${a(APPROVED_LIST_URL, "IPF approved list")}. Any kit that is not compliant will be rejected, and referees will not make exceptions, so check it now rather than at weigh-in.`],
+  ["p", `Not sure about something? Email us at ${a("mailto:info@ynepf.co.uk", "info@ynepf.co.uk")} and we will help.`],
+];
+// ==== end of email template ====
+
 export const MESSAGES: Record<string, string> = {
   closed: "Entries for this competition are closed, so the waiting list is closed too.",
   not_full: "There are places left, so you can enter now instead of joining the waiting list.",
@@ -45,50 +213,75 @@ export function when(iso: string): string {
 }
 export const offerLink = (siteUrl: string, slug: string, token: string) => `${siteUrl.replace(/\/$/, "")}/enter?c=${encodeURIComponent(slug)}&offer=${encodeURIComponent(token)}`;
 
+// ---- the emails. Each builder describes one email; send() turns it into HTML and plain text (see the email template above). --------------
 type Who = { name: string; competition: string; date?: string; entriesEmail: string };
-const sign = (o: Who, more: string[] = []) => [...more, "", `If you have any questions, reply to this email or write to ${o.entriesEmail}.`, "", "YNEPF"].join("\n");
+const hi = (name?: string) => `Hi ${esc(name || "there")}`;
+const named = (o: { competition: string; date?: string }) => `${b(o.competition)}${o.date ? ` (${esc(o.date)})` : ""}`;
+const WHY_ENTERED = "You are getting this email because you are entered in this competition.";
 
-export function joinedEmail(o: Who & { position: number; hours: number }) {
-  return sign(o, [
-    `Hi ${o.name},`, "",
-    `You are on the waiting list for ${o.competition}${o.date ? ` (${o.date})` : ""}. You are number ${o.position} in the queue.`, "",
-    `If a place becomes free we will email you a personal link and you will have ${o.hours} hours to use it. You do not need to do anything now.`,
-    "If you no longer want a place, you can ignore any email we send you and the place will pass to the next person.",
-  ]);
+export function joinedEmail(o: Who & { position: number; hours: number }): EmailSpec {
+  return {
+    entriesEmail: o.entriesEmail, preheader: `You are number ${o.position} in the queue. You do not need to do anything now.`,
+    why: "You are getting this email because you joined the waiting list for this competition.",
+    blocks: [
+      ["h1", "You're on the waiting list"],
+      ["p", `${hi(o.name)}, ${named(o)} is full at the moment, so we have put you on the waiting list.`],
+      ["details", [["Your place in the queue", String(o.position)], ["Time to take a place", `${o.hours} hours`]]],
+      ["p", `If a place becomes free, we will email you a personal link and you will have ${o.hours} hours to use it. You do not need to do anything now.`],
+      ["small", "If you no longer want a place, you can ignore any email we send you and the place will pass to the next person."],
+    ],
+  };
 }
-export function offerEmail(o: Who & { link: string; expiresAt: string }) {
-  return sign(o, [
-    `Hi ${o.name},`, "",
-    `Good news: a place has come up in ${o.competition}${o.date ? ` (${o.date})` : ""} and it is being held for you.`, "",
-    `Enter here: ${o.link}`, "",
-    `The place is yours until ${when(o.expiresAt)} (UK time). After that it goes to the next person on the waiting list.`,
-    "The link is for you only, so please do not share it. Your entry is only confirmed once you have completed the form and paid.",
-  ]);
+export function offerEmail(o: Who & { link: string; expiresAt: string }): EmailSpec {
+  return {
+    entriesEmail: o.entriesEmail, preheader: `A place is being held for you until ${when(o.expiresAt)}.`,
+    why: "You are getting this email because you joined the waiting list for this competition.",
+    blocks: [
+      ["h1", "Good news, a place has come up"],
+      ["p", `A place in ${named(o)} is being held for you.`],
+      ["button", "Claim your place", o.link, "fallback"],
+      ["note", `<b>Held until ${esc(when(o.expiresAt))} (UK time).</b> After that it goes to the next person on the waiting list.`, "warn"],
+      ["small", "The link is just for you, so please do not share it. Your entry is only confirmed once you have filled in the form and paid. If you no longer want the place, you do not need to do anything."],
+    ],
+  };
 }
-export function reminderEmail(o: Who & { expiresAt: string; slug: string; siteUrl: string }) {
-  return sign(o, [
-    `Hi ${o.name},`, "",
-    `A reminder: the place being held for you in ${o.competition} runs out on ${when(o.expiresAt)} (UK time).`, "",
-    "Use the personal link in our earlier email to enter. If you no longer want the place, you do not need to do anything and it will pass to the next person.",
-  ]);
+export function reminderEmail(o: Who & { expiresAt: string; slug: string; siteUrl: string }): EmailSpec {
+  return {
+    entriesEmail: o.entriesEmail, preheader: `Your place in ${o.competition} runs out soon.`,
+    why: "You are getting this email because a place is being held for you.",
+    blocks: [
+      ["h1", "Your place runs out soon"],
+      ["p", `${hi(o.name)}, a quick reminder: the place we are holding for you in ${b(o.competition)} runs out on <b>${esc(when(o.expiresAt))}</b> (UK time).`],
+      ["note", "To enter, use the personal link in our earlier email, <b>\"A place has come up\"</b>. If you no longer want the place, you do not need to do anything and it will pass to the next person.", "warn"],
+    ],
+  };
 }
-export function expiredEmail(o: Who & { slug: string; siteUrl: string }) {
-  return sign(o, [
-    `Hi ${o.name},`, "",
-    `The place we were holding for you in ${o.competition} has now gone to the next person on the waiting list, because it was not taken up in time.`, "",
-    `If you still want to enter, you can join the waiting list again at ${o.siteUrl.replace(/\/$/, "")}/enter?c=${encodeURIComponent(o.slug)} and you will be added to the back of the queue.`,
-  ]);
+export function expiredEmail(o: Who & { slug: string; siteUrl: string }): EmailSpec {
+  return {
+    entriesEmail: o.entriesEmail, preheader: "You can join the waiting list again if you still want to enter.",
+    why: "You are getting this email because the place held for you ran out.",
+    blocks: [
+      ["h1", "Your place has gone to the next person"],
+      ["p", `${hi(o.name)}, the place we were holding for you in ${b(o.competition)} was not taken up in time, so it has gone to the next person on the waiting list.`],
+      ["p", "If you still want to enter, you can join the waiting list again. You will go to the back of the queue."],
+      ["button", "Join the waiting list again", `${o.siteUrl.replace(/\/$/, "")}/enter?c=${encodeURIComponent(o.slug)}`],
+    ],
+  };
 }
 
-export function priorityEmail(o: Who & { link: string; windowStart: string; opens?: string; points?: boolean }) {
-  return sign(o, [
-    `Hi ${o.name || "there"},`, "",
-    `You can enter ${o.competition}${o.date ? ` (${o.date})` : ""} early, with priority entry.`, "",
-    `Your personal link works from ${when(o.windowStart)} (UK time)${o.opens ? `, before general entry opens on ${when(o.opens)}` : ""}:`,
-    o.link, "",
-    "Please enter with the email address this message was sent to, and keep the link to yourself: it only works once. You can still enter when general entry opens if you would rather wait.",
-    ...(o.points ? ["", "This is your thank-you for volunteering. Priority entry costs 1 volunteer point, taken only once your entry is confirmed. If you do not use the link, you keep the point."] : []),
-  ]);
+export function priorityEmail(o: Who & { link: string; windowStart: string; opens?: string; points?: boolean }): EmailSpec {
+  return {
+    entriesEmail: o.entriesEmail, preheader: `Enter ${o.competition} early, before general entry opens. Your link works once.`,
+    why: "You are getting this email because you asked for a priority entry link.",
+    blocks: [
+      ["h1", "Enter early with priority access"],
+      ["p", o.points ? `${hi(o.name)}, thank you for volunteering. You can enter ${named(o)} before general entry opens.` : `${hi(o.name)}, you can enter ${named(o)} before general entry opens.`],
+      ["button", "Enter with priority", o.link, "fallback"],
+      ["details", [["Your link works from", when(o.windowStart)], o.opens ? ["General entry opens", when(o.opens)] : null]],
+      ["note", "Please enter with the email address this was sent to, and keep the link to yourself. It only works once.", "warn"],
+      ["p", `${o.points ? "Priority entry costs 1 volunteer point, taken only once your entry is confirmed. If you do not use the link, you keep your point. " : ""}You can still enter when general entry opens if you would rather wait.`],
+    ],
+  };
 }
 
 // ---- Volunteers: the sign-up confirmation, the "change your answers" link, and a note for the inbox -------------------------------
@@ -103,68 +296,174 @@ export function volunteerCode(message: string): string {
   const m = String(message ?? ""); for (const k of Object.keys(VOLUNTEER_MESSAGES)) if (m.includes(k)) return k; return "unknown";
 }
 export const volunteerLink = (siteUrl: string, slug: string, token: string) => `${siteUrl.replace(/\/$/, "")}/volunteer?c=${encodeURIComponent(slug)}&edit=${encodeURIComponent(token)}`;
-export function volunteerSignupEmail(o: Who & { lines: string[]; link: string; edited: boolean }) {
-  return sign(o, [
-    `Hi ${o.name || "there"},`, "",
-    o.edited ? `Your volunteer answers for ${o.competition} have been updated. You said you could help with:` : `Thank you for signing up to volunteer at ${o.competition}${o.date ? ` (${o.date})` : ""}. You said you could help with:`,
-    ...o.lines.map((l) => `- ${l}`), "",
-    "We will be in touch about the rota. If you have been given a role and your plans change, please tell us in advance: if you do not turn up and have not told us, you lose your volunteer points.", "",
-    "To change what you said you can do, use your personal link (keep it to yourself):", o.link,
-  ]);
+export const rotaLink = (siteUrl: string, slug: string) => `${siteUrl.replace(/\/$/, "")}/rota?c=${encodeURIComponent(slug)}`;
+export function volunteerSignupEmail(o: Who & { lines: string[]; link: string; edited: boolean }): EmailSpec {
+  return {
+    entriesEmail: o.entriesEmail, preheader: o.edited ? "Your volunteer answers have been updated." : "Thank you for signing up. Here is what you said you could help with.",
+    why: "You are getting this email because you signed up to volunteer.",
+    blocks: [
+      ["h1", o.edited ? "Your answers are updated" : "Thank you for volunteering"],
+      ["p", o.edited ? `${hi(o.name)}, your volunteer answers for ${b(o.competition)} have been updated. You said you could help with:`
+        : `${hi(o.name)}, thank you for signing up to volunteer at ${named(o)}. You said you could help with:`],
+      ["bullets", o.lines],
+      ["p", "We will be in touch about the rota."],
+      ["note", "If you are given a role and your plans change, please tell us in advance. If you do not turn up and have not told us, you lose your volunteer points.", "warn"],
+      ["p", "Need to change what you said you can do? Use your personal link. Please keep it to yourself."],
+      ["button", "Change your answers", o.link, "fallback"],
+    ],
+  };
 }
-export function volunteerLinkEmail(o: Who & { link: string }) {
-  return sign(o, [`Hi ${o.name || "there"},`, "", `Here is your personal link to see and change your volunteer answers for ${o.competition}:`, o.link, "", "If you did not ask for this, you can ignore this email."]);
+export function volunteerLinkEmail(o: Who & { link: string }): EmailSpec {
+  return {
+    entriesEmail: o.entriesEmail, preheader: "Your personal link to see and change your volunteer answers.",
+    why: "You are getting this email because someone asked for your volunteer link.",
+    blocks: [
+      ["h1", "Your volunteer link"],
+      ["p", `${hi(o.name)}, here is your personal link to see and change your volunteer answers for ${b(o.competition)}.`],
+      ["button", "See or change your answers", o.link, "fallback"],
+      ["small", "Did not ask for this? You can ignore this email."],
+    ],
+  };
+}
+// The rota is published: each volunteer with a role is told what they are doing, with a link to the whole rota.
+export function rotaEmail(o: Who & { roles: { session: string; when?: string; role: string }[]; link: string }): EmailSpec {
+  return {
+    entriesEmail: o.entriesEmail, noQuestions: true, preheader: `Here is what you are doing at ${o.competition}, and when.`,
+    why: "You are getting this email because you volunteered and have a role on the rota.",
+    blocks: [
+      ["h1", "The rota is published"],
+      ["p", `${hi(o.name)}, the rota for ${named(o)} is now live. Thank you for helping. This is what you are doing:`],
+      ["details", o.roles.map((r) => [r.session + (r.when ? ` (${r.when})` : ""), r.role] as [string, string])],
+      ["button", "See the full rota", o.link],
+      ["note", "<b>If your plans change, please tell us in advance.</b> If you do not turn up and have not told us, you lose your volunteer points. If you tell us beforehand, it costs you nothing.", "warn"],
+      ["p", "Please arrive in good time before your session starts. If anything looks wrong, reply to this email."],
+    ],
+  };
 }
 // ---- Volunteer points: the one-time code, the discount code, and a note for the inbox when a code is made ---------------------------------
-export function pointsCodeEmail(o: { name: string; code: string; entriesEmail?: string }) {
-  return [`Hi ${o.name || "there"},`, "", `Your code to look at and spend your volunteer points is ${o.code}.`, "It works for 15 minutes and can be used once. If you did not ask for it, you can ignore this email: nothing has changed.", "", `Yorkshire & North East Powerlifting Federation${o.entriesEmail ? `\n${o.entriesEmail}` : ""}`].join("\n");
+export function pointsCodeEmail(o: { name: string; code: string; entriesEmail?: string }): EmailSpec {
+  const shown = /^\d{6}$/.test(o.code) ? `${o.code.slice(0, 3)} ${o.code.slice(3)}` : o.code;
+  return {
+    entriesEmail: o.entriesEmail, preheader: `Your one-time code is ${shown}. It works for 15 minutes.`,
+    why: "You are getting this email because someone asked to look at volunteer points for this address.",
+    blocks: [
+      ["h1", "Your one-time code"],
+      ["p", "Use this code to look at and spend your volunteer points. It works for 15 minutes and can be used once."],
+      ["code", shown],
+      ["small", "Did not ask for this? You can ignore this email. Nothing has changed."],
+    ],
+  };
 }
-export function pointsDiscountEmail(o: { name: string; code: string; competition: string; pounds: number; points: number; expires?: string; link: string; entriesEmail?: string }) {
-  return [`Hi ${o.name || "there"},`, "", `Here is your £${o.pounds} discount for ${o.competition}:`, "", o.code, "",
-    `Type it into the discount box on the entry form, using this email address: ${o.link}`,
-    `It can be used once${o.expires ? ` and runs out on ${when(o.expires)}` : ""}. The ${o.points} points it is worth are taken from your balance when your entry is confirmed.`, "",
-    `Yorkshire & North East Powerlifting Federation${o.entriesEmail ? `\n${o.entriesEmail}` : ""}`].join("\n");
+export function pointsDiscountEmail(o: { name: string; code: string; competition: string; pounds: number; points: number; expires?: string; link: string; entriesEmail?: string }): EmailSpec {
+  return {
+    entriesEmail: o.entriesEmail, preheader: `Your discount code for ${o.competition}. It can be used once.`,
+    why: "You are getting this email because you spent volunteer points.",
+    blocks: [
+      ["h1", `Your £${o.pounds} discount`],
+      ["p", `${hi(o.name)}, here is your discount for ${b(o.competition)}. Thank you for everything you do for the federation.`],
+      ["code", o.code],
+      ["button", "Enter the competition", o.link, "fallback"],
+      ["details", [["Worth", `£${o.pounds}.00 (${o.points} points)`], o.expires ? ["Use by", when(o.expires)] : null, ["How", "Type the code into the discount box, using this email address"]]],
+      ["small", "It can be used once. The points are only taken from your balance when your entry is confirmed."],
+    ],
+  };
 }
-export function pointsRedeemedNotification(o: { name: string; email: string; competition: string; pounds: number; points: number; code: string; deskUrl?: string }) {
-  return [`${o.name} (${o.email}) turned ${o.points} volunteer points into a £${o.pounds} discount code for ${o.competition}.`, "", `Code: ${o.code}`, "The points come off their balance when an entry using the code is confirmed.",
-    ...(o.deskUrl ? ["", `Discount codes and who has used them: ${o.deskUrl}`] : [])].join("\n");
+// Internal notes: for the team, sent to the competitions inbox. They carry a button to the right page in the editor.
+const note = (o: { deskUrl?: string }, label: string): Block[] => o.deskUrl ? [["button", label, o.deskUrl]] : [];
+export function pointsRedeemedNotification(o: { name: string; email: string; competition: string; pounds: number; points: number; code: string; deskUrl?: string }): EmailSpec {
+  return { internal: true, preheader: `${o.name} turned ${o.points} points into a £${o.pounds} discount code.`, blocks: [
+    ["h1", "Points turned into a discount"],
+    ["p", `${b(o.name)} (${esc(o.email)}) turned ${o.points} volunteer points into a £${o.pounds} discount code for ${b(o.competition)}.`],
+    ["details", [["Code", o.code]]],
+    ["small", "The points come off their balance when an entry using the code is confirmed."], ...note(o, "Discount codes and who has used them")] };
 }
 // An internal note when the quarterly committee points are awarded.
-export function committeePointsNotification(o: { people: { name: string; email: string; quarter: string }[]; deskUrl?: string }) {
+export function committeePointsNotification(o: { people: { name: string; email: string; quarter: string }[]; deskUrl?: string }): EmailSpec {
   const by = new Map<string, string[]>(); for (const p of o.people) by.set(p.quarter, [...(by.get(p.quarter) ?? []), `${p.name} <${p.email}>`]);
-  return ["Committee and executive points have been awarded (3 points each, for being part of the committee on the last day of the quarter).", "",
-    ...[...by.entries()].flatMap(([q, who]) => [`${q}: ${who.length} ${who.length === 1 ? "person" : "people"}`, ...who.map((w) => `- ${w}`), ""]),
-    ...(o.deskUrl ? [`The points list: ${o.deskUrl}`] : [])].join("\n");
+  return { internal: true, preheader: `Committee points awarded to ${o.people.length} ${o.people.length === 1 ? "person" : "people"}.`, blocks: [
+    ["h1", "Committee points awarded"],
+    ["p", "Committee and executive points have been awarded: 3 points each, for being part of the committee on the last day of the quarter."],
+    ...[...by.entries()].flatMap(([q, who]): Block[] => [["h2", `${q}: ${who.length} ${who.length === 1 ? "person" : "people"}`], ["bullets", who]]), ...note(o, "See the points list")] };
 }
-export function pointsReleasedNotification(o: { name: string; email: string; competition: string; points: number; code: string; deskUrl?: string }) {
-  return [`${o.name} (${o.email}) gave back an unused discount code for ${o.competition}, so its ${o.points} points are free to spend again.`, "", `Code switched off: ${o.code}`, "No points were spent or added: an unused code only holds its points.",
-    ...(o.deskUrl ? ["", `Discount codes: ${o.deskUrl}`] : [])].join("\n");
+export function pointsReleasedNotification(o: { name: string; email: string; competition: string; points: number; code: string; deskUrl?: string }): EmailSpec {
+  return { internal: true, preheader: `An unused code was switched off. Its ${o.points} points are free to spend again.`, blocks: [
+    ["h1", "A discount code was given back"],
+    ["p", `${esc(o.name)} (${esc(o.email)}) gave back an unused discount code for ${b(o.competition)}, so its ${o.points} points are free to spend again.`],
+    ["details", [["Code switched off", o.code]]],
+    ["small", "No points were spent or added: an unused code only holds its points."], ...note(o, "Discount codes")] };
 }
-export function volunteerNotification(o: { name: string; email: string; competition: string; lines: string[]; edited: boolean; deskUrl?: string }) {
-  return [`${o.edited ? "A volunteer changed their answers" : "A new volunteer has signed up"} for ${o.competition}.`, "", `${o.name} (${o.email})`, ...o.lines.map((l) => `- ${l}`),
-    ...(o.edited ? ["", "If they are already in a role they no longer ticked, the rota builder flags it so you can change it."] : []), ...(o.deskUrl ? ["", `Open the rota: ${o.deskUrl}`] : [])].join("\n");
+export function volunteerNotification(o: { name: string; email: string; competition: string; lines: string[]; edited: boolean; deskUrl?: string }): EmailSpec {
+  return { internal: true, preheader: `${o.name} ${o.edited ? "changed their volunteer answers" : "has signed up to volunteer"}.`, blocks: [
+    ["h1", o.edited ? "A volunteer changed their answers" : "New volunteer"],
+    ["p", `${o.edited ? "A volunteer changed their answers" : "A new volunteer has signed up"} for ${b(o.competition)}.`],
+    ["details", [["Name", o.name], ["Email", o.email]]], ["bullets", o.lines],
+    ...(o.edited ? [["small", "If they are already in a role they no longer ticked, the rota builder flags it so you can change it."] as Block] : []), ...note(o, "Open the rota")] };
 }
-
 // An internal note to the competitions inbox when priority entry links go out, so the team can see who was sent one.
-export function prioritySentNotification(o: { competition: string; sent: { name: string; email: string }[]; failed: { name: string; email: string }[]; deskUrl?: string }) {
-  const who = (p: { name: string; email: string }) => `- ${p.name ? p.name + " " : ""}<${p.email}>`;
-  return [
-    `Priority entry links for ${o.competition} have been emailed.`, "",
-    `Sent to ${o.sent.length} ${o.sent.length === 1 ? "person" : "people"}:`, ...(o.sent.length ? o.sent.map(who) : ["- nobody"]),
-    ...(o.failed.length ? ["", `Could not be sent to ${o.failed.length} (they will be tried again at the next check):`, ...o.failed.map(who)] : []),
-    ...(o.deskUrl ? ["", `See who has been sent a link, and who has used it: ${o.deskUrl}`] : []),
-  ].join("\n");
+export function prioritySentNotification(o: { competition: string; sent: { name: string; email: string }[]; failed: { name: string; email: string }[]; deskUrl?: string }): EmailSpec {
+  const who = (p: { name: string; email: string }) => `${p.name ? p.name + " " : ""}<${p.email}>`;
+  return { internal: true, preheader: `Sent to ${o.sent.length}${o.failed.length ? `. ${o.failed.length} could not be sent and will be tried again` : ""}.`, blocks: [
+    ["h1", "Priority links sent"],
+    ["p", `Priority entry links for ${b(o.competition)} have been emailed to ${o.sent.length} ${o.sent.length === 1 ? "person" : "people"}:`],
+    ["bullets", o.sent.length ? o.sent.map(who) : ["nobody"]],
+    ...(o.failed.length ? [["note", `Could not be sent to ${o.failed.length} (they will be tried again at the next check): ${o.failed.map((p) => esc(who(p))).join("; ")}`, "warn"] as Block] : []),
+    ...note(o, "See who has used a link")] };
 }
-
-export function liftingOrderEmail(o: Who & { link: string; kind: "provisional" | "final" }) {
-  return sign(o, [
-    `Hi ${o.name || "there"},`, "",
-    `The ${o.kind} lifting order for ${o.competition}${o.date ? ` (${o.date})` : ""} is now online:`,
-    o.link, "",
-    o.kind === "provisional"
-      ? "This is the provisional lifting order. Entry is still open, so it may change before the competition. Please check your flight and session, and get in touch if anything looks wrong."
-      : "This is the final lifting order. Entry has closed. Please check your flight and session, and get in touch straight away if anything looks wrong.",
-  ]);
+export function offeredNotification(o: { name: string; email: string; competition: string; expiresAt: string }): EmailSpec {
+  return { internal: true, preheader: `${o.name} has until ${when(o.expiresAt)} to take the place.`, blocks: [
+    ["h1", "A place was offered"],
+    ["p", `A place in ${b(o.competition)} was offered to ${b(o.name)} (${esc(o.email)}) from the waiting list. They have until <b>${esc(when(o.expiresAt))}</b>.`]] };
+}
+// A lifting order email, and an automatic "entries are closed" email. The rules and kit reminder goes in both.
+export function liftingOrderEmail(o: Who & { link: string; kind: "provisional" | "final" }): EmailSpec {
+  const final = o.kind === "final";
+  return {
+    entriesEmail: o.entriesEmail, noQuestions: true, why: WHY_ENTERED,
+    preheader: final ? "The final lifting order is online. Please check your flight and session." : "Check your flight and session. Entry is still open, so it may change.",
+    blocks: [
+      ["h1", final ? "The final lifting order is here" : "The lifting order is online"],
+      ["p", `${hi(o.name)}, the ${o.kind} lifting order for ${named(o)} is now online.`],
+      ["button", final ? "See the final lifting order" : "See the lifting order", o.link],
+      ["note", final ? "<b>This is the final order.</b> Entries have closed. Please check your flight and session, and reply to this email straight away if anything looks wrong."
+        : "<b>This is the provisional order.</b> Entry is still open, so it may change before the competition. Please check your flight and session, and reply to this email if anything looks wrong.", "warn"],
+      ...RULES_AND_KIT,
+    ],
+  };
+}
+export function entriesClosedEmail(o: Who & { link?: string }): EmailSpec {
+  return {
+    entriesEmail: o.entriesEmail, noQuestions: true, why: WHY_ENTERED, preheader: "No more changes to entries. The final lifting order will follow in the next few days.",
+    blocks: [
+      ["h1", "Entries are now closed"],
+      ["p", `${hi(o.name)}, entries for ${named(o)} have now closed. Thank you for entering.`],
+      ["note", "<b>There can be no more changes to entries, and we cannot offer refunds for dropouts.</b>", "warn"],
+      ["p", o.link ? "The final lifting order will be published in the next few days, and we will email you as soon as it is ready. In the meantime, you can see the provisional order below."
+        : "We are putting the lifting order together, and it will be published in the next few days. We will email you as soon as it is ready."],
+      ...(o.link ? [["button2", "See the provisional lifting order", o.link] as Block] : []),
+      ...RULES_AND_KIT,
+    ],
+  };
+}
+// Internal: what the automatic emails did.
+export function liftingSharedNotification(o: { competition: string; kind: "provisional" | "final"; sent: number; failed: number; link: string }): EmailSpec {
+  return { internal: true, preheader: `The ${o.kind} lifting order was emailed to ${o.sent} ${o.sent === 1 ? "lifter" : "lifters"}.`, blocks: [
+    ["h1", o.kind === "final" ? "Final lifting order sent" : "Lifting order sent"],
+    ["p", `The ${o.kind} lifting order for ${b(o.competition)} was emailed to <b>${o.sent} ${o.sent === 1 ? "lifter" : "lifters"}</b>${o.failed ? `, and ${o.failed} could not be sent` : ""}.`],
+    ["button", "See the lifting order", o.link]] };
+}
+export function entriesClosedNotification(o: { competition: string; sent: number; failed: number; orderPublished: boolean; deskUrl?: string }): EmailSpec {
+  return { internal: true, preheader: `The entries closed email went to ${o.sent} ${o.sent === 1 ? "lifter" : "lifters"}.`, blocks: [
+    ["h1", "Entries closed email sent"],
+    ["p", `Entries for ${b(o.competition)} have closed. The "entries are now closed" email was sent to <b>${o.sent} ${o.sent === 1 ? "lifter" : "lifters"}</b>${o.failed ? `, and ${o.failed} could not be sent` : ""}.`],
+    ["note", o.orderPublished ? "A provisional lifting order is published, so the email linked to it. When the final order is ready, use <b>Finalise lifting order</b> on the lifting order page and lifters are emailed."
+      : "No lifting order is published yet, so the email said it will follow in the next few days. When it is ready, use <b>Finalise lifting order</b> on the lifting order page and lifters are emailed.", "info"],
+    ...note(o, "Open the lifting order")] };
+}
+export function rotaSharedNotification(o: { competition: string; sent: number; failed: number; link: string }): EmailSpec {
+  return { internal: true, preheader: `The rota was emailed to ${o.sent} ${o.sent === 1 ? "volunteer" : "volunteers"}.`, blocks: [
+    ["h1", "Rota published and emailed"],
+    ["p", `The rota for ${b(o.competition)} was emailed to <b>${o.sent} ${o.sent === 1 ? "volunteer" : "volunteers"}</b>${o.failed ? `, and ${o.failed} could not be sent` : ""}.`],
+    ["button", "See the rota", o.link]] };
 }
 
 // ---- OpenIPF -------------------------------------------------------------------------------------------------------------
@@ -257,8 +556,9 @@ if (typeof Deno !== "undefined") {
     const H = { apikey: svc, authorization: `Bearer ${svc}`, "content-type": "application/json" };
     const rpc = (fn: string, args: Record<string, unknown>) => fetch(`${url}/rest/v1/rpc/${fn}`, { method: "POST", headers: H, body: JSON.stringify(args) });
     const from = Deno.env.get("MAIL_FROM") ?? "YNEPF <onboarding@resend.dev>", copy = Deno.env.get("NOTIFY_TO") ?? "competitions@ynepf.co.uk";
-    const send = async (to: string, subject: string, text: string): Promise<boolean> => {
-      const r = await fetch("https://api.resend.com/emails", { method: "POST", headers: { authorization: `Bearer ${Deno.env.get("RESEND_API_KEY")}`, "content-type": "application/json" }, body: JSON.stringify({ from, to: [to], reply_to: copy, subject, text }) });
+    const send = async (to: string, subject: string, spec: EmailSpec): Promise<boolean> => {
+      const { html, text } = renderEmail({ ...spec, title: subject, siteUrl });
+      const r = await fetch("https://api.resend.com/emails", { method: "POST", headers: { authorization: `Bearer ${Deno.env.get("RESEND_API_KEY")}`, "content-type": "application/json" }, body: JSON.stringify({ from, to: [to], reply_to: copy, subject, html, text }) });
       if (!r.ok) console.error("Resend failed", r.status);
       return r.ok;
     };
@@ -356,7 +656,7 @@ if (typeof Deno !== "undefined") {
       const listRes = await rpc("waitlist_competitions", {});
       let ids: string[] = await listRes.json().catch(() => []);
       if (body.competition_id) ids = ids.filter((i) => i === body.competition_id);
-      const done = { offers: 0, reminders: 0, expired: 0, failed: 0, priority: 0, openipf: 0 };
+      const done = { offers: 0, reminders: 0, expired: 0, failed: 0, priority: 0, openipf: 0, closed: 0 };
       for (const id of ids) {
         const c = await comp(id);
         if (!c) continue;
@@ -375,7 +675,7 @@ if (typeof Deno !== "undefined") {
           if (!mk.ok) { console.error("offer not made", await mk.text()); continue; }
           const expiresAt = String(await mk.json());
           const sent = await send(n.email, `A place has come up: ${c.name}`, offerEmail({ ...who(n.name), link: offerLink(siteUrl, c.slug, tok), expiresAt }));
-          if (sent) { done.offers++; await send(copy, `Offered a place: ${n.name} (${c.name})`, `A place in ${c.name} was offered to ${n.name} (${n.email}) from the waiting list. They have until ${when(expiresAt)}.`); }
+          if (sent) { done.offers++; await send(copy, `Offered a place: ${n.name} (${c.name})`, offeredNotification({ name: n.name, email: n.email, competition: c.name, expiresAt })); }
           else { done.failed++; await rpc("waitlist_unoffer", { wid: n.waiting_id }); }   // keep their place in the queue; try again next time
         }
       }
@@ -388,6 +688,24 @@ if (typeof Deno !== "undefined") {
           const people: { id: string; email: string; name: string }[] = await (await rpc("priority_pending", { c: id })).json().catch(() => []);
           const r = await sendPriority(c, Array.isArray(people) ? people : [], false);
           done.priority += r.sent; done.failed += r.failed;
+        }
+      }
+      // Entries have closed: everyone entered is emailed once (and the entries team gets a note). It links to the provisional lifting order if there is one.
+      if (!body.competition_id) {
+        const closedIds: string[] = await (await rpc("entries_closed_pending", {})).json().catch(() => []);
+        for (const id of Array.isArray(closedIds) ? closedIds : []) {
+          const c = await comp(id); if (!c) continue;
+          const info = await (await rpc("entries_closed_info", { c: id })).json().catch(() => null) as { order_published: boolean; people: { email: string; name: string }[] } | null;
+          if (!info) continue;
+          const link = info.order_published ? `${siteUrl}/lifting/?c=${encodeURIComponent(c.slug || c.id)}` : undefined;
+          let sent = 0, failed = 0;
+          for (const p of info.people ?? []) {
+            const ok = await send(p.email, `Entries are now closed: ${c.name}`, entriesClosedEmail({ name: p.name, competition: c.name, date: dateText(c.start_date), entriesEmail: copy, link }));
+            if (ok) sent++; else failed++;
+          }
+          if (sent || !(info.people ?? []).length) await rpc("entries_closed_mark", { c: id });      // marked once anyone has been emailed, so nobody gets it twice
+          if (sent || failed) await send(copy, `Entries closed email sent: ${c.name}`, entriesClosedNotification({ competition: c.name, sent, failed, orderPublished: info.order_published, deskUrl: `${siteUrl}/admin/#competitions/${c.id}` }));
+          done.closed += sent; done.failed += failed;
         }
       }
       if (!body.competition_id) {
@@ -495,7 +813,8 @@ if (typeof Deno !== "undefined") {
       return reply(200, { ok: true, code: out.code, pounds, points: out.points, competition: out.competition, available_after: out.available_after, slug: out.slug });
     }
 
-    // ---- the entries team shares the published lifting order with everyone in it ------------------------------------
+    // ---- the lifting order is published (provisional) or marked final: email the lifters in it ---------------------------------------
+    // The editor calls this after it has published the order. Provisional is only sent while entries are open, and final once it has been marked final.
     if (action === "share_lifting_order") {
       const token = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
       let allowed = false;
@@ -506,10 +825,11 @@ if (typeof Deno !== "undefined") {
       if (!allowed) return reply(401, { error: "not_allowed" });
       const c = await comp(String(body.competition_id ?? ""));
       if (!c) return reply(404, { error: "not_found" });
-      const info = await (await rpc("lifting_order_share_info", { c: c.id })).json().catch(() => null) as { published: boolean; closed: boolean; people: { email: string; name: string }[] } | null;
+      const info = await (await rpc("lifting_order_share_info", { c: c.id })).json().catch(() => null) as { published: boolean; closed: boolean; final: boolean; people: { email: string; name: string }[] } | null;
       if (!info) return reply(404, { error: "not_found" });
       if (!info.published) return reply(409, { error: "not_published" });
-      const kind = info.closed ? "final" : "provisional";
+      const kind = info.final ? "final" : "provisional";
+      if (kind === "provisional" && info.closed) return reply(409, { error: "closed" });         // after entries close, the only lifting order email is the final one
       const link = `${siteUrl}/lifting/?c=${encodeURIComponent(c.slug || c.id)}`;
       let sent = 0, failed = 0;
       for (const p of info.people ?? []) {
@@ -517,8 +837,34 @@ if (typeof Deno !== "undefined") {
         if (ok) sent++; else failed++;
       }
       if (sent) await rpc("lifting_order_mark_shared", { c: c.id, kind, n: sent });
-      await send(copy, `Lifting order shared: ${c.name}`, `The ${kind} lifting order for ${c.name} was emailed to ${sent} ${sent === 1 ? "lifter" : "lifters"}${failed ? `, and ${failed} could not be sent` : ""}. Link: ${link}`);
+      await send(copy, `Lifting order shared: ${c.name}`, liftingSharedNotification({ competition: c.name, kind, sent, failed, link }));
       return reply(200, { ok: true, kind, sent, failed });
+    }
+
+    // ---- the rota is published: each volunteer with a role is told what they are doing (once; publishing again does not email again) ----
+    if (action === "rota_share") {
+      const token = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
+      let allowed = false;
+      if (token && token !== anon) {
+        const who = await fetch(`${url}/rest/v1/rpc/is_entries`, { method: "POST", headers: { apikey: anon!, authorization: `Bearer ${token}`, "content-type": "application/json" }, body: "{}" });
+        allowed = who.ok && (await who.json()) === true;
+      }
+      if (!allowed) return reply(401, { error: "not_allowed" });
+      const c = await comp(String(body.competition_id ?? ""));
+      if (!c) return reply(404, { error: "not_found" });
+      const info = await (await rpc("rota_share_info", { c: c.id })).json().catch(() => null) as { published: boolean; emailed_at: string | null; people: { email: string; name: string; roles: { session: string; when: string; role: string }[] }[] } | null;
+      if (!info) return reply(404, { error: "not_found" });
+      if (!info.published) return reply(409, { error: "not_published" });
+      if (info.emailed_at) return reply(200, { ok: true, already: true, sent: 0, failed: 0 });
+      const link = rotaLink(siteUrl, c.slug);
+      let sent = 0, failed = 0;
+      for (const p of info.people ?? []) {
+        const ok = await send(p.email, `The rota is published: ${c.name}`, rotaEmail({ name: p.name, competition: c.name, date: dateText(c.start_date), entriesEmail: copy, roles: p.roles, link }));
+        if (ok) sent++; else failed++;
+      }
+      if (sent || !(info.people ?? []).length) await rpc("rota_mark_emailed", { c: c.id, n: sent });
+      if (sent || failed) await send(copy, `Rota published: ${c.name}`, rotaSharedNotification({ competition: c.name, sent, failed, link }));
+      return reply(200, { ok: true, sent, failed });
     }
 
     return reply(400, { error: "bad_request" });

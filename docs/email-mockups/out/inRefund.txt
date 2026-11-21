@@ -1,0 +1,14 @@
+Entry cancelled and refunded
+
+Ed refunded £40.00 to Sam Taylor for their entry in NESC Open 2027.
+
+Reason: Withdrawn at their request
+The entry is now: Cancelled, and the place is free
+Email: sam@example.com
+Places taken: 40 of 96
+
+Stripe keeps its processing fee on a refund.
+
+Open the entries desk: https://www.ynepf.co.uk/admin/#competitions/abc/entries
+
+An automatic note from the YNEPF website, sent to the competitions inbox.

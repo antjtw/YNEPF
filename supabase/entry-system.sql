@@ -631,7 +631,8 @@ begin
   end loop;
 end $$;
 -- Publish or unpublish the lifting order. Published: the calendar's "View entries" link becomes "View lifting order" and the order is
--- public (without lot numbers). Provisional until entry closes, final after. Entries team only.
+-- public (without lot numbers). It is provisional until the entries team marks it final. Entries team only.
+alter table public.lifting_orders add column if not exists final_at timestamptz;       -- set when the entries team marks the order final (only possible once entries have closed)
 create or replace function public.lifting_order_publish(c uuid, publish boolean) returns text
 language plpgsql security definer set search_path = public
 as $$
@@ -643,8 +644,8 @@ begin
                    join public.lo_sessions s on s.id = f.session_id where s.competition_id = c) then
       raise exception 'invalid:empty_order';
     end if;
-    select case when co.entry_closes is null or co.entry_closes > now() then 'provisional' else 'final' end into v_as
-      from public.competitions co where co.id = c;
+    -- Provisional until the entries team marks it final (lifting_order_finalise), which keeps it final if it is unpublished and published again.
+    select case when lo.final_at is not null then 'final' else 'provisional' end into v_as from public.lifting_orders lo where lo.competition_id = c;
     update public.lifting_orders set status = 'published', published_as = coalesce(v_as, 'provisional'), published_at = now() where competition_id = c;
     return coalesce(v_as, 'provisional');
   else
@@ -709,6 +710,7 @@ as $$
   select jsonb_build_object(
     'published', lo.status = 'published',
     'closed', (co.entries_closed_manually or (co.entry_closes is not null and co.entry_closes <= now())),
+    'final', lo.final_at is not null,
     'people', coalesce((
       select jsonb_agg(jsonb_build_object('email', g.email, 'name', g.names) order by g.email)
       from (select lower(e.email) as email, string_agg(distinct e.full_name, ' and ') as names
@@ -2841,3 +2843,86 @@ on conflict (name_key) do nothing;
 update public.universities set name = 'Leeds University' where name_key = 'university of leeds' and not exists (select 1 from public.universities where name_key = 'leeds university');       -- the name lifters have used in past years
 -- (An earlier version of this file seeded "Aston University" by mistake: it was meant to be Askham Bryan College, York.)
 update public.universities set name = 'Askham Bryan College' where name_key = 'aston university' and not exists (select 1 from public.universities where name_key = 'askham bryan college');
+
+-- ---------------------------------------------------------------------------
+-- 25. Emails when the lifting order is published or finalised, when entries close, and when the rota is published
+-- ---------------------------------------------------------------------------
+-- Lifting order: publishing while entries are open emails the provisional order (the entries team chooses). Once entries have closed, the entries
+-- team marks the order final, which publishes it if it is not already and emails the final order. This function is the "mark final" step.
+create or replace function public.lifting_order_finalise(c uuid) returns text
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if not public.is_entries() then raise exception 'forbidden'; end if;
+  if not exists (select 1 from public.competitions co where co.id = c and (co.entries_closed_manually or (co.entry_closes is not null and co.entry_closes <= now()))) then
+    raise exception 'invalid:not_closed';
+  end if;
+  if not exists (select 1 from public.lo_assignments a join public.lo_flights f on f.id = a.flight_id
+                 join public.lo_sessions s on s.id = f.session_id where s.competition_id = c) then
+    raise exception 'invalid:empty_order';
+  end if;
+  update public.lifting_orders set status = 'published', published_as = 'final', published_at = coalesce(published_at, now()), final_at = coalesce(final_at, now()) where competition_id = c;
+  return 'final';
+end $$;
+revoke all on function public.lifting_order_finalise(uuid) from public, anon;
+grant execute on function public.lifting_order_finalise(uuid) to authenticated;
+
+-- Entries closed: everyone entered is emailed once, automatically (by the five-minute check). The first time this runs, competitions that have
+-- already closed are marked as done, so nobody is emailed about an old closure.
+do $$ begin
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'competitions' and column_name = 'entries_closed_emailed_at') then
+    alter table public.competitions add column entries_closed_emailed_at timestamptz;
+    update public.competitions set entries_closed_emailed_at = now() where entries_closed_manually or (entry_closes is not null and entry_closes <= now());
+  end if;
+end $$;
+create or replace function public.entries_closed_pending() returns setof uuid
+language sql stable security definer set search_path = public
+as $$
+  select co.id from public.competitions co
+   where co.entries_closed_emailed_at is null and co.entry_method = 'yne' and co.start_date >= current_date
+     and (co.entries_closed_manually or (co.entry_closes is not null and co.entry_closes <= now()))
+     and exists (select 1 from public.entries e where e.competition_id = co.id and e.status in ('paid', 'comped'));
+$$;
+create or replace function public.entries_closed_info(c uuid) returns jsonb
+language sql stable security definer set search_path = public
+as $$
+  select jsonb_build_object(
+    'order_published', coalesce((select lo.status = 'published' from public.lifting_orders lo where lo.competition_id = c), false),
+    'people', coalesce((select jsonb_agg(jsonb_build_object('email', g.email, 'name', g.names) order by g.email)
+      from (select lower(e.email) as email, string_agg(distinct e.full_name, ' and ') as names
+              from public.entries e where e.competition_id = c and e.status in ('paid', 'comped') and coalesce(e.email, '') <> '' group by lower(e.email)) g), '[]'::jsonb));
+$$;
+create or replace function public.entries_closed_mark(c uuid) returns void
+language sql security definer set search_path = public
+as $$ update public.competitions set entries_closed_emailed_at = now() where id = c; $$;
+
+-- Rota: publishing emails each volunteer who has a role, once. Unpublishing and publishing again does not email again.
+alter table public.vol_rota add column if not exists emailed_at timestamptz;
+alter table public.vol_rota add column if not exists emailed_count integer;
+create or replace function public.rota_share_info(c uuid) returns jsonb
+language sql stable security definer set search_path = public
+as $$
+  select jsonb_build_object(
+    'published', r.status = 'published', 'emailed_at', r.emailed_at,
+    'people', coalesce((select jsonb_agg(jsonb_build_object('email', g.email, 'name', g.name, 'roles', g.roles) order by g.email)
+      from (select lower(p.email) as email, max(nullif(p.person_name, '')) as name,
+                   jsonb_agg(jsonb_build_object('session', s.label, 'when', s.when_text, 'role', ro.name) order by s.sort_order, ro.sort_order) as roles
+              from public.vol_places p
+              join public.vol_sessions s on s.id = p.vol_session_id
+              join public.vol_roles ro on ro.id = p.role_id
+             where s.competition_id = c and coalesce(p.email, '') <> '' and p.status = 'planned'
+             group by lower(p.email)) g), '[]'::jsonb))
+  from public.vol_rota r where r.competition_id = c;
+$$;
+create or replace function public.rota_mark_emailed(c uuid, n integer) returns void
+language sql security definer set search_path = public
+as $$ update public.vol_rota set emailed_at = now(), emailed_count = n where competition_id = c; $$;
+
+revoke all on function public.entries_closed_pending(), public.entries_closed_info(uuid), public.entries_closed_mark(uuid),
+  public.rota_share_info(uuid), public.rota_mark_emailed(uuid, integer) from public, anon, authenticated;
+do $$ begin
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    grant execute on function public.entries_closed_pending(), public.entries_closed_info(uuid), public.entries_closed_mark(uuid),
+      public.rota_share_info(uuid), public.rota_mark_emailed(uuid, integer) to service_role;
+  end if;
+end $$;

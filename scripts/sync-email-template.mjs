@@ -1,0 +1,28 @@
+// Copies the shared email code into every Edge Function that sends email, between marker comments.
+// The functions are pasted into Supabase one at a time and cannot import each other, so this keeps the copies identical.
+//   supabase/email/template.ts      -> every function that sends email (the layout, buttons, and the HTML + plain text renderer)
+//   supabase/email/entry-emails.ts  -> entry-checkout, stripe-webhook, entry-refund (confirmation, refund and "new entry" emails)
+// Run after editing either file:  node scripts/sync-email-template.mjs      (add --check to only test that the copies match)
+import fs from "node:fs";
+const root = new URL("../supabase/", import.meta.url);
+const fn = (n) => new URL(`functions/${n}/index.ts`, root);
+const regions = [
+  { name: "email template", from: "email/template.ts", to: ["waitlist", "stripe-webhook", "entry-checkout", "entry-refund", "send-contact"] },
+  { name: "entry emails", from: "email/entry-emails.ts", to: ["stripe-webhook", "entry-checkout", "entry-refund"] },
+];
+const check = process.argv.includes("--check");
+let bad = 0;
+for (const r of regions) {
+  const START = `// ==== ${r.name}: copied from supabase/${r.from} by scripts/sync-email-template.mjs. Do not edit between these markers. ====`;
+  const END = `// ==== end of ${r.name} ====`;
+  const code = fs.readFileSync(new URL(r.from, root), "utf8").replace(/^(\/\/.*\n)+\n?/, "").trim();
+  for (const t of r.to) {
+    const file = fn(t), src = fs.readFileSync(file, "utf8");
+    const a = src.indexOf(START), b = src.indexOf(END);
+    if (a < 0 || b < 0) { console.error(`markers for "${r.name}" missing in ${t}`); bad++; continue; }
+    const next = src.slice(0, a) + START + "\n" + code + "\n" + src.slice(b);
+    if (next !== src) { if (check) { console.error(`out of date: ${r.name} in ${t}`); bad++; } else fs.writeFileSync(file, next); }
+  }
+}
+if (bad) process.exit(1);
+console.log(check ? "email code copies are up to date" : "email code copied into the functions");
