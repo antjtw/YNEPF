@@ -1,6 +1,6 @@
 # YNEPF emails: research, mockups and plan
 
-Status: **mockups only.** Nothing here changes the emails that are sent today. The Edge Functions are untouched.
+Status: **built into the functions** (see Part 13 of docs/setup-guide.md). The mockups use the real template, so what you preview here is the design that is sent. The sample wording in `samples.mjs` is the original proposal: the live wording is in the function files.
 
 ## What we send today
 
