@@ -345,6 +345,8 @@ create table if not exists public.entries (
 -- (waiting_list is created further down, so the column and its link are added after it exists; see section 7.)
 -- Added for the entries desk: whether the entries team has checked the membership number (for guests), and a private note.
 alter table public.entries add column if not exists membership_checked boolean not null default false;
+-- (An earlier version added club_unlisted here for checking typed-in universities. We never check them, so it is removed.)
+alter table public.entries drop column if exists club_unlisted;
 alter table public.entries add column if not exists discount_code_id uuid references public.discount_codes (id) on delete set null;
 alter table public.entries add column if not exists discount_pence integer not null default 0;
 -- The entry fee before any discount, which is what the host's share is worked out from (the federation absorbs discounts).
