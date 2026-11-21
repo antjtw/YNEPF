@@ -31,6 +31,13 @@ export function button(label, href) {
       <a href="${esc(href)}" target="_blank" style="display:inline-block;padding:14px 28px;font-family:${FONT};font-size:16px;line-height:1.2;font-weight:700;color:#FFFFFF;text-decoration:none;border-radius:10px;">${esc(label)}</a>
     </td></tr></table>`;
 }
+// A quieter button, for a second action next to the main one (outlined, not filled).
+export function buttonSecondary(label, href) {
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px;"><tr>
+    <td align="center" style="border:2px solid ${BRAND.iron};border-radius:10px;">
+      <a class="btn2" href="${esc(href)}" target="_blank" style="display:inline-block;padding:12px 26px;font-family:${FONT};font-size:16px;line-height:1.2;font-weight:700;color:${BRAND.ironDark};text-decoration:none;border-radius:10px;">${esc(label)}</a>
+    </td></tr></table>`;
+}
 // For when the link is also worth showing in full (some people copy and paste it).
 export const linkFallback = (href) => small(`If the button does not work, copy this link into your browser:<br><a class="lnk" href="${esc(href)}" style="color:${BRAND.navy};word-break:break-all;">${esc(href)}</a>`);
 
@@ -86,6 +93,7 @@ export function layout(o) {
     .t-body h1, .t-body strong { color:#FFFFFF !important; }
     .t-muted, .t-muted a { color:#AAB7C4 !important; }
     .lnk { color:#9CC3EA !important; }
+    .btn2 { color:#F2B9A3 !important; }
     .bg-code { background-color:#0E1A26 !important; }
     .t-code { color:#FFFFFF !important; }
     .note-info { background-color:#1F3A52 !important; color:#E6ECF2 !important; border-left-color:#9CC3EA !important; }
@@ -146,11 +154,12 @@ export function render(e) {
     else if (t === "details") { html.push(details(a, { boldLast: c === "boldLast" })); text.push(...a.filter(Boolean).map(([x, y]) => `${x}: ${y}`), ""); }
     else if (t === "button") { html.push(button(a, c)); if (k[3] === "fallback") html.push(linkFallback(c)); text.push(`${a}: ${c}`, ""); }
     else if (t === "code") { html.push(codeBox(a)); text.push(`   ${a}`, ""); }
+    else if (t === "button2") { html.push(buttonSecondary(a, c)); text.push(`${a}: ${String(c).replace(/^mailto:/, "").split("?")[0]}`, ""); }
     else if (t === "note") { html.push(note(a, c)); text.push(plain(a), ""); }
     else if (t === "bullets") { html.push(bullets(a)); text.push(...a.map((x) => `- ${x}`), ""); }
   }
   const siteUrl = e.siteUrl || "https://www.ynepf.co.uk";
   const outHtml = layout({ title: e.subject, preheader: e.preheader, body: html.join("\n"), entriesEmail: e.entriesEmail, siteUrl, why: e.why });
-  const outText = [...text, `Any questions? Just reply to this email${e.entriesEmail ? ` or write to ${e.entriesEmail}` : ""}.`, "", "Thanks,", "The YNEPF team", "", e.why || "", `${BRAND.name} - ${siteUrl.replace(/^https?:\/\//, "")}`].join("\n");
+  const outText = [...text, `Any questions? Just reply to this email${e.entriesEmail ? ` or write to ${e.entriesEmail}` : ""}.`, "", "Thanks,", "The YNEPF team", "", e.why || "", `${BRAND.name} - www.ynepf.co.uk`].join("\n");
   return { subject: e.subject, html: outHtml, text: outText };
 }
