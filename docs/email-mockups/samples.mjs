@@ -325,7 +325,7 @@ export const SAMPLES = {
 
   // ---- the contact form ------------------------------------------------------------------------------------------
   contact: {
-    group: "Contact form", internal: true, label: "Message from the website contact form", to: "info@ynepf.co.uk", subject: "[Website] Can my under-18 son enter?",
+    group: "Contact form", internal: true, tag: "Website message", headerNote: "Sent through the contact form on the website", label: "Message from the website contact form", to: "info@ynepf.co.uk", subject: "[Website] Can my under-18 son enter?",
     preheader: "A message from Pat Jones through the contact form on the website.",
     why: "Sent through the contact form on the YNEPF website. Replying goes to the sender.",
     blocks: [
