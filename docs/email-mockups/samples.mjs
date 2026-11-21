@@ -41,6 +41,31 @@ export const SAMPLES = {
       ...RULES_AND_KIT,
     ],
   },
+  entriesClosed: {
+    label: "Entries closed (automatic, when entries close)", to: "every entered lifter", subject: "Entries are now closed: NESC Open 2027", noQuestions: true, entriesEmail: entries,
+    preheader: "No more changes to entries. The final lifting order will follow in the next few days.",
+    why: "You are getting this email because you are entered in this competition.",
+    blocks: [
+      ["h1", "Entries are now closed"],
+      ["p", `Hi Sam, entries for ${b("NESC Open 2027")} (27 February 2027) have now closed. Thank you for entering.`],
+      ["note", "<b>There can be no more changes to entries, and we cannot offer refunds for dropouts.</b>", "warn"],
+      ["p", "The final lifting order will be published in the next few days, and we will email you as soon as it is ready."],
+      ["button2", "See the provisional lifting order", "https://www.ynepf.co.uk/lifting/?c=nesc-open-2027"],
+      ...RULES_AND_KIT,
+    ],
+  },
+  liftingFinal: {
+    label: "Final lifting order (when the entries team marks it final)", to: "every entered lifter", subject: "The final lifting order: NESC Open 2027", noQuestions: true, entriesEmail: entries,
+    preheader: "The final lifting order is online. Please check your flight and session.",
+    why: "You are getting this email because you are entered in this competition.",
+    blocks: [
+      ["h1", "The final lifting order is here"],
+      ["p", `Hi Sam, the final lifting order for ${b("NESC Open 2027")} (27 February 2027) is now online.`],
+      ["button", "See the final lifting order", "https://www.ynepf.co.uk/lifting/?c=nesc-open-2027"],
+      ["note", "<b>This is the final order.</b> Entries have closed. Please check your flight and session, and reply to this email straight away if anything looks wrong.", "warn"],
+      ...RULES_AND_KIT,
+    ],
+  },
   priority: {
     label: "Priority entry link", to: "a volunteer", subject: "Your priority entry link: NESC Open 2027", entriesEmail: entries,
     preheader: "Enter NESC Open 2027 early, before general entry opens. Your link works once.",

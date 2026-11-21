@@ -33,9 +33,9 @@ This is the current mainstream advice. Sources are vendor blogs and docs rather 
 
 ## The mockups
 
-Run `node docs/email-mockups/build.mjs`, then open `out/index.html`. 26 emails in three groups, each beside its plain text version:
+Run `node docs/email-mockups/build.mjs`, then open `out/index.html`. 28 emails in three groups, each beside its plain text version:
 
-- **Lifters and volunteers (14):** entry confirmation, waiting list (joined, offer, reminder, expired), priority link, volunteer sign-up, volunteer link, one-time points code, points discount, lifting order, cancelled or refunded, part refund, automatic refund, and the new **rota published** email.
+- **Lifters and volunteers (16):** entry confirmation, waiting list (joined, offer, reminder, expired), priority link, volunteer sign-up, volunteer link, one-time points code, points discount, lifting order (provisional), entries closed, final lifting order, cancelled or refunded, part refund, automatic refund, and the new **rota published** email.
 - **Internal notes to the competitions inbox (11):** new entry, discount used, refund, priority links sent, place offered, new volunteer, points spent, code given back, committee points, lifting order shared. Same branding with an "Internal" tag, and a button straight to the right page in the editor.
 - **Contact form (1):** the visitor's message in a quoted box with a "Reply" button.
 
