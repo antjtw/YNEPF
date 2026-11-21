@@ -66,6 +66,9 @@ export function note(html, kind = "info") {
   return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 24px;"><tr>
     <td class="note-${kind}" bgcolor="${c[0]}" style="background-color:${c[0]};border-left:4px solid ${c[1]};border-radius:6px;padding:14px 16px;font-family:${FONT};font-size:15px;line-height:1.55;color:${c[2]};">${html}</td></tr></table>`;
 }
+// A message someone else wrote, kept apart from our own words (used for contact form messages).
+export const quote = (t) => `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 24px;"><tr>
+  <td class="bg-code" bgcolor="${BRAND.page}" style="background-color:${BRAND.page};border-left:4px solid ${BRAND.line};border-radius:6px;padding:14px 16px;font-family:${FONT};font-size:16px;line-height:1.6;color:${BRAND.text};white-space:pre-wrap;">${esc(t)}</td></tr></table>`;
 export const bullets = (items) => `<ul style="margin:0 0 16px;padding:0 0 0 20px;font-family:${FONT};font-size:16px;line-height:1.6;color:${BRAND.text};">${items.map((i) => `<li style="margin:0 0 6px;">${esc(i)}</li>`).join("")}</ul>`;
 
 // ---- the full email ----------------------------------------------------------------------------------
@@ -116,8 +119,8 @@ export function layout(o) {
     <tr><td bgcolor="${BRAND.navy}" style="background-color:${BRAND.navy};border-radius:14px 14px 0 0;border-bottom:4px solid ${BRAND.gold};padding:22px 32px;" class="pad">
       <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
         <td valign="middle" style="padding-right:14px;"><img src="${site}/assets/img/email-logo.png" width="44" height="44" alt="" style="display:block;width:44px;height:44px;"></td>
-        <td valign="middle" style="font-family:${FONT};color:#FFFFFF;"><div style="font-size:18px;line-height:1.2;font-weight:700;color:#FFFFFF;">YNEPF</div>
-          <div style="font-size:12px;line-height:1.4;color:#C9D4E0;">${esc(BRAND.name)}</div></td>
+        <td valign="middle" style="font-family:${FONT};color:#FFFFFF;"><div style="font-size:18px;line-height:1.2;font-weight:700;color:#FFFFFF;">YNEPF${o.internal ? ' <span style="display:inline-block;margin-left:8px;padding:2px 8px;border-radius:999px;background-color:#D6B778;color:#07121A;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;vertical-align:2px;">Internal</span>' : ""}</div>
+          <div style="font-size:12px;line-height:1.4;color:#C9D4E0;">${o.internal ? "A note from the website for the entries team" : esc(BRAND.name)}</div></td>
       </tr></table>
     </td></tr>
     <!-- content -->
@@ -125,14 +128,14 @@ export function layout(o) {
       ${o.body}
     </td></tr>
     <!-- sign off -->
-    <tr><td class="bg-card pad t-body" bgcolor="#FFFFFF" style="background-color:#FFFFFF;padding:0 32px 32px;border-radius:0 0 14px 14px;">
-      ${o.noQuestions ? "" : p("Any questions? Just reply to this email" + (o.entriesEmail ? ` or write to <a class="lnk" href="mailto:${esc(o.entriesEmail)}" style="color:${BRAND.navy};font-weight:600;">${esc(o.entriesEmail)}</a>` : "") + ".")}
-      <p style="margin:0;font-family:${FONT};font-size:16px;line-height:1.6;color:${BRAND.text};">Thanks,<br><strong style="color:${BRAND.navy};">The YNEPF team</strong></p>
+    <tr><td class="bg-card pad t-body" bgcolor="#FFFFFF" style="background-color:#FFFFFF;padding:${o.internal ? "0 32px 8px" : "0 32px 32px"};border-radius:0 0 14px 14px;">
+      ${o.internal ? "" : o.noQuestions ? "" : p("Any questions? Just reply to this email" + (o.entriesEmail ? ` or write to <a class="lnk" href="mailto:${esc(o.entriesEmail)}" style="color:${BRAND.navy};font-weight:600;">${esc(o.entriesEmail)}</a>` : "") + ".")}
+      ${o.internal ? "" : `<p style="margin:0;font-family:${FONT};font-size:16px;line-height:1.6;color:${BRAND.text};">Thanks,<br><strong style="color:${BRAND.navy};">The YNEPF team</strong></p>`}
     </td></tr>
     <!-- footer -->
     <tr><td class="pad" style="padding:20px 32px 0;font-family:${FONT};font-size:12px;line-height:1.6;color:${BRAND.muted};text-align:center;">
-      <span class="t-muted" style="color:${BRAND.muted};">${esc(o.why || "You are getting this email because of something you did on our website.")}<br>
-      ${esc(BRAND.name)} &middot; <a href="${site}" style="color:${BRAND.muted};">www.ynepf.co.uk</a> &middot; <a href="${site}/privacy" style="color:${BRAND.muted};">Privacy</a></span>
+      <span class="t-muted" style="color:${BRAND.muted};">${esc(o.why || (o.internal ? "An automatic note from the YNEPF website, sent to the competitions inbox." : "You are getting this email because of something you did on our website."))}<br>
+      ${esc(BRAND.name)} &middot; <a href="${site}" style="color:${BRAND.muted};">www.ynepf.co.uk</a>${o.internal ? "" : ` &middot; <a href="${site}/privacy" style="color:${BRAND.muted};">Privacy</a>`}</span>
     </td></tr>
   </table>
 </td></tr></table>
@@ -160,11 +163,12 @@ export function render(e) {
     else if (t === "button") { html.push(button(a, c)); if (k[3] === "fallback") html.push(linkFallback(c)); text.push(`${a}: ${c}`, ""); }
     else if (t === "code") { html.push(codeBox(a)); text.push(`   ${a}`, ""); }
     else if (t === "button2") { html.push(buttonSecondary(a, c)); text.push(`${a}: ${String(c).replace(/^mailto:/, "").split("?")[0]}`, ""); }
+    else if (t === "quote") { html.push(quote(a)); text.push(`> ${String(a).replace(/\n/g, "\n> ")}`, ""); }
     else if (t === "note") { html.push(note(a, c)); text.push(plain(a), ""); }
     else if (t === "bullets") { html.push(bullets(a)); text.push(...a.map((x) => `- ${x}`), ""); }
   }
   const siteUrl = e.siteUrl || "https://www.ynepf.co.uk";
-  const outHtml = layout({ title: e.subject, preheader: e.preheader, body: html.join("\n"), entriesEmail: e.entriesEmail, siteUrl, why: e.why, noQuestions: e.noQuestions });
-  const outText = [...text, ...(e.noQuestions ? [] : [`Any questions? Just reply to this email${e.entriesEmail ? ` or write to ${e.entriesEmail}` : ""}.`, ""]), "Thanks,", "The YNEPF team", "", e.why || "", `${BRAND.name} - www.ynepf.co.uk`].join("\n");
+  const outHtml = layout({ title: e.subject, preheader: e.preheader, body: html.join("\n"), entriesEmail: e.entriesEmail, siteUrl, why: e.why, noQuestions: e.noQuestions, internal: e.internal });
+  const outText = e.internal ? [...text, e.why || "An automatic note from the YNEPF website, sent to the competitions inbox."].join("\n") : [...text, ...(e.noQuestions ? [] : [`Any questions? Just reply to this email${e.entriesEmail ? ` or write to ${e.entriesEmail}` : ""}.`, ""]), "Thanks,", "The YNEPF team", "", e.why || "", `${BRAND.name} - www.ynepf.co.uk`].join("\n");
   return { subject: e.subject, html: outHtml, text: outText };
 }

@@ -1,0 +1,16 @@
+A message from the website
+
+From: Pat Jones
+Email: pat@example.com
+Subject: Can my under-18 son enter?
+
+> Hi,
+> 
+> My son is 16 and has been training for a year. Can he enter the NESC Open, and do I need to be there on the day?
+> 
+> Thanks,
+> Pat
+
+Reply to Pat: mailto:pat@example.com?subject=Re%3A%20Can%20my%20under-18%20son%20enter%3F
+
+Sent through the contact form on the YNEPF website. Replying goes to the sender.

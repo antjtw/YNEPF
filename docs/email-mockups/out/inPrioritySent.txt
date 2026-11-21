@@ -1,0 +1,13 @@
+Priority links sent
+
+Priority entry links for NESC Open 2027 have been emailed to 3 people:
+
+- Alex Morgan <alex@example.com>
+- Priya Shah <priya@example.com>
+- Tom Reid <tom@example.com>
+
+Could not be sent to 1 (they will be tried again at the next check): Jo Blake 
+
+See who has used a link: https://www.ynepf.co.uk/admin/#competitions/abc/discounts
+
+An automatic note from the YNEPF website, sent to the competitions inbox.

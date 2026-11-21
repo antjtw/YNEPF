@@ -33,14 +33,13 @@ This is the current mainstream advice. Sources are vendor blogs and docs rather 
 
 ## The mockups
 
-Open `out/index.html` (after `node docs/email-mockups/build.mjs`). Six emails, each shown beside its plain text version:
+Run `node docs/email-mockups/build.mjs`, then open `out/index.html`. 26 emails in three groups, each beside its plain text version:
 
-1. Entry confirmation
-2. Priority entry link
-3. Waiting list offer
-4. Entry cancelled and refunded
-5. Volunteer points discount
-6. One-time points code
+- **Lifters and volunteers (14):** entry confirmation, waiting list (joined, offer, reminder, expired), priority link, volunteer sign-up, volunteer link, one-time points code, points discount, lifting order, cancelled or refunded, part refund, automatic refund, and the new **rota published** email.
+- **Internal notes to the competitions inbox (11):** new entry, discount used, refund, priority links sent, place offered, new volunteer, points spent, code given back, committee points, lifting order shared. Same branding with an "Internal" tag, and a button straight to the right page in the editor.
+- **Contact form (1):** the visitor's message in a quoted box with a "Reply" button.
+
+The confirmation and lifting order emails also carry a short "Before competition day" reminder about the IPF Technical Rules and approved kit.
 
 What changed in each:
 
