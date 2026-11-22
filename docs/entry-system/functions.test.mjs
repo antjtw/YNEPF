@@ -110,6 +110,8 @@ assert(es.validEntry("123e4567-e89b-12d3-a456-426614174000") && !es.validEntry("
   assert.strictEqual(wl.openipfSlug("https://www.openipf.org/u/AgataSitko"), "agatasitko", "profile address -> name");
   assert.strictEqual(wl.openipfSlug(" http://openipf.org/u/agata.sitko-1/?x=1 "), "agata.sitko-1");
   assert.strictEqual(wl.openipfSlug("https://www.openpowerlifting.org/u/agatasitko"), null, "a different site is not accepted");
+  assert.strictEqual(wl.openipfSlug("https://www.openipf.org/u/.."), null, "a profile name of dots cannot steer the lookup to another page");
+  assert.strictEqual(wl.openipfSlug("https://www.openipf.org/u/../api/x"), null, "nor can a path");
   assert.strictEqual(wl.openipfSlug("https://www.openipf.org/meet/ipf/2503"), null, "a meet page is not a lifter");
   const rows = wl.parseCsv(csv);
   assert(rows.length === 44 && rows[0].Name === "Agata Sitko" && rows[0].TotalKg === "612.5" && rows[0].Goodlift === "133.37", "the CSV is read: " + rows.length);

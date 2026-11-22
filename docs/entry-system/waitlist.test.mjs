@@ -371,6 +371,25 @@ await db.exec("set role authenticated");
 ok(!(await can(`select public.rota_share_info('${LO}')`)) && !(await can(`select public.entries_closed_pending()`)) && !(await can(`select public.entries_closed_info('${LO}')`)), "signed-in users cannot call the email functions (only our server can)");
 await db.exec("reset role");
 
+// security hardening: who can delete a competition, what the public can write, and which functions it can run
+await db.exec(`insert into public.competitions (id,name,start_date,capacity,published,slug,entry_method) values ('99999999-aaaa-4000-8000-000000000001','Deletable','2027-09-01',10,true,'deletable','yne')`);
+await asUser(U.editor, async () => {
+  ok(await can(`update public.competitions set name = 'Renamed by editor' where id = '99999999-aaaa-4000-8000-000000000001'`) && (await q(`select name from public.competitions where id = '99999999-aaaa-4000-8000-000000000001'`))[0].name === "Renamed by editor", "a content editor can still change a competition");
+  await db.query(`delete from public.competitions where id = '99999999-aaaa-4000-8000-000000000001'`).catch(() => {});
+});
+ok((await q(`select count(*)::int n from public.competitions where id = '99999999-aaaa-4000-8000-000000000001'`))[0].n === 1, "but a content editor cannot delete one");
+await asUser(U.entries, async () => { await db.query(`delete from public.competitions where id = '99999999-aaaa-4000-8000-000000000001'`); });
+ok((await q(`select count(*)::int n from public.competitions where id = '99999999-aaaa-4000-8000-000000000001'`))[0].n === 0, "the entries team can");
+await db.exec("set role anon");
+ok(!(await can(`insert into public.site_settings (key, value) values ('x', '1')`)) && !(await can(`update public.site_settings set value = '1'`)) && !(await can(`delete from public.site_settings`)) && !(await can(`truncate public.site_settings`)), "the public has no write access to tables at all");
+ok(!(await can(`select public.audit_row()`)) && !(await can(`select public.handle_new_user()`)) && !(await can(`select public.competition_fee_snapshot()`)), "the public cannot run the trigger functions");
+await db.exec("reset role");
+await db.exec("set role authenticated");
+ok(!(await can(`truncate public.entries`)) && !(await can(`truncate public.payments`)), "signed-in users cannot truncate tables (row security does not stop truncate, so the privilege is removed)");
+await db.exec("reset role");
+const pubFns = (await q(`select p.proname from pg_proc p where p.pronamespace = 'public'::regnamespace and p.prosecdef and has_function_privilege('anon', p.oid, 'execute') order by 1`)).map((r) => r.proname);
+ok(pubFns.join(",") === "can_post,is_admin,is_editor,is_entries,my_role,places_left,places_open,places_taken,points_public_count,points_public_search,volunteer_form", "the only privileged functions the public can run are the known, reviewed ones: " + pubFns.join(", "));
+
 // the entry page asks the database for the time (so a phone with the wrong clock is not told entry is closed)
 await db.exec("set role anon");
 const stime = (await db.query("select public.server_time() t")).rows[0].t;
@@ -510,9 +529,13 @@ const hp = await pe("points_award_helpers", U.entries, { competition_id: VC, row
 ok(hp.awarded === 1 && hp.skipped === 1 && (await bal("hal@x.com")) === 2, "helpers at a franchise competition earn points once: " + JSON.stringify(hp));
 ok((await pe("points_award_helpers", U.entries, { competition_id: VC, rows: [{ name: "Hal Helper", email: "hal@x.com", points: 2 }] })).awarded === 0, "and not twice");
 // the public list is names and points only
+const allNames = (await q(`select full_name from public.vol_people`)).map((r) => r.full_name);
 await db.exec("set role anon");
-const pubPts = (await db.query(`select * from public.points_public_list() order by points desc`)).rows;
-ok(pubPts.length >= 3 && Object.keys(pubPts[0]).sort().join() === "name,points" && !pubPts.some((x) => x.points <= 0), "the public points list shows names and points only, never zero: " + JSON.stringify(pubPts[0]));
+const pubPts = (await db.query(`select * from public.points_public_search($1) order by points desc`, [allNames[0].slice(0, 3)])).rows;
+ok(Object.keys(pubPts[0] || { name: 1, points: 1 }).sort().join() === "name,points" && !pubPts.some((x) => x.points <= 0) && pubPts.length <= 25, "the public points search shows names and points only, never zero: " + JSON.stringify(pubPts[0]));
+ok((await db.query(`select * from public.points_public_search('')`)).rows.length === 0 && (await db.query(`select * from public.points_public_search('ab')`)).rows.length === 0 && (await db.query(`select * from public.points_public_search('%%%')`)).rows.length === 0, "a search needs at least 3 letters, and % or _ are not wildcards: the whole list cannot be pulled in one go");
+ok((await db.query(`select public.points_public_count() n`)).rows[0].n >= 3, "the public can see how many people have points, but not who");
+ok(!(await can(`select * from public.points_public_list()`)), "the old function that listed everyone is gone");
 ok(!(await can(`select public.points_balance('vic@x.com')`)) && !(await can(`select * from public.points_ledger`)), "the public cannot read the ledger or call balances");
 await db.exec("reset role");
 

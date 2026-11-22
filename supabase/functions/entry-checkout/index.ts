@@ -419,7 +419,9 @@ if (typeof Deno !== "undefined") {
     // The form asks "would this code work, and what is the new total?" before it pays.
     if (body.action === "discount") {
       const key = (req.headers.get("x-forwarded-for") ?? "").split(",")[0] + "|" + String(body.email ?? "").toLowerCase();
-      if (!allowTry(key)) return reply(429, { ok: false, message: "Too many tries. Please wait a few minutes and try again." });
+      // Limited three ways, so codes cannot be guessed: per address, per visitor (whatever address they type), and across everyone.
+      const visitor = (req.headers.get("x-forwarded-for") ?? "").split(",")[0];
+      if (!allowTry(key) || !allowTry(visitor + "|discount", Date.now(), 30) || !allowTry("everyone|discount", Date.now(), 300)) return reply(429, { ok: false, message: "Too many tries. Please wait a few minutes and try again." });
       const chk = await fetch(`${url}/rest/v1/rpc/check_discount`, {
         method: "POST", headers: { apikey: svc, authorization: `Bearer ${svc}`, "content-type": "application/json" },
         body: JSON.stringify({ p: { competition_id: body.competition_id, email: body.email, code: body.code, date_of_birth: body.date_of_birth, event: body.event, equipment: body.equipment } }),

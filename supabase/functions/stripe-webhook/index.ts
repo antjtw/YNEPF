@@ -369,6 +369,8 @@ if (typeof Deno !== "undefined") {
           }).then((r) => { if (!r.ok) console.error("Resend failed", r.status); });
         };
 
+        // A safety net, not a block: what Stripe says was paid should equal the price held for this entry. If it does not, say so in the logs.
+        if (state === "paid" && row && typeof session.amount_total === "number" && session.amount_total !== row.price_pence) console.error("PAYMENT AMOUNT MISMATCH for entry", entryId, "stripe", session.amount_total, "entry", row.price_pence);
         if (state === "paid" && row) {
           const xr = await (await db(`entry_addons?entry_id=eq.${entryId}&select=price_pence,addons(name),addon_options(label)`)).json().catch(() => []);
           const extras = (Array.isArray(xr) ? xr : []).map((x: { price_pence: number; addons?: { name: string }; addon_options?: { label: string } | null }) => ({ name: x.addons?.name ?? "Extra", option: x.addon_options?.label, pence: x.price_pence }));

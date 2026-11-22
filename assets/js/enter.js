@@ -555,6 +555,8 @@
   }
 
   // ---- load ------------------------------------------------------------------------------------
+  // Anything that came from the database goes through this before it is placed inside a piece of HTML.
+  function escHtml(t) { return String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
   function stop(headline, html) {
     title.textContent = headline; lede.textContent = ""; app.hidden = true; status.hidden = false; status.innerHTML = html;
     var before = document.getElementById("enter-before"); if (before) before.hidden = true;      // "your place is held for N minutes" means nothing on a page with no form
@@ -616,9 +618,9 @@
           if (missing.length) return stop("Preview needs a bit more set up", "<p>A lifter could not enter yet. Still to do:</p><ul>" + missing.map(function (m) { return "<li>" + m + "</li>"; }).join("") + "</ul>");
         }
         if (!st || !settings || st.entry_method !== "yne")
-          return stop("Enter " + comp.name, "<p>Entries for this competition are not taken on this page." + (comp.entry_url ? " <a href='" + encodeURI(comp.entry_url) + "'>Enter here</a>." : "") + "</p>");
+          return stop("Enter " + comp.name, "<p>Entries for this competition are not taken on this page." + (/^https:\/\//i.test(comp.entry_url || "") ? " <a href=\"" + escHtml(comp.entry_url) + "\" rel=\"noopener\">Enter here</a>." : "") + "</p>");
         var now = nowDate();
-        if (!dryRun && (st.entries_closed_manually || (comp.entry_closes && new Date(comp.entry_closes) <= now))) return stop("Entries are closed", "<p>Entries for " + Y.el("span", null, comp.name).textContent + " are closed.</p>");
+        if (!dryRun && (st.entries_closed_manually || (comp.entry_closes && new Date(comp.entry_closes) <= now))) return stop("Entries are closed", "<p>Entries for " + escHtml(comp.name) + " are closed.</p>");
         var opensAt = comp.entry_opens ? new Date(comp.entry_opens) : null, priority = false;
         if (!dryRun && opensAt && opensAt > now) {
           var priorityFrom = new Date(opensAt.getTime() - (settings.priority_hours || 24) * 3600 * 1000), when = function (d) { return d.toLocaleString("en-GB", { timeZone: Y.TZ, dateStyle: "full", timeStyle: "short" }); };
