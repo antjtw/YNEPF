@@ -52,6 +52,7 @@ const pages = [
   "volunteer.html",
   "rota.html",
   "points.html",
+  "my-entry.html",
   "chairperson.html",
   "rules.html",
   "contact.html",

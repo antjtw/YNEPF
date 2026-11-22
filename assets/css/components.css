@@ -813,3 +813,9 @@ form > p.field-error:not([hidden])::before, #submit-error:not([hidden])::before,
   .contact-aside { margin-top: var(--space-8); }
   .site-footer .grid-column-one-third + .grid-column-one-third { margin-top: var(--space-7); }
 }
+
+/* Manage your entry (/my-entry): the entry laid out as a list of facts */
+.entry-dl { display: grid; grid-template-columns: minmax(8rem, 12rem) 1fr; gap: var(--space-2) var(--space-5); margin: 0 0 var(--space-6); max-width: var(--measure); }
+.entry-dl dt { color: var(--text-muted); }
+.entry-dl dd { margin: 0; overflow-wrap: anywhere; font-weight: 600; }
+@media (max-width: 40rem) { .entry-dl { grid-template-columns: 1fr; gap: 0; } .entry-dl dt { margin-top: var(--space-3); } }
