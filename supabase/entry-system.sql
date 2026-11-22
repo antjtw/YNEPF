@@ -2966,3 +2966,278 @@ create policy "editors read" on public.competitions for select to authenticated 
 create policy "editors add" on public.competitions for insert to authenticated with check (public.is_editor());
 create policy "editors change" on public.competitions for update to authenticated using (public.is_editor()) with check (public.is_editor());
 create policy "entries delete" on public.competitions for delete to authenticated using (public.is_entries());
+
+-- ---------------------------------------------------------------------------
+-- 27. Manage your entry: lifters look at their own entry and ask for changes
+-- ---------------------------------------------------------------------------
+-- A lifter asks for an emailed one-time code (the same pattern as spending volunteer points), then sees their entries. Small things (name, club or
+-- university, Instagram, OpenIPF link, membership number) they change straight away. A different weight class or equipment is a REQUEST the entries
+-- team approves or declines, and so is cancelling. Event, date of birth, sex and anything that touches money stay with an email to the team.
+-- Once entries have closed there are no changes, only a cancellation request (and no refund). Everything is recorded in entry_requests.
+-- All of the lifter functions are called only by the waitlist Edge Function (service role).
+create table if not exists public.entry_login (
+  id uuid primary key default gen_random_uuid(),
+  email text not null check (email = lower(email)),
+  code_hash text not null,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  attempts integer not null default 0,
+  used_at timestamptz
+);
+alter table public.entry_login enable row level security;
+
+create table if not exists public.entry_requests (
+  id uuid primary key default gen_random_uuid(),
+  entry_id uuid not null references public.entries (id) on delete cascade,
+  kind text not null check (kind in ('change', 'cancel', 'update')),                       -- update = a small change applied straight away
+  status text not null default 'pending' check (status in ('pending', 'approved', 'declined', 'withdrawn', 'applied')),
+  changes jsonb not null default '{}'::jsonb,                                                 -- what to apply, for the system
+  before jsonb not null default '{}'::jsonb,                                                  -- "Weight class": "Men's 93 kg" ... in words, for the desk and the history
+  after jsonb not null default '{}'::jsonb,
+  note text not null default '',                                                              -- the lifter's note
+  decline_reason text not null default '',
+  decided_by text not null default '',
+  decided_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create unique index if not exists entry_requests_one_pending on public.entry_requests (entry_id) where status = 'pending';
+create index if not exists entry_requests_entry on public.entry_requests (entry_id, created_at desc);
+alter table public.entry_requests enable row level security;
+drop policy if exists "entries team" on public.entry_requests;
+create policy "entries team" on public.entry_requests for all to authenticated using (public.is_entries()) with check (public.is_entries());
+drop trigger if exists entry_requests_audit on public.entry_requests;
+create trigger entry_requests_audit after insert or update or delete on public.entry_requests for each row execute function public.audit_row();
+
+create or replace function public.entry_login_start(p_email text, th text) returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare v_email text := lower(btrim(coalesce(p_email, ''))); v_name text;
+begin
+  if v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then return jsonb_build_object('ok', false, 'error', 'invalid_email'); end if;
+  if (select count(*) from public.entry_login where email = v_email and created_at > now() - interval '1 hour') >= 5 then return jsonb_build_object('ok', false, 'error', 'rate'); end if;
+  select e.full_name into v_name from public.entries e join public.competitions c on c.id = e.competition_id
+   where e.email = v_email and e.status in ('paid', 'comped') and c.start_date >= current_date order by e.created_at desc limit 1;
+  if v_name is null then return jsonb_build_object('ok', true, 'send', false); end if;       -- the same answer whether or not there is an entry
+  insert into public.entry_login (email, code_hash, expires_at) values (v_email, th, now() + interval '15 minutes');
+  return jsonb_build_object('ok', true, 'send', true, 'name', v_name);
+end $$;
+
+create or replace function public.entry_login_ok(p_email text, th text) returns uuid
+language plpgsql security definer set search_path = public
+as $$
+declare v_id uuid;
+begin
+  select id into v_id from public.entry_login
+   where email = lower(btrim(coalesce(p_email, ''))) and code_hash = th and used_at is null and expires_at > now() and attempts < 5
+   order by created_at desc limit 1;
+  if v_id is null then
+    update public.entry_login set attempts = attempts + 1 where email = lower(btrim(coalesce(p_email, ''))) and used_at is null and expires_at > now();
+  end if;
+  return v_id;
+end $$;
+
+-- "Men's 93 kg" for a weight class.
+create or replace function public.class_text(sex text, label text) returns text
+language sql immutable as $$ select case when sex = 'F' then 'Women''s ' else 'Men''s ' end || label || ' kg' $$;
+-- Can this entry still be changed? Not once entries have closed (the closing date has passed, or the team closed them).
+create or replace function public.entry_changes_open(c uuid) returns boolean
+language sql stable security definer set search_path = public
+as $$ select coalesce(not co.entries_closed_manually and (co.entry_closes is null or co.entry_closes > now()), false) from public.competitions co where co.id = c $$;
+-- The weight classes this entry may move to: the same sex, and the same age rule as when they entered.
+create or replace function public.entry_allowed_classes(eid uuid) returns table (id uuid, label text, text text)
+language sql stable security definer set search_path = public
+as $$
+  select w.id, w.label, public.class_text(w.sex, w.label) from public.entries e join public.competitions c on c.id = e.competition_id
+  join public.weight_classes w on w.sex = e.sex and w.active and (w.min_age_category = '' or w.min_age_category = public.age_category_on(e.date_of_birth, c.start_date))
+  where e.id = eid order by w.sort_order
+$$;
+
+-- Everything the page shows: their upcoming entries, what they can change, and any requests.
+create or replace function public.entry_portal(p_email text, th text) returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare v_email text := lower(btrim(coalesce(p_email, '')));
+begin
+  if public.entry_login_ok(v_email, th) is null then return jsonb_build_object('ok', false, 'error', 'code'); end if;
+  return jsonb_build_object('ok', true,
+    'clubs', coalesce((select jsonb_agg(name order by name) from public.clubs where active), '[]'::jsonb),
+    'universities', coalesce((select jsonb_agg(name order by name) from public.universities where active), '[]'::jsonb),
+    'entries', coalesce((select jsonb_agg(jsonb_build_object(
+        'entry_id', e.id, 'status', e.status, 'name', e.full_name, 'event', e.event, 'equipment', e.equipment, 'sex', e.sex,
+        'weight_class_id', e.weight_class_id, 'weight_class', case when w.id is null then '' else public.class_text(w.sex, w.label) end,
+        'club', e.club, 'instagram', e.instagram, 'openipf_url', e.openipf_url, 'bp_number', e.bp_number, 'price_pence', e.price_pence,
+        'competition', jsonb_build_object('name', c.name, 'slug', c.slug, 'start_date', c.start_date, 'entry_closes', c.entry_closes, 'is_university', c.is_university),
+        'open', public.entry_changes_open(c.id),
+        'equipment_options', coalesce((select to_jsonb(s.equipment) from public.entry_settings s where s.competition_id = c.id), '["classic","equipped"]'::jsonb),
+        'classes', coalesce((select jsonb_agg(jsonb_build_object('id', a.id, 'text', a.text)) from public.entry_allowed_classes(e.id) a), '[]'::jsonb),
+        'requests', coalesce((select jsonb_agg(jsonb_build_object('id', r.id, 'kind', r.kind, 'status', r.status, 'before', r.before, 'after', r.after, 'changes', r.changes,
+            'note', r.note, 'decline_reason', r.decline_reason, 'created_at', r.created_at, 'decided_at', r.decided_at) order by r.created_at desc)
+          from (select * from public.entry_requests x where x.entry_id = e.id and x.kind <> 'update' order by x.created_at desc limit 5) r), '[]'::jsonb)
+      ) order by c.start_date, e.created_at)
+      from public.entries e join public.competitions c on c.id = e.competition_id left join public.weight_classes w on w.id = e.weight_class_id
+      where e.email = v_email and e.status in ('paid', 'comped') and c.start_date >= current_date), '[]'::jsonb));
+end $$;
+
+-- Small changes, applied straight away (and recorded).
+create or replace function public.entry_update(p_email text, th text, eid uuid, p jsonb) returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare v_email text := lower(btrim(coalesce(p_email, ''))); e public.entries%rowtype; c public.competitions%rowtype; s public.entry_settings%rowtype;
+  v_name text; v_club text; v_ig text; v_url text; v_bp text; b jsonb := '{}'::jsonb; a jsonb := '{}'::jsonb;
+begin
+  if public.entry_login_ok(v_email, th) is null then return jsonb_build_object('ok', false, 'error', 'code'); end if;
+  select * into e from public.entries where id = eid and email = v_email and status in ('paid', 'comped');
+  if not found then return jsonb_build_object('ok', false, 'error', 'not_found'); end if;
+  select * into c from public.competitions where id = e.competition_id;
+  if not public.entry_changes_open(c.id) then return jsonb_build_object('ok', false, 'error', 'closed'); end if;
+  select * into s from public.entry_settings where competition_id = c.id;
+  if p ? 'full_name' then
+    v_name := btrim(regexp_replace(coalesce(p->>'full_name', ''), '\s+', ' ', 'g'));
+    if length(v_name) < 2 or length(v_name) > 120 then return jsonb_build_object('ok', false, 'error', 'invalid:full_name'); end if;
+    if v_name <> e.full_name then b := b || jsonb_build_object('Name', e.full_name); a := a || jsonb_build_object('Name', v_name); end if;
+  end if;
+  if p ? 'club' then
+    v_club := btrim(coalesce(p->>'club', ''));
+    if lower(v_club) = 'unattached' then v_club := ''; end if;
+    if c.is_university then
+      if v_club = '' or length(v_club) > 120 then return jsonb_build_object('ok', false, 'error', 'invalid:university'); end if;
+      select coalesce((select name from public.universities where name_key = lower(v_club) and active), v_club) into v_club;
+    elsif v_club <> '' then
+      select name into v_club from public.clubs where name_key = lower(v_club) and active;
+      if not found then return jsonb_build_object('ok', false, 'error', 'invalid:club'); end if;
+    end if;
+    if v_club <> e.club then b := b || jsonb_build_object(case when c.is_university then 'University' else 'Club' end, case when e.club = '' then '(none)' else e.club end);
+      a := a || jsonb_build_object(case when c.is_university then 'University' else 'Club' end, case when v_club = '' then '(none)' else v_club end); end if;
+  end if;
+  if p ? 'instagram' then
+    v_ig := regexp_replace(btrim(coalesce(p->>'instagram', '')), '^@', '');
+    if v_ig !~ '^[A-Za-z0-9._]{0,30}$' then return jsonb_build_object('ok', false, 'error', 'invalid:instagram'); end if;
+    if v_ig <> e.instagram then b := b || jsonb_build_object('Instagram', case when e.instagram = '' then '(none)' else '@' || e.instagram end);
+      a := a || jsonb_build_object('Instagram', case when v_ig = '' then '(none)' else '@' || v_ig end); end if;
+  end if;
+  if p ? 'openipf_url' then
+    v_url := btrim(coalesce(p->>'openipf_url', ''));
+    if v_url <> '' and v_url !~* '^https://(www\.)?openipf\.org/.+' then return jsonb_build_object('ok', false, 'error', 'invalid:openipf'); end if;
+    if v_url = '' and (s.openipf_mode = 'required' or s.qualification_mode in ('glp', 'totals')) then return jsonb_build_object('ok', false, 'error', 'invalid:openipf'); end if;
+    if length(v_url) > 300 then return jsonb_build_object('ok', false, 'error', 'invalid:openipf'); end if;
+    if v_url <> e.openipf_url then b := b || jsonb_build_object('OpenIPF link', case when e.openipf_url = '' then '(none)' else e.openipf_url end);
+      a := a || jsonb_build_object('OpenIPF link', case when v_url = '' then '(none)' else v_url end); end if;
+  end if;
+  if p ? 'bp_number' then
+    v_bp := btrim(coalesce(p->>'bp_number', ''));
+    if v_bp = '' or length(v_bp) > 30 then return jsonb_build_object('ok', false, 'error', 'invalid:bp_number'); end if;
+    if v_bp <> e.bp_number then b := b || jsonb_build_object('Membership number', e.bp_number); a := a || jsonb_build_object('Membership number', v_bp); end if;
+  end if;
+  if a = '{}'::jsonb then return jsonb_build_object('ok', true, 'unchanged', true); end if;
+  update public.entries set full_name = coalesce(v_name, full_name), club = coalesce(v_club, club), instagram = coalesce(v_ig, instagram),
+         openipf_url = coalesce(v_url, openipf_url), bp_number = coalesce(v_bp, bp_number),
+         membership_checked = case when v_bp is not null and v_bp <> e.bp_number and e.is_guest then false else membership_checked end
+   where id = e.id;
+  insert into public.entry_requests (entry_id, kind, status, changes, before, after, decided_by, decided_at) values (e.id, 'update', 'applied', p - 'x', b, a, 'the lifter', now());
+  return jsonb_build_object('ok', true, 'applied', a);
+end $$;
+
+-- Ask for a different weight class or equipment, or to cancel. The team decides.
+create or replace function public.entry_request_create(p_email text, th text, eid uuid, p jsonb) returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare v_email text := lower(btrim(coalesce(p_email, ''))); e public.entries%rowtype; c public.competitions%rowtype; s public.entry_settings%rowtype;
+  v_kind text := coalesce(p->>'kind', ''); v_note text := left(btrim(coalesce(p->>'note', '')), 500); v_class uuid; v_equip text;
+  w public.weight_classes%rowtype; cur public.weight_classes%rowtype; b jsonb := '{}'::jsonb; a jsonb := '{}'::jsonb; ch jsonb := '{}'::jsonb; v_open boolean; v_id uuid;
+begin
+  if public.entry_login_ok(v_email, th) is null then return jsonb_build_object('ok', false, 'error', 'code'); end if;
+  select * into e from public.entries where id = eid and email = v_email and status in ('paid', 'comped');
+  if not found then return jsonb_build_object('ok', false, 'error', 'not_found'); end if;
+  select * into c from public.competitions where id = e.competition_id;
+  if c.start_date < current_date then return jsonb_build_object('ok', false, 'error', 'not_found'); end if;
+  v_open := public.entry_changes_open(c.id);
+  if exists (select 1 from public.entry_requests where entry_id = e.id and status = 'pending') then return jsonb_build_object('ok', false, 'error', 'pending'); end if;
+  if v_kind = 'cancel' then
+    ch := jsonb_build_object('refund_possible', v_open);
+    a := jsonb_build_object('Cancellation', case when v_open then 'Requested (a refund is possible until entries close)' else 'Requested after entries closed (no refund)' end);
+  elsif v_kind = 'change' then
+    if not v_open then return jsonb_build_object('ok', false, 'error', 'closed'); end if;
+    select * into s from public.entry_settings where competition_id = c.id;
+    v_class := nullif(p->>'weight_class_id', '')::uuid; v_equip := nullif(p->>'equipment', '');
+    if v_class is not null and v_class is distinct from e.weight_class_id then
+      select * into w from public.weight_classes x where x.id = v_class and x.sex = e.sex and x.active
+         and (x.min_age_category = '' or x.min_age_category = public.age_category_on(e.date_of_birth, c.start_date));
+      if not found then return jsonb_build_object('ok', false, 'error', 'invalid:weight_class'); end if;
+      select * into cur from public.weight_classes where id = e.weight_class_id;
+      ch := ch || jsonb_build_object('weight_class_id', v_class);
+      b := b || jsonb_build_object('Weight class', coalesce(public.class_text(cur.sex, cur.label), '(none)')); a := a || jsonb_build_object('Weight class', public.class_text(w.sex, w.label));
+    end if;
+    if v_equip is not null and v_equip is distinct from e.equipment then
+      if v_equip not in ('classic', 'equipped') or (s.equipment is not null and not (v_equip = any (s.equipment))) then return jsonb_build_object('ok', false, 'error', 'invalid:equipment'); end if;
+      ch := ch || jsonb_build_object('equipment', v_equip);
+      b := b || jsonb_build_object('Equipment', initcap(coalesce(e.equipment, ''))); a := a || jsonb_build_object('Equipment', initcap(v_equip));
+    end if;
+    if ch = '{}'::jsonb then return jsonb_build_object('ok', false, 'error', 'nothing'); end if;
+  else
+    return jsonb_build_object('ok', false, 'error', 'invalid:kind');
+  end if;
+  insert into public.entry_requests (entry_id, kind, changes, before, after, note) values (e.id, v_kind, ch, b, a, v_note) returning id into v_id;
+  return jsonb_build_object('ok', true, 'id', v_id, 'kind', v_kind, 'before', b, 'after', a, 'note', v_note, 'open', v_open,
+    'name', e.full_name, 'email', e.email, 'competition', c.name, 'competition_id', c.id, 'slug', c.slug, 'start_date', c.start_date);
+end $$;
+
+create or replace function public.entry_request_withdraw(p_email text, th text, rid uuid) returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare v_email text := lower(btrim(coalesce(p_email, ''))); n integer;
+begin
+  if public.entry_login_ok(v_email, th) is null then return jsonb_build_object('ok', false, 'error', 'code'); end if;
+  update public.entry_requests r set status = 'withdrawn', decided_at = now(), decided_by = 'the lifter'
+   from public.entries e where r.id = rid and r.status = 'pending' and r.entry_id = e.id and e.email = v_email and r.kind <> 'update';
+  get diagnostics n = row_count;
+  return jsonb_build_object('ok', n = 1, 'error', case when n = 1 then null else 'not_found' end);
+end $$;
+
+-- The entries team decides a request (called by the waitlist function after it has checked they are on the team).
+-- Approving a change makes it. Approving a cancellation only records it: the entry is cancelled first through Cancel or refund, so the money is handled there.
+create or replace function public.entry_request_decide(rid uuid, approve boolean, reason text, actor text) returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare r public.entry_requests%rowtype; e public.entries%rowtype; c public.competitions%rowtype; v_class uuid; v_equip text; v_qual text; v_order jsonb := null;
+begin
+  select * into r from public.entry_requests where id = rid and kind <> 'update' for update;
+  if not found or r.status <> 'pending' then return jsonb_build_object('ok', false, 'error', 'not_pending'); end if;
+  select * into e from public.entries where id = r.entry_id for update;
+  select * into c from public.competitions where id = e.competition_id;
+  if not approve then
+    if btrim(coalesce(reason, '')) = '' then return jsonb_build_object('ok', false, 'error', 'reason'); end if;
+    update public.entry_requests set status = 'declined', decline_reason = left(btrim(reason), 500), decided_by = coalesce(actor, ''), decided_at = now() where id = r.id;
+  elsif r.kind = 'cancel' then
+    if e.status not in ('cancelled', 'refunded') then return jsonb_build_object('ok', false, 'error', 'entry_not_cancelled'); end if;
+    update public.entry_requests set status = 'approved', decided_by = coalesce(actor, ''), decided_at = now() where id = r.id;
+  else
+    if e.status not in ('paid', 'comped') then return jsonb_build_object('ok', false, 'error', 'entry_not_live'); end if;
+    v_class := nullif(r.changes->>'weight_class_id', '')::uuid; v_equip := nullif(r.changes->>'equipment', '');
+    if v_class is not null and not exists (select 1 from public.entry_allowed_classes(e.id) a where a.id = v_class) then return jsonb_build_object('ok', false, 'error', 'invalid:weight_class'); end if;
+    update public.entries set weight_class_id = coalesce(v_class, weight_class_id), equipment = coalesce(v_equip, equipment) where id = e.id;
+    update public.entries set qualification = public.qualification_of(e.id) where id = e.id;
+    update public.entry_requests set status = 'approved', decided_by = coalesce(actor, ''), decided_at = now() where id = r.id;
+  end if;
+  select jsonb_build_object('session_no', s.session_no, 'day', s.day, 'flight', f.letter) into v_order
+    from public.lo_assignments a join public.lo_flights f on f.id = a.flight_id join public.lo_sessions s on s.id = f.session_id where a.entry_id = e.id;
+  select qualification into v_qual from public.entries where id = e.id;
+  return jsonb_build_object('ok', true, 'kind', r.kind, 'status', case when approve then 'approved' else 'declined' end, 'before', r.before, 'after', r.after,
+    'reason', coalesce(reason, ''), 'name', e.full_name, 'email', e.email, 'competition', c.name, 'slug', c.slug, 'start_date', c.start_date,
+    'lifting_order', v_order, 'qualification', v_qual, 'refund_possible', coalesce((r.changes->>'refund_possible')::boolean, false));
+end $$;
+
+revoke all on function public.entry_login_start(text, text), public.entry_login_ok(text, text), public.entry_portal(text, text), public.entry_update(text, text, uuid, jsonb),
+  public.entry_request_create(text, text, uuid, jsonb), public.entry_request_withdraw(text, text, uuid), public.entry_request_decide(uuid, boolean, text, text),
+  public.entry_allowed_classes(uuid), public.entry_changes_open(uuid) from public, anon, authenticated;
+do $$ begin
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    grant execute on function public.entry_login_start(text, text), public.entry_login_ok(text, text), public.entry_portal(text, text), public.entry_update(text, text, uuid, jsonb),
+      public.entry_request_create(text, text, uuid, jsonb), public.entry_request_withdraw(text, text, uuid), public.entry_request_decide(uuid, boolean, text, text),
+      public.entry_allowed_classes(uuid), public.entry_changes_open(uuid) to service_role;
+  end if;
+end $$;
+-- New tables get open privileges from Supabase by default: take the public's away (row security would stop them anyway).
+revoke all on public.entry_login, public.entry_requests from anon;
+revoke truncate, references, trigger on public.entry_login, public.entry_requests from authenticated;
+revoke all on public.entry_login from authenticated;
+grant select, insert, update, delete on public.entry_requests to authenticated;                  -- row security limits it to the entries team
