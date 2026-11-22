@@ -819,3 +819,12 @@ form > p.field-error:not([hidden])::before, #submit-error:not([hidden])::before,
 .entry-dl dt { color: var(--text-muted); }
 .entry-dl dd { margin: 0; overflow-wrap: anywhere; font-weight: 600; }
 @media (max-width: 40rem) { .entry-dl { grid-template-columns: 1fr; gap: 0; } .entry-dl dt { margin-top: var(--space-3); } }
+.entry-banner { margin: var(--space-4) 0 var(--space-6); max-width: none; }
+.success-panel.entry-banner { padding: var(--space-5) var(--space-6); }
+.success-panel.entry-banner h3 { margin: 0 0 var(--space-2); color: var(--success-text); }
+.success-panel.entry-banner ul { margin: 0 0 var(--space-3); }
+.success-panel.entry-banner p:last-child { margin-bottom: 0; }
+/* A shorter heading block on this page, so the form is not pushed far down the screen */
+body[data-page="my-entry"] .page-hero { padding-block: var(--space-7) var(--space-3); }
+body[data-page="my-entry"] .page-hero + .container { padding-top: var(--space-3); }
+body[data-page="my-entry"] #live > .panel { margin-top: 0; }

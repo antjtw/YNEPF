@@ -472,7 +472,7 @@ if (typeof Deno !== "undefined") {
         };
         const clubLabel = row.competitions.is_university ? "University" : "Club";
         const wcRow = Array.isArray(row.weight_classes) ? row.weight_classes[0] : row.weight_classes;
-        await mail(row.email, `Your entry: ${row.competitions.name}`, confirmationEmail({ manageUrl: siteUrl ? `${siteUrl}/my-entry` : undefined,
+        await mail(row.email, `Your entry: ${row.competitions.name}`, confirmationEmail({ manageUrl: siteUrl ? `${siteUrl}/my-entry?email=${encodeURIComponent(row.email)}` : undefined,
           name: row.full_name, competition: row.competitions.name, date: row.competitions.start_date, event: row.event === "bench_only" ? "Bench only" : "Full power",
           equipment: row.equipment === "equipped" ? "Equipped" : "Classic", pence: row.price_pence, under18: exactAge(row.date_of_birth, row.competitions.start_date) < 18, entriesEmail: copy,
           category: ageCategory(new Date(row.date_of_birth).getFullYear(), compYear), weightClass: wcRow?.label, sex: row.sex, division: row.divisions ? row.divisions.name + (row.divisions.is_home ? "" : " (guest)") : undefined,

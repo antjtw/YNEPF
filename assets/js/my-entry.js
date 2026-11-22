@@ -73,11 +73,11 @@
     if (r.status === "pending") {
       var withdraw = el("button", { type: "button", class: "btn btn-secondary btn-sm" }, "Withdraw this request");
       withdraw.addEventListener("click", function () { withdraw.disabled = true; post("entry_withdraw", { request_id: r.id }).then(function (b) { if (!b.ok) { withdraw.disabled = false; return window.alert(b.message || "We could not do that."); } load("banner-" + e.entry_id); }); });
-      return el("div", { class: "callout", role: "status", id: "banner-" + e.entry_id }, el("p", { class: "callout-title" }, "Waiting for the entries team: " + what + " requested"),
+      return el("div", { class: "callout entry-banner", role: "status", id: "banner-" + e.entry_id }, el("p", { class: "callout-title" }, "Waiting for the entries team: " + what + " requested"),
         list, el("p", { style: "margin:0 0 var(--space-3)" }, "Sent " + when(r.created_at) + ". Nothing changes until they approve it, and we will email you either way."), withdraw);
     }
-    if (r.status === "approved") return el("div", { class: "success-panel", role: "status", id: "banner-" + e.entry_id, style: "padding:var(--space-5) var(--space-6)" }, el("h3", { style: "margin:0 0 var(--space-2);color:inherit" }, what === "cancellation" ? "Cancellation approved" : "Change approved"), list, el("p", { style: "margin:0" }, what === "cancellation" ? "Your entry has been cancelled." : "Your entry has been updated."));
-    return el("div", { class: "callout", role: "alert", id: "banner-" + e.entry_id }, el("p", { class: "callout-title" }, (what === "cancellation" ? "Cancellation" : "Change") + " declined"), el("p", { style: "margin:0" }, "Reason: " + (r.decline_reason || "none given") + ". Your entry has not changed."));
+    if (r.status === "approved") return el("div", { class: "success-panel entry-banner", role: "status", id: "banner-" + e.entry_id }, el("h3", { style: "margin:0 0 var(--space-2);color:inherit" }, what === "cancellation" ? "Cancellation approved" : "Change approved"), list, el("p", { style: "margin:0" }, what === "cancellation" ? "Your entry has been cancelled." : "Your entry has been updated."));
+    return el("div", { class: "callout entry-banner", role: "alert", id: "banner-" + e.entry_id }, el("p", { class: "callout-title" }, (what === "cancellation" ? "Cancellation" : "Change") + " declined"), el("p", { style: "margin:0" }, "Reason: " + (r.decline_reason || "none given") + ". Your entry has not changed."));
   }
   function entryPanel(e) {
     var id = e.entry_id, pending = (e.requests || []).some(function (r) { return r.status === "pending"; }), msg = el("p", { role: "status", "aria-live": "polite", class: "help form-status", id: "msg-" + id });
@@ -89,7 +89,7 @@
     var kids = [el("h2", null, e.competition.name), el("p", { class: "flow-intro" }, longDate(e.competition.start_date)), banner(e), details];
 
     if (!e.open) {
-      kids.push(el("div", { class: "callout" }, el("p", { class: "callout-title" }, "Entries have closed"), el("p", { style: "margin:0" }, "Entries cannot be changed now. You can still ask to cancel: there is no refund, but your place is freed up and the lifting order is updated.")));
+      kids.push(el("div", { class: "callout entry-banner" }, el("p", { class: "callout-title" }, "Entries have closed"), el("p", { style: "margin:0" }, "Entries cannot be changed now. You can still ask to cancel: there is no refund, but your place is freed up and the lifting order is updated.")));
     } else {
       // small changes, made straight away
       var name = el("input", { type: "text", id: "n-" + id, value: e.name, maxlength: "120", autocomplete: "name" });

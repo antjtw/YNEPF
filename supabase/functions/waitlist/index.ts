@@ -934,7 +934,7 @@ if (typeof Deno !== "undefined") {
       if (!r.ok || !out) return reply(500, sorry);
       if (!out.ok) return reply(200, { ok: false, error: out.error, message: out.error === "code" ? BAD_CODE : ERR[out.error] ?? "We could not do that." });
       const who = { name: out.name as string, competition: out.competition as string, date: dateText(out.start_date), entriesEmail: copy };
-      await send(email, out.kind === "cancel" ? `We have your cancellation request: ${out.competition}` : `We have your request: ${out.competition}`, requestReceivedEmail({ ...who, kind: out.kind, before: out.before, after: out.after, note: out.note, open: !!out.open, link: `${siteUrl}/my-entry` }));
+      await send(email, out.kind === "cancel" ? `We have your cancellation request: ${out.competition}` : `We have your request: ${out.competition}`, requestReceivedEmail({ ...who, kind: out.kind, before: out.before, after: out.after, note: out.note, open: !!out.open, link: `${siteUrl}/my-entry?email=${encodeURIComponent(email)}` }));
       await send(copy, `${out.kind === "cancel" ? "Cancellation requested" : "Change requested"}: ${out.name}, ${out.competition}`, requestNotification({ name: out.name, email: out.email, competition: out.competition, kind: out.kind, before: out.before, after: out.after, note: out.note, open: !!out.open, deskUrl: `${siteUrl}/admin/#competitions/${out.competition_id}/entries` }));
       return reply(200, { ok: true, id: out.id, kind: out.kind });
     }
@@ -958,7 +958,7 @@ if (typeof Deno !== "undefined") {
       // A cancellation that is approved has already had its own email (from Cancel or refund). Everything else tells the lifter the outcome.
       if (!(kind === "cancel" && out.status === "approved")) {
         await send(out.email, out.status === "approved" ? `Your change has been made: ${out.competition}` : kind === "cancel" ? `We could not cancel your entry: ${out.competition}` : `We could not make that change: ${out.competition}`,
-          requestDecidedEmail({ name: out.name, competition: out.competition, date: dateText(out.start_date), entriesEmail: copy, kind, approved: out.status === "approved", before: out.before, after: out.after, reason: out.reason, link: `${siteUrl}/my-entry` }));
+          requestDecidedEmail({ name: out.name, competition: out.competition, date: dateText(out.start_date), entriesEmail: copy, kind, approved: out.status === "approved", before: out.before, after: out.after, reason: out.reason, link: `${siteUrl}/my-entry?email=${encodeURIComponent(out.email)}` }));
       }
       return reply(200, { ok: true, status: out.status, kind, lifting_order: out.lifting_order, qualification: out.qualification });
     }
