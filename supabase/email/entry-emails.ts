@@ -10,7 +10,7 @@ type Extra = { name: string; option?: string; pence: number };
 const extraLabel = (x: Extra) => `${x.name}${x.option ? ` (${x.option})` : ""}`;
 
 // ---- to the lifter ----------------------------------------------------------------------------------------------------------------------
-export function confirmationEmail(e: { name: string; competition: string; date: string; event: string; equipment: string; pence: number; under18: boolean; entriesEmail: string; refundsUntil?: string; category?: string; weightClass?: string; sex?: string; division?: string; club?: string; clubLabel?: string; discountPence?: number; extras?: Extra[] }): EmailSpec {
+export function confirmationEmail(e: { name: string; competition: string; date: string; event: string; equipment: string; pence: number; under18: boolean; entriesEmail: string; refundsUntil?: string; category?: string; weightClass?: string; sex?: string; division?: string; club?: string; clubLabel?: string; discountPence?: number; extras?: Extra[]; manageUrl?: string }): EmailSpec {
   const first = String(e.name).trim().split(/\s+/)[0] || "there";
   return {
     entriesEmail: e.entriesEmail, noQuestions: true, why: "You are getting this email because you entered a YNEPF competition.",
@@ -23,8 +23,14 @@ export function confirmationEmail(e: { name: string; competition: string; date: 
         ...(e.extras ?? []).map((x): [string, string] => [`Extra: ${extraLabel(x)}`, gbp(x.pence)]), ["Paid", gbp(e.pence)]], "boldLast"],
       ...(e.under18 ? [["note", "<b>Under 18 on the day?</b> A parent or guardian needs to be with you at the competition.", "info"] as Block] : []),
       ...(e.refundsUntil ? [["p", `Refunds are available until entries close on ${esc(e.refundsUntil)}. After that, we cannot refund entries.`] as Block] : []),
-      ["p", "<b>Need to change something, or pull out?</b> Email us and the entries team will sort it. You cannot edit an entry yourself yet, so please get in touch before entries close."],
-      ["button2", "Email us about your entry", mailto(e.entriesEmail, `Changing my entry: ${e.competition}`)],
+      ...(e.manageUrl ? [
+        ["p", "<b>Need to change something, or pull out?</b> You can do it online until entries close. Your name, club and Instagram update straight away. A different weight class, or cancelling, goes to the entries team to approve."] as Block,
+        ["button", "Manage your entry", e.manageUrl] as Block,
+        ["small", `To change your event, date of birth or sex, or anything to do with money, email us at ${a(mailto(e.entriesEmail, `Changing my entry: ${e.competition}`), e.entriesEmail)} instead.`] as Block,
+      ] : [
+        ["p", "<b>Need to change something, or pull out?</b> Email us and the entries team will sort it, before entries close."] as Block,
+        ["button2", "Email us about your entry", mailto(e.entriesEmail, `Changing my entry: ${e.competition}`)] as Block,
+      ]),
       ...RULES_AND_KIT,
       ["small", "Your name, club and weight class are shown on the entries list and the lifting order. Your date of birth is never published. If anything is wrong, or you want us to change or delete what we hold about you, just reply to this email."],
     ],
