@@ -505,7 +505,7 @@ export function requestNotification(o: { name: string; email: string; competitio
     ["p", `${b(o.name)} (${esc(o.email)}) has asked ${cancel ? "to cancel their entry" : "to change their entry"} in ${b(o.competition)}.`],
     ["details", [...changeRows(o.before, o.after), o.note ? ["Their note", o.note] as [string, string] : null]],
     ...(cancel && !o.open ? [["note", "<b>Entries have closed:</b> no refund is due.", "warn"] as Block] : []),
-    ...(o.deskUrl ? [["button", "Open the entries desk to approve or decline", o.deskUrl] as Block] : []),
+    ...(o.deskUrl ? [["button", "View request", o.deskUrl] as Block] : []),
   ] };
 }
 // Internal: what the automatic emails did.

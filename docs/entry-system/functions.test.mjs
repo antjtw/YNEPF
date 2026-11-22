@@ -208,7 +208,7 @@ console.log("function helper tests passed");
   const ok1 = T(wl.requestDecidedEmail({ ...who, kind: "change", approved: true, before, after, link: "l" })), no1 = T(wl.requestDecidedEmail({ ...who, kind: "change", approved: false, before, after, reason: "Kit check is at weigh-in", link: "l" }));
   assert(/Your change has been made/.test(ok1.text) && ok1.text.includes("Weight class: Men's 105 kg") && /could not make that change/i.test(no1.text) && no1.text.includes("Reason: Kit check is at weigh-in") && !no1.text.includes("has been made"), "approved and declined emails");
   const nt = T(wl.requestNotification({ name: "Sam Taylor", email: "sam@x.com", competition: "NESC Open 2027", kind: "change", before, after, note: "n", open: true, deskUrl: "https://x/admin/#competitions/c/entries" }));
-  assert(nt.html.includes("Internal") && nt.text.includes("Open the entries desk to approve or decline: https://x/admin/#competitions/c/entries") && nt.text.includes("sam@x.com"), "the team is told about a request, with a direct link to the entries desk");
+  assert(nt.html.includes("Internal") && nt.text.includes("View request: https://x/admin/#competitions/c/entries") && nt.text.includes("sam@x.com"), "the team is told about a request, with a direct link to the entries desk");
   const evil = '<script>alert(1)</script>';
   assert(!T(wl.requestReceivedEmail({ ...who, name: evil, kind: "change", before, after, note: evil, open: true, link: "l" })).html.includes("<script>"), "what a lifter types in a request note is escaped");
   const conf = (o) => stw.renderEmail(stw.confirmationEmail({ name: "A", competition: "C", date: "2027-02-27", event: "e", equipment: "q", pence: 6000, under18: false, entriesEmail: "competitions@ynepf.co.uk", ...o })).text;
