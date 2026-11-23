@@ -79,6 +79,7 @@ export function sessionParams(o: { entryId: string; email: string; name: string;
     ...more,
     "metadata[entry_id]": o.entryId,
     "payment_intent_data[metadata][entry_id]": o.entryId,
+    "payment_intent_data[description]": `${o.competition}: ${o.name}`,          // shows in the Description column in Stripe's payment list
   };
 }
 
