@@ -1096,7 +1096,7 @@
         { name: "prime_men", label: "Men in prime time", type: "number", min: "1", max: "14", half: true, show: function (v) { return v.prime_time; } },
         { name: "women_first", label: "Put the women's flight first in each session", type: "checkbox" }
       ], settings);
-      var secForm = pageForm([{ name: "seconds_per_attempt", label: "Seconds per attempt", type: "number", min: "15", max: "180", half: true, help: "Used to estimate when each session finishes. 45 is the usual: about 3.5 hours for two full flights." },
+      var secForm = pageForm([{ name: "seconds_per_attempt", label: "Seconds per attempt", type: "number", min: "15", max: "180", half: true, help: "Used to estimate session finish times. Usually 45." },
         { name: "show_glp", label: "Show GL points on the public lifting order", type: "checkbox" },
         { name: "show_total", label: "Show best totals on the public lifting order", type: "checkbox" }], { seconds_per_attempt: settings.seconds_per_attempt, show_glp: settings.show_glp, show_total: settings.show_total });
       secForm.el.addEventListener("change", function () { S.dirty = true; status(); draw(); });
@@ -1382,7 +1382,7 @@
       function iconBtn(label, icon, fn, extra) { return el("button", Object.assign({ type: "button", class: "btn btn-sm btn-ghost", onclick: fn }, extra || {}), Y.svg(icon), " ", label); }
       var exportBox = el("section", { "aria-labelledby": "lo-export-h", style: "margin:var(--space-5) 0" },
         el("h3", { id: "lo-export-h" }, "Exports"),
-        el("p", { class: "help" }, "Print sheets open in a new tab, ready to print or save as PDF. The weigh-in sheet follows the lot numbers, so draw those first. The others follow the lifting order."),
+        el("p", { class: "help" }, "Sheets open in a new tab, ready to print or save as PDF."),
         el("h4", { class: "lo-sub" }, "Print sheets"),
         el("div", { class: "actions" },
           iconBtn("Weigh-in sheet", ICON_PRINT, function () { if (exportReady(true)) openSheet(LEx.weighInSheet(exportSessions(), peopleMap(), c)); }),
@@ -1416,11 +1416,11 @@
         finalBtn.className = "btn " + (isFinal ? "btn-secondary" : "btn-primary");
         finalBtn.disabled = !closed; finalBtn.title = closed ? "" : "Available once entries close";
         var autoNote = el("p", { class: "help", id: "lo-auto-note" }, closed
-          ? (isFinal ? "This order is final. Lifters were emailed when entries closed and again when it was finalised." : "Entries have closed, so lifters have been emailed that entries are closed and the final order is coming. Finalise lifting order publishes the order as final and emails it to them.")
-          : "When entries close, everyone entered is emailed automatically: no more changes to entries, no refunds for dropouts, and the final lifting order will follow. After that, Finalise lifting order sends them the final order.");
+          ? (isFinal ? "This order is final. Lifters have been emailed." : "Entries have closed and lifters have been told. Finalise lifting order publishes the final order and emails it to them.")
+          : "Lifters are emailed automatically when entries close. Finalise lifting order then sends the final order.");
         if (!published) {
-          kids.push(el("p", { class: "help", id: "lo-pub-note", role: "status" }, "Not published yet. Publishing puts the lifting order on the website, without lot numbers, and the calendar swaps View entries for View lifting order. Save your changes first. Use Preview above to see it before anyone else can."
-            + (closed ? "" : " While entries are open you can also email the provisional order to the lifters in it when you publish.")));
+          kids.push(el("p", { class: "help", id: "lo-pub-note", role: "status" }, "Not published yet. Save your changes first. Preview shows it before anyone else sees it."
+            + (closed ? "" : " You can email lifters the provisional order when you publish.")));
           kids.push(el("div", { class: "actions" }, pubBtn, finalBtn));
         } else {
           kids.push(el("p", { class: "help", id: "lo-pub-note", role: "status" }, "Published (" + (isFinal ? "final" : "provisional") + "). Anyone can see it on the website, and saving changes updates it straight away. Saving never emails anyone."
@@ -1469,7 +1469,7 @@
           doPublish(false); return;
         }
         openForm({ title: "Publish the lifting order", fields: [], saveLabel: "Publish and email " + lifters(n),
-          intro: "Publishing puts the lifting order on the website, without lot numbers, and the calendar swaps View entries for View lifting order. You can also email the provisional order to the " + lifters(n) + " in it, from the competitions address. Entry is still open, so it may change.",
+          intro: "Publishing puts the order on the website, without lot numbers. You can also email the provisional order to the " + lifters(n) + " in it. It may still change while entries are open.",
           extra: [{ label: "Publish without emailing", onclick: function () { doPublish(false); } }],
           onSave: function () { return publishCall(true).then(function () { pubStatus(); return emailLifters().then(function (b) { pubStatus(); sentToast(b); }).catch(function (e) { toast("Published, but the email did not send: " + friendly(e) + " Unpublish and publish again to try once more.", "error"); }); }); } });
       }
@@ -1498,7 +1498,7 @@
       function renderLots() {
         var ls = lotsState(), n = flightsList().reduce(function (t, x) { return t + x.f.lifters.length; }, 0);
         var kids = [el("h3", { id: "lo-lots-h" }, "Lot numbers"),
-          el("p", { class: "help" }, "Lot numbers decide the weigh-in order and are never shown publicly. Each flight gets its own block of numbers in flight order (flight A from 1, flight B carries on, and so on), women before men, shuffled at random within each group. Draw them once the flights are settled.")];
+          el("p", { class: "help" }, "Set the weigh-in order. Never shown publicly. Draw them once the flights are settled.")];
         if (!S.sessions.length) kids.push(el("p", { class: "help" }, "Sort the entries first."));
         else if (!ls.any) kids.push(el("div", { class: "actions" }, btn("Draw lot numbers", drawLots, "btn-secondary")));
         else {

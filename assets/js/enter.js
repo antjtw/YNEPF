@@ -200,6 +200,12 @@
   function goStep(key) { step = key; render(); window.scrollTo(0, 0); }
 
   // ---- little form builders --------------------------------------------------------------------
+  // OpenIPF link: accept the full address, one without https:// or www., or just the profile name ("anthonywhite1").
+  function ipfLink(s) {
+    s = String(s || "").trim();
+    var m = s.match(/^(?:https?:\/\/)?(?:www\.)?openipf\.org\/(?:u\/)?([A-Za-z0-9][A-Za-z0-9._-]*)\/?(?:[?#].*)?$/i) || s.match(/^(?:u\/)?([A-Za-z0-9][A-Za-z0-9._-]*)$/i);
+    return m ? "https://www.openipf.org/u/" + m[1] : "";
+  }
   function text(id, label, opts) {
     opts = opts || {};
     return el("div", { class: "field", "data-field": id },
@@ -334,8 +340,8 @@
       select("weight_class_id", "Weight class", classes, classes.length ? "Choose your class" : "Choose men's or women's first",
         "The weight class you intend to compete in on the day. If you miss weight on the day, you can still compete as a guest."),
       ctx.settings.openipf_mode === "hidden" && !ipfRequired() ? null : text("openipf_url", "OpenIPF profile link", ipfRequired()
-        ? { max: 300, help: ipfWhy() + " It looks like https://www.openipf.org/u/yourname." }
-        : { optional: true, max: 300, help: "If you have one, paste your link from openipf.org. It looks like https://www.openipf.org/u/yourname." }),
+        ? { max: 300, help: ipfWhy() + " Paste the link or just your profile name, for example anthonywhite1." }
+        : { optional: true, max: 300, help: "If you have one, paste your link from openipf.org or just your profile name, for example anthonywhite1." }),
       extrasField(),
       el("p", { class: "lede", id: "fee-line", role: "status" }, feeText())
     ];
@@ -366,7 +372,7 @@
     if (age !== null && age < 18) rows.push(row("Parent or guardian", trim(v.guardian_name), "guardian"), row("Their phone number", trim(v.guardian_phone), "guardian"), row("Their email address", trim(v.guardian_email), "guardian"));
     rows.push(row("Photos and videos", PHOTO_NAMES[v.photo_choice], "about"),
       row("Event", EVENT_NAMES[v.event], "lifting"), row("Equipment", EQUIP_NAMES[v.equipment], "lifting"), row("Weight class", cls ? cls.label + " kg" : "", "lifting"));
-    if (trim(v.openipf_url)) rows.push(row("OpenIPF profile", trim(v.openipf_url), "lifting"));
+    if (trim(v.openipf_url)) rows.push(row("OpenIPF profile", ipfLink(v.openipf_url) || trim(v.openipf_url), "lifting"));
     chosenExtras().forEach(function (x) { rows.push(row(x.name + (x.option ? " (size " + x.option + ")" : ""), pounds(x.price_pence), "lifting")); });
     return [
       el("h2", null, "Check your answers"),
@@ -406,7 +412,9 @@
       if (!v.guardian_consent) e.push(["guardian_consent", "A parent or guardian must consent to this entry"]);
     }
     if (n === "lifting") {
-      if (ipfRequired() && !/^https:\/\/(www\.)?openipf\.org\/.+/i.test(trim(v.openipf_url))) e.push(["openipf_url", "Enter your OpenIPF profile link, starting https://www.openipf.org/"]);
+      if (ipfRequired() && !trim(v.openipf_url)) e.push(["openipf_url", "Enter your OpenIPF profile link or name, for example anthonywhite1"]);
+      else if (trim(v.openipf_url) && !ipfLink(v.openipf_url)) e.push(["openipf_url", "That does not look like an OpenIPF profile. Enter the link or just your profile name, for example anthonywhite1"]);
+      else if (trim(v.openipf_url)) { v.openipf_url = ipfLink(v.openipf_url); var ipfBox = document.getElementById("openipf_url"); if (ipfBox) ipfBox.value = v.openipf_url; }
       if (!v.event) e.push(["event", "Choose an event"]);
       if (!v.equipment) e.push(["equipment", "Choose your equipment"]);
       if (!v.weight_class_id || !allowedClasses().some(function (c) { return c.id === v.weight_class_id; })) e.push(["weight_class_id", "Choose your weight class"]);
@@ -419,7 +427,7 @@
   function payload() {
     var o = { competition_id: ctx.comp.id, email: trim(v.email), full_name: trim(v.full_name), date_of_birth: dobISO(), sex: v.sex,
       bp_number: trim(v.bp_number), club: trim(v.club), club_other: needUniversity() ? trim(v.club_other) : "", division_id: v.division_id, instagram: trim(v.instagram).replace(/^@/, ""), event: v.event, equipment: v.equipment,
-      weight_class_id: v.weight_class_id, openipf_url: trim(v.openipf_url),
+      weight_class_id: v.weight_class_id, openipf_url: ipfLink(v.openipf_url),
       photo_ok: v.photo_choice === "yes", photo_opt_out: v.photo_choice === "never" };
     if (invite) o.invite = invite;
     if (offerInfo) o.offer = offer;
