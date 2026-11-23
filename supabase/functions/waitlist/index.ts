@@ -273,7 +273,7 @@ export function expiredEmail(o: Who & { slug: string; siteUrl: string }): EmailS
 export function priorityEmail(o: Who & { link: string; windowStart: string; opens?: string; points?: boolean }): EmailSpec {
   return {
     entriesEmail: o.entriesEmail, preheader: `Enter ${o.competition} early, before general entry opens. Your link works once.`,
-    why: "You are getting this email because you asked for a priority entry link.",
+    why: o.points ? "You are getting this email because you volunteered at a YNEPF competition." : "You are getting this email because you asked for a priority entry link.",
     blocks: [
       ["h1", "Enter early with priority access"],
       ["p", o.points ? `${hi(o.name)}, thank you for volunteering. You can enter ${named(o)} before general entry opens.` : `${hi(o.name)}, you can enter ${named(o)} before general entry opens.`],
@@ -281,6 +281,7 @@ export function priorityEmail(o: Who & { link: string; windowStart: string; open
       ["details", [["Your link works from", when(o.windowStart)], o.opens ? ["General entry opens", when(o.opens)] : null]],
       ["note", "Please enter with the email address this was sent to, and keep the link to yourself. It only works once.", "warn"],
       ["p", `${o.points ? "Priority entry costs 1 volunteer point, taken only once your entry is confirmed. If you do not use the link, you keep your point. " : ""}You can still enter when general entry opens if you would rather wait.`],
+      ...(o.points ? [["small", "Do not want these emails? Reply and tell us, and we will stop sending them. You keep your points."] as Block] : []),
     ],
   };
 }

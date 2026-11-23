@@ -639,6 +639,9 @@ await db.exec(`insert into public.invites (competition_id, email, full_name) val
 const s3_n = (await q(`select public.priority_fill() n`))[0].n;
 ok(s3_n >= 1 && (await q(`select email from public.invites where competition_id = '${PC}' and from_points order by email`)).every((x) => x.email !== "old@x.com" && x.email !== "man@x.com") && (await q(`select 1 from public.invites where competition_id = '${PC}' and email = 'pat@x.com' and from_points`)).length === 1, "priority_fill: people with an unexpired point and no link already get one (pat), not an expired one (old) or a hand-made one (man)");
 ok((await q(`select public.priority_fill() n`))[0].n === 0, "and running it again adds nobody");
+await db.exec(`insert into public.vol_people (email, full_name) values ('quiet@x.com', 'Quiet Person') on conflict (email) do nothing; update public.vol_people set priority_emails = false where email = 'quiet@x.com'`);
+await db.exec(`insert into public.points_ledger (email, delta, reason, kind, earned_at) values ('quiet@x.com', 1, 'test', 'import', now())`);
+ok((await q(`select public.priority_fill() n`))[0].n === 0 && (await q(`select 1 from public.invites where competition_id = '${PC}' and email = 'quiet@x.com'`)).length === 0, "priority_fill: someone who asked us to stop is not given a link, although they have a point");
 let invs = (await q(`select email, from_points, token_hash from public.invites where competition_id = '${PC}' order by email`));
 ok(invs.length >= 2 && invs.find((x) => x.email === "pat@x.com").from_points && !invs.find((x) => x.email === "man@x.com").from_points && invs.every((x) => !x.token_hash), "priority list: pat from points, the hand-made one unchanged, both waiting to be sent");
 ok((await q(`select public.priority_competitions() r`))[0].r.includes(PC), "the timer picks the competition up");
