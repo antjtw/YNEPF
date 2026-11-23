@@ -183,7 +183,7 @@
         err,
         el("div", { class: "field" }, fileInput, drop, preview, info),
         el("div", { class: "field" }, el("label", { for: "img-alt" }, "Describe the picture"),
-          el("p", { class: "help", id: "img-alt-help" }, "A few words for people who cannot see it, for example “Lifters warming up before the first flight”. Required."), alt),
+          el("p", { class: "help", id: "img-alt-help" }, "Describe it for screen readers, e.g. “Lifters warming up”. Required."), alt),
         el("div", { class: "dialog-actions" }, add, cancel));
       dlg.appendChild(form);
       document.body.appendChild(dlg);
@@ -203,7 +203,7 @@
           preview.src = URL.createObjectURL(s.blob); preview.hidden = false;
           info.textContent = file.name + ": shrunk from " + fileSize(file.size) + " to " + fileSize(all.reduce(function (n, x) { return n + x.blob.size; }, 0)) +
             " (" + s.width + " × " + s.height + (all.length > 1 ? ", plus a smaller copy for phones" : "") + ")." +
-            (opts.frame ? " The home page shows it in a nearly square frame, cropped evenly from the centre, as in the preview." : "");
+            (opts.frame ? " Shown cropped to a near-square, as in the preview." : "");
           refresh(); alt.focus();
         }).catch(function (e) { if (mine !== token) return; info.textContent = ""; showErr(e.message); refresh(); });
       }
@@ -217,7 +217,7 @@
       form.addEventListener("submit", function (e) {
         e.preventDefault();
         if (busy || !shrunk) return;
-        if (!alt.value.trim()) { showErr("Describe the picture in a few words, so people using screen readers know what it shows."); alt.focus(); return; }
+        if (!alt.value.trim()) { showErr("Describe the picture for screen readers."); alt.focus(); return; }
         busy = true; showErr(""); add.textContent = "Uploading…"; refresh();
         uploadImage(shrunk, alt.value.trim(), opts).then(function (urls) { done({ url: urls[0], smallUrl: urls[1] || "", alt: alt.value.trim() }); })
           .catch(function (ex) { busy = false; add.textContent = "Add image"; refresh(); showErr("The picture could not be uploaded. " + friendly(ex)); });
@@ -379,7 +379,7 @@
       }).catch(function (e) { box.replaceChildren(el("h2", { style: "margin-top:0" }, "Universities"), el("p", { class: "form-error" }, friendly(e))); });
     }
     function addUni() {
-      openForm({ title: "Add a university", saveLabel: "Add it", values: {}, fields: [{ name: "name", label: "Name", required: true, help: "As lifters should see it on the entry form and the lifting order, for example Bradford University." }],
+      openForm({ title: "Add a university", saveLabel: "Add it", values: {}, fields: [{ name: "name", label: "Name", required: true, help: "As shown to lifters, e.g. Bradford University." }],
         onSave: function (v) {
           var name = String(v.name).trim();
           return sb.from("universities").insert({ name: name, active: true }).then(function (r) {
@@ -460,7 +460,7 @@
         onSave: function () {
           return sb.from("competitions").delete().eq("id", c.id).then(function (r) {
             if (r.error) {
-              if (r.error.code === "23503" || /foreign key|violates/i.test(r.error.message || "")) { throw new Error("This " + what + " has entries or payments recorded against it, so it cannot be deleted. Hide it from the website instead (untick “Show on the website”)."); }
+              if (r.error.code === "23503" || /foreign key|violates/i.test(r.error.message || "")) { throw new Error("This " + what + " has entries or payments, so it can’t be deleted. Untick “Show on the website” to hide it."); }
               throw r.error;
             }
             toast(c.kind === "event" ? "Event deleted." : "Competition deleted."); go("#competitions");
@@ -648,10 +648,10 @@
           help: "Makes the OpenIPF link required. After payment we check their best result from the 12 months before (same event and kit). The result shows on each entry." }),
         E({ name: "qualification_glp", label: "Minimum GL points", type: "number", min: "1", show: function (v) { return isOnline(v) && v.qualification === "glp"; } }),
         E({ name: "qualifying_totals_text", label: "Qualifying totals", type: "textarea", rows: 8, show: function (v) { return isOnline(v) && v.qualification === "totals"; },
-          help: "One per line: M or F, the weight class, then the total in kg. For example M 83: 450 or F 63: 300. Classes you leave out are not checked." }),
+          help: "One per line, e.g. M 83: 450 or F 63: 300. Classes left out aren’t checked." }),
         { sub: "Entry rules", show: isOnline },
         E({ name: "hold_minutes", label: "Minutes a place is held while paying", type: "number", min: "5", show: isOnline, help: "Between 5 and 30. A short hold stops places being parked." }),
-        E({ name: "guest_delay_days", label: "Guests can enter this many days after entry opens", type: "number", min: "0", show: isOnline, help: "A guest is anyone outside the Yorkshire & North East division. Usually 14 (two weeks). They are told the date on the entry form." }),
+        E({ name: "guest_delay_days", label: "Guests can enter this many days after entry opens", type: "number", min: "0", show: isOnline, help: "Guests are lifters outside the Yorkshire & North East division. Usually 14." }),
         { sub: "Priority and the waiting list", show: isOnline },
         E({ name: "priority_hours", label: "Priority entry starts this many hours before general entry", type: "number", min: "1", show: isOnline, help: "Personal links are emailed this many hours before general entry opens." }),
         E({ name: "priority_from_points", label: "Priority links for volunteers", type: "checkbox", show: isOnline, help: "Emails everyone with a volunteer point a priority link. Costs 1 point, taken when the entry is confirmed. Untick for a competition where volunteers should not get priority." }),
@@ -697,8 +697,8 @@
         if (!allowed) form.controls[f.name].input.disabled = true;
       });
       var note = null;
-      if (onlyEntry) note = "You can change the online entry settings (how entries are taken, events, prices, closing entries). The rest is looked after by the editors.";
-      else if (!canEntry()) note = "You can change the competition details. The online entry settings (how entries are taken, prices) are looked after by the entries team.";
+      if (onlyEntry) note = "You can change online entry settings. Editors look after the rest.";
+      else if (!canEntry()) note = "You can change the competition details. The entries team looks after online entry settings.";
       var formEl = el("form", { novalidate: true }, note ? el("p", { class: "callout" }, note) : null, form.el, bar.el);
       view.replaceChildren(formEl);
       if (!isNew && canComp()) view.appendChild(deleteZone(c));
@@ -891,7 +891,7 @@
           onSave: function (v) { return callWaitlist({ action: "entry_request_decide", request_id: r.id, approve: false, reason: v.reason }).then(function () { toast("Request declined. They have been emailed."); reload(); }); } });
       }
       var reqBox = pendingReqs.length ? el("section", { class: "card", "aria-labelledby": "req-h", style: "margin-bottom:var(--space-5)" }, el("h2", { id: "req-h" }, "Requests (" + pendingReqs.length + ")"),
-        el("p", { class: "help" }, "Lifters ask for a different weight class or equipment, or to cancel. Nothing changes until you approve it."),
+        el("p", { class: "help" }, "Change and cancel requests. Nothing changes until you approve."),
         el("ul", { class: "item-list" }, pendingReqs.map(function (r) {
           var e = rows.filter(function (x) { return x.id === r.entry_id; })[0] || {};
           return el("li", { class: "item-row" }, el("div", { class: "item-main" }, el("p", { class: "item-title" }, (e.full_name || "A lifter") + ": " + (r.kind === "cancel" ? "wants to cancel" : "change requested")),
@@ -1393,10 +1393,10 @@
         el("p", { class: "help" }, "A CSV to import into OpenLifter."),
         el("div", { class: "actions" }, iconBtn("OpenLifter file", ICON_DOWNLOAD, olFile)),
         el("details", { class: "ol-settings" }, el("summary", null, "OpenLifter settings"),
-          el("div", { class: "field" }, el("label", { for: "ol-divisions" }, "Division codes"), el("p", { class: "help", id: "ol-div-help" }, "One per line, the code after the equals sign. Each must match a division set up in the OpenLifter meet exactly, or the import fails."), divText),
+          el("div", { class: "field" }, el("label", { for: "ol-divisions" }, "Division codes"), el("p", { class: "help", id: "ol-div-help" }, "One per line, the code after the equals sign. Must match the OpenLifter meet’s divisions exactly."), divText),
           el("div", { class: "field half" }, el("label", { for: "ol-classic" }, "Classic equipment"), classicBox),
           el("div", { class: "field half" }, el("label", { for: "ol-equipped" }, "Equipped equipment"), equippedBox),
-          el("div", { class: "field field-check" }, stdBox, el("div", null, el("label", { for: "ol-standard" }, "Use the public OpenLifter's columns"), el("p", { class: "help" }, "Leaves out Session, Novice and CanBreakRecords. Only for the public OpenLifter: ours accepts them."))),
+          el("div", { class: "field field-check" }, stdBox, el("div", null, el("label", { for: "ol-standard" }, "Use the public OpenLifter's columns"), el("p", { class: "help" }, "Leaves out Session, Novice and CanBreakRecords, for the public OpenLifter."))),
           el("div", { class: "field field-check" }, noviceBox, el("div", null, el("label", { for: "ol-novice" }, "This is a novice competition"), el("p", { class: "help" }, "Written to the Novice column."))),
           el("div", { class: "actions" }, btn("Save OpenLifter settings", function () {
             var st = olSettings(), nf = (olSaved.novice_for || []).filter(function (id) { return id !== c.id; }); if (st.novice) nf.push(c.id);
@@ -1416,7 +1416,7 @@
         finalBtn.className = "btn " + (isFinal ? "btn-secondary" : "btn-primary");
         finalBtn.disabled = !closed; finalBtn.title = closed ? "" : "Available once entries close";
         var autoNote = el("p", { class: "help", id: "lo-auto-note" }, closed
-          ? (isFinal ? "This order is final. Lifters have been emailed." : "Entries have closed and lifters have been told. Finalise lifting order publishes the final order and emails it to them.")
+          ? (isFinal ? "This order is final. Lifters have been emailed." : "Entries closed and lifters told. Finalise publishes the final order and emails it.")
           : "Lifters are emailed automatically when entries close. Finalise lifting order then sends the final order.");
         if (!published) {
           kids.push(el("p", { class: "help", id: "lo-pub-note", role: "status" }, "Not published yet. Save your changes first. Preview shows it before anyone else sees it."
@@ -1502,7 +1502,7 @@
         if (!S.sessions.length) kids.push(el("p", { class: "help" }, "Sort the entries first."));
         else if (!ls.any) kids.push(el("div", { class: "actions" }, btn("Draw lot numbers", drawLots, "btn-secondary")));
         else {
-          kids.push(el("p", { class: ls.ok ? "help" : "form-error", role: "status" }, ls.ok ? "Lot numbers are drawn for " + n + (n === 1 ? " lifter." : " lifters.") : "Lifters have moved since the lot numbers were drawn, so some flights no longer have their own block. Redraw them once the order is settled."));
+          kids.push(el("p", { class: ls.ok ? "help" : "form-error", role: "status" }, ls.ok ? "Lot numbers are drawn for " + n + (n === 1 ? " lifter." : " lifters.") : "The order changed since lot numbers were drawn. Redraw once it’s settled."));
           var showBox = el("input", { type: "checkbox", id: "lo-show-lots" }); showBox.checked = !!S.showLots;
           showBox.addEventListener("change", function (e) { S.showLots = e.target.checked; draw(); });
           kids.push(el("div", { class: "field field-check" }, showBox, el("div", null, el("label", { for: "lo-show-lots" }, "Show lot numbers in the lists above"))));
@@ -1511,7 +1511,7 @@
         lotsBox.replaceChildren.apply(lotsBox, kids);
       }
       view.replaceChildren(
-        el("p", { class: "panel-intro" }, "Sort the entered lifters into sessions and flights, then drag anyone to change it. Best totals come from OpenIPF. Not public yet."),
+        el("p", { class: "panel-intro" }, "Sort into sessions and flights, then drag to adjust. Best totals come from OpenIPF. Not public yet."),
         form.el,
         el("section", { "aria-labelledby": "lo-build-h", style: "margin:var(--space-4) 0" }, el("h3", { id: "lo-build-h" }, "Build and save"),
           el("p", { class: "help" }, "Sort once for a first order, then arrange by hand. Save as you go. Preview shows the saved order to the entries team only."),
@@ -1577,7 +1577,7 @@
     function adjust(sign, who) {
       var add = sign > 0;
       openForm({ title: add ? (who ? "Add points for " + (who.name || who.email) : "Add points") : who ? "Take points away from " + (who.name || who.email) : "Take points away", saveLabel: add ? "Add points" : "Take points away",
-        intro: who && add ? "Adding points for " + (who.name || who.email) + ". It goes in the ledger with your name, so there is a record." : who && !add ? (who.name || who.email) + " has " + (who.balance === undefined ? "" : who.balance + " points. ") + "Spends (priority 1, £20 off 4, £40 off 8, half-price BP 5, free BP 10) or corrections. Can’t go below zero." : add ? "A thank you, a correction, or points earned somewhere we did not tick off. It goes in the ledger with your name, so there is a record." : "Spends (priority 1, £20 off 4, £40 off 8, half-price BP 5, free BP 10) or corrections. Can’t go below zero.",
+        intro: who && add ? "Adding points for " + (who.name || who.email) + ". It goes in the ledger with your name, so there is a record." : who && !add ? (who.name || who.email) + " has " + (who.balance === undefined ? "" : who.balance + " points. ") + "Spends (priority 1, £20 off 4, £40 off 8, half-price BP 5, free BP 10) or corrections. Can’t go below zero." : add ? "A thank you, correction or points earned elsewhere. Recorded with your name." : "Spends (priority 1, £20 off 4, £40 off 8, half-price BP 5, free BP 10) or corrections. Can’t go below zero.",
         values: who ? { email: who.email } : {}, fields: [{ name: "email", label: "Their email address", type: "email", required: true }].concat(add && !who ? [{ name: "name", label: "Their name (only for someone new)", help: "Leave empty for someone who already has points." }] : [])
           .concat([{ name: "points", label: "Points", type: "number", required: true, min: "1", max: "100", half: true }, { name: "date", label: "Date (optional)", type: "date", half: true, help: "For adding points retroactively. Points expire 24 months after this date." }, { name: "reason", label: "What is it for?", required: true, help: add ? "For example: Helped with the livestream." : "For example: Priority entry, March Open." }]),
         validate: function (v) { var n = Number(v.points); return !n || n < 1 || n > 100 || Math.round(n) !== n ? "Enter a whole number of points from 1 to 100." : null; },
@@ -1723,10 +1723,10 @@
     openForm({ title: "Add someone new", saveLabel: "Add them", values: {},
       intro: "For people not in the points list yet, such as committee or another host’s volunteers.",
       fields: [{ name: "full_name", label: "Name", required: true }, { name: "email", label: "Email address", type: "email", required: true, help: "Points are tied to this address." }, { name: "mobile", label: "Mobile number (optional)" },
-        { name: "committee", label: "Part of the committee", type: "checkbox", help: "Executive and supporting committee members earn 3 points at the end of every quarter. Untick when they step down." },
+        { name: "committee", label: "Part of the committee", type: "checkbox", help: "Committee members earn 3 points each quarter. Untick when they step down." },
         { sub: "Points to give them now (optional)" },
         { name: "points", label: "Points", type: "number", min: "1", max: "100", half: true }, { name: "date", label: "Date earned (optional)", type: "date", half: true },
-        { name: "reason", label: "What are they for?", help: "Needed if you add points, for example: Volunteered at the March Open. Points expire 24 months after the date earned." }],
+        { name: "reason", label: "What are they for?", help: "Needed when adding points, e.g. Volunteered at the March Open. Points expire after 24 months." }],
       validate: function (v) {
         if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(v.email || "").trim())) return "That email address does not look right.";
         var has = v.points !== "" && v.points !== null && v.points !== undefined;
@@ -1753,7 +1753,7 @@
         values: { full_name: row.full_name || person.name || "", email: person.email, mobile: row.mobile || "", tshirt: row.tshirt || "", committee: !!row.committee },
         fields: [{ name: "full_name", label: "Name", required: true }, { name: "email", label: "Email address", type: "email", required: true, help: "Points are tied to this address, and it is where their emails go." },
           { name: "mobile", label: "Mobile number (optional)", half: true }, { name: "tshirt", label: "T-shirt size (optional)", type: "select", half: true, options: [{ value: "", label: "Not given" }].concat(SIZES.map(function (z) { return { value: z, label: z }; })) },
-          { name: "committee", label: "Part of the committee", type: "checkbox", help: "Executive and supporting committee members earn 3 points at the end of every quarter. Untick when they step down." }],
+          { name: "committee", label: "Part of the committee", type: "checkbox", help: "Committee members earn 3 points each quarter. Untick when they step down." }],
         validate: function (v) { return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(v.email || "").trim()) ? null : "That email address does not look right."; },
         extra: extraActions || [],
         onSave: function (v) {
@@ -1889,7 +1889,7 @@
     }
     // a referee who is not on the roster yet: their level is required, so it shows on the rota
     function addReferee(session, place) {
-      openForm({ title: "Add a referee", intro: "They join the referee roster, so they are in the list next time. Their level is shown on the rota.", saveLabel: "Add and use",
+      openForm({ title: "Add a referee", intro: "Added to the referee roster. Their level shows on the rota.", saveLabel: "Add and use",
         fields: [{ name: "name", label: "Name", required: true }, { name: "level", label: "Level", type: "select", required: true, options: [{ value: "", label: "Choose a level" }].concat(REF_LEVELS) }, { name: "email", label: "Email address (optional)", type: "email", help: "Needed for them to earn volunteer points." }],
         values: {}, validate: function (v) { if (!v.level) return "Choose their level."; return v.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(v.email).trim()) ? "That email address does not look right." : null; },
         onSave: function (v) {
@@ -2041,7 +2041,7 @@
         el("hr"),
         el("div", { class: "vol-settings" },
           el("div", { class: "field", style: "max-width:22rem;margin:0" }, el("label", { for: "vol-closes" }, "Close sign-up automatically (optional)"), el("p", { class: "help", id: "vol-closes-help" }, "UK time. Leave empty to close it yourself."), when),
-          el("div", { class: "field field-check", style: "margin:0" }, shirts, el("div", null, el("label", { for: "vol-shirts" }, "Ask for a T-shirt size"), el("p", { class: "help" }, "Unisex sizes XS to 5XL. Turn it off for competitions where we are not providing T-shirts.")))));
+          el("div", { class: "field field-check", style: "margin:0" }, shirts, el("div", null, el("label", { for: "vol-shirts" }, "Ask for a T-shirt size"), el("p", { class: "help" }, "Unisex XS to 5XL. Off if we aren’t providing T-shirts.")))));
       // Publishing the rota can email each volunteer who has a role, once: what they are doing, with a link to the rota. Publishing again does not email again.
       function rotaPeople() { var seen = {}; V.sessions.forEach(function (s) { (s.vol_places || []).forEach(function (p) { if (p.email && (p.status || "planned") === "planned") seen[p.email.toLowerCase()] = 1; }); }); return Object.keys(seen).length; }
       function emailRota() {
@@ -2067,7 +2067,7 @@
       }
       var shareBox = el("section", { class: "card vol-card", "aria-labelledby": "vol-pub-h" },
         el("div", { class: "vol-card-head" }, el("h2", { id: "vol-pub-h" }, "Publishing"), published ? btn("Unpublish", function () { setRota({ status: "draft", published_at: null }, "Rota unpublished."); }, "btn-secondary") : el("button", { type: "button", class: "btn btn-sm btn-primary", onclick: publishRota }, "Publish")),
-        el("p", { class: "help", id: "vol-pub-note" }, published ? "The rota is published: anyone can see who is helping, by name and role. Changes show straight away." + (V.rota.emailed_at ? " Volunteers were emailed on " + stamp(new Date(V.rota.emailed_at)) + (V.rota.emailed_count ? " (" + V.rota.emailed_count + (V.rota.emailed_count === 1 ? " person" : " people") + ")" : "") + "." : "") : "Not published. Publishing shows names and roles publicly (no emails or mobiles). Preview shows the entries team first."),
+        el("p", { class: "help", id: "vol-pub-note" }, published ? "Published: anyone can see names and roles. Changes show straight away." + (V.rota.emailed_at ? " Volunteers were emailed on " + stamp(new Date(V.rota.emailed_at)) + (V.rota.emailed_count ? " (" + V.rota.emailed_count + (V.rota.emailed_count === 1 ? " person" : " people") + ")" : "") + "." : "") : "Not published. Publishing shows names and roles publicly (no emails or mobiles). Preview shows the entries team first."),
         el("div", { class: "actions" }, el("a", { class: "btn btn-sm btn-ghost", href: rotaUrl(true), target: "_blank", rel: "noopener" }, "Preview ", el("span", { class: "visually-hidden" }, "(opens in a new tab)")),
           published ? btn("Copy the rota link", function () { copyText(rotaUrl(false)); }, "btn-ghost") : null));
       var needs = [];
@@ -2084,7 +2084,7 @@
           el("p", null, "Press ", el("strong", null, "Arrived"), " beside a name to give them the role’s points straight away."),
           el("p", null, el("strong", null, "No show"), " is for someone who did not turn up and did not tell us. It removes all their points."),
           el("p", null, el("strong", null, "Told us"), " is for someone who let us know in advance. It costs them nothing."),
-          el("p", null, "Referees, the technical controller, the session manager and the platform manager are not on the sign-up form: you fill those in.")));
+          el("p", null, "Referees, TC, session manager and platform manager aren’t on the sign-up form: you fill those in.")));
       var kids = [statusRow, el("p", { class: "panel-intro" }, "Open sign-up, choose who does what in each session, and publish the rota."), signupBox];
       if (peopleBox) kids.push(peopleBox);
       kids.push(dayBox);
@@ -2241,7 +2241,7 @@
           rows.length ? btn("Record a payment sent", function () { recordPayout(c, rows, function () { renderMoneyTab(view, c); }); }, "btn-secondary") : null,
           franchise ? btn("Change this competition's amounts", function () { setCompetitionFees(c, own, feeDefaults, function () { renderMoneyTab(view, c); }); }) : null),
         el("h2", null, "How the money is split"),
-        franchise ? el("p", null, hostPayee ? "Host: " + hostPayee.name + "." : el("strong", null, "No host set yet: all the entry money stays with the federation until you set one.")) : el("p", null, el("strong", null, "Run by the federation."), " Not a franchise competition: the federation keeps the whole entry fee, so there is no host to pay."),
+        franchise ? el("p", null, hostPayee ? "Host: " + hostPayee.name + "." : el("strong", null, "No host set yet: all the entry money stays with the federation until you set one.")) : el("p", null, el("strong", null, "Run by the federation."), " Not a franchise: the federation keeps the whole fee."),
         franchise ? el("p", null, "From each entry the federation keeps a fixed amount: ", el("strong", null, fp("full_power", 1200) + " for a full power entry, " + fp("bench_only", 750) + " for bench only and " + fp("sub_junior", 450) + " for a sub-junior"),
           " (these are this competition's own amounts, whatever the host charges). Novice, junior, masters and open entries pay the full power amount. The host receives the rest of the entry fee.") : null,
         split.length ? el("ul", null, split) : null,
@@ -2339,7 +2339,7 @@
     var others = rows.filter(function (r) { return r.payee_kind !== "federation"; });
     openForm({
       title: "Record a payment sent", saveLabel: "Record it",
-      intro: "This only records that you have sent the money (it does not send anything). The report then shows what is still to send.",
+      intro: "Only records that you’ve sent the money; it doesn’t send anything.",
       values: { payee_id: others[0] && others[0].payee_id, paid_on: Y.todayLondon() },
       fields: [
         { name: "payee_id", label: "Paid to", type: "select", options: others.map(function (r) { return { value: r.payee_id, label: r.payee_name + " (to send " + money(r.net_pence) + ")" }; }) },
@@ -2381,7 +2381,7 @@
           var rows = used.filter(function (e) { return byId[e.discount_code_id] && !(e.status === "held" && new Date(e.hold_expires_at) <= now); });
           var label = { paid: "Paid", comped: "Free entry", held: "Paying now", cancelled: "Cancelled", refunded: "Refunded" };
           return el("div", null, el("div", { class: "section-head" }, el("h2", null, "Who has used a code")),
-            el("p", { class: "panel-intro" }, "Every entry that used a code, newest first. The competitions inbox also gets an email each time a code is used."),
+            el("p", { class: "panel-intro" }, "Every entry that used a code, newest first. The inbox is emailed each time too."),
             rows.length ? el("div", { class: "table-scroll" }, el("table", { class: "admin-table" },
               el("thead", null, el("tr", null, ["When", "Code", "Used by", "Discount", "Entry"].map(function (h) { return el("th", { scope: "col" }, h); }))),
               el("tbody", null, rows.map(function (e) {
@@ -2415,7 +2415,7 @@
                   btn("Copy", function () { copyText(d.code); }),
                   everUsed(d) && !d.active ? null : btn("Delete", function () {
                     var kept = everUsed(d);
-                    if (!window.confirm(kept ? "The code " + d.code + " has been used, so it cannot be deleted: its entries keep a record of it. It will be switched off, so nobody can use it again." : "Delete the code " + d.code + "?")) return;
+                    if (!window.confirm(kept ? "The code " + d.code + " has been used, so it can’t be deleted. It will be switched off instead." : "Delete the code " + d.code + "?")) return;
                     (kept ? sb.from("discount_codes").update({ active: false }).eq("id", d.id) : sb.from("discount_codes").delete().eq("id", d.id)).then(ok)
                       .then(function () { toast(kept ? "Switched off." : "Deleted."); renderDiscountsTab(view, c); }).catch(function (er) { toast(friendly(er), "error"); });
                   }, "btn-danger"))));
@@ -2431,7 +2431,7 @@
       half: { kind: "percent", value: 50, reason: "Volunteer points: half price" }, free: { kind: "percent", value: 100, reason: "Volunteer points: free entry" } };
     var api = openForm({
       title: "Make a discount code: " + c.name, saveLabel: "Make code",
-      intro: "The code is made for you from the name and the discount, plus random letters so it cannot be guessed. Send it to the person yourself.",
+      intro: "The code is generated for you. Send it to the person yourself.",
       values: { preset: "custom", kind: "amount", value: "", max_uses: 1, scope: "this" },
       fields: [
         { name: "preset", label: "Quick choice", type: "select", options: [{ value: "custom", label: "Something else (fill in below)" }, { value: "off20", label: "£20 off (volunteer)" }, { value: "off40", label: "£40 off (volunteer)" }, { value: "half", label: "Half price (volunteer)" }, { value: "free", label: "Free entry (volunteer)" }] },
@@ -2536,7 +2536,7 @@
     openForm({
       title: "Cancel or refund: " + e.full_name, saveLabel: "Confirm",
       intro: (paid ? "Paid " + entryMoney(paid) + (refunded ? ", already refunded " + entryMoney(refunded) : "") + ". " : "") + (canRefund ? "Stripe keeps its processing fee on a refund, so the federation bears that cost. " : "") +
-        (closed ? "Entries have closed, so refunds are not normally given now. Use this only for unforeseen circumstances. " : "") + "The lifter is emailed unless you untick the box. This cannot be undone.",
+        (closed ? "Entries have closed: refund only in unforeseen circumstances. " : "") + "The lifter is emailed unless you untick the box. This cannot be undone.",
       values: { action: (closed && !opts.keepRefund) ? (options.filter(function (o) { return o.value === "cancel"; })[0] || options[0]).value : options[0].value, amount: "", reason: opts.reason || "", notify: true },
       fields: [
         { name: "action", label: "What would you like to do?", type: "select", options: options },
@@ -2672,7 +2672,7 @@
   function addPriority(c, done) {
     openForm({
       title: "Add people to the priority list", saveLabel: "Add to the list",
-      intro: "Their links are emailed to them automatically when priority entry opens. You can add people at any time before then, and again later.",
+      intro: "Links are emailed automatically when priority entry opens. Add people any time.",
       fields: [{ name: "people", label: "People, one per line", type: "textarea", rows: 10, required: true, help: "Email addresses, optionally with a name first (Sam Smith, sam@example.com). Two spreadsheet columns work too." },
         { name: "from_points", label: "Costs 1 volunteer point", type: "checkbox", help: "Costs 1 point, taken when the entry is confirmed. Untick for a free link (guest, sponsor, test)." }],
       onSave: function (v) {
@@ -2733,7 +2733,7 @@
   // ---- news -----------------------------------------------------------------------
   function renderNews(panel) {
     panel.replaceChildren(panelHead("News", btn("New post", function () { editPost(); }, "btn-primary")),
-      el("p", { class: "panel-intro" }, "Posts show on the News page, newest first. A post dated in the future appears automatically on that date."),
+      el("p", { class: "panel-intro" }, "Newest first. A post dated in the future appears on that date."),
       el("p", null, "Loading…"));
     sb.from("posts").select("*").order("post_date", { ascending: false }).then(function (res) {
       var rows = ok(res);
@@ -2804,7 +2804,7 @@
 
   var ORG = {
     title: "Organisation", slug: "organisation",
-    intro: "Everyone listed on the Committee page. Sections run top to bottom; people run left to right.",
+    intro: "The Committee page. Sections run top to bottom, people left to right.",
     gTable: "org_sections", iTable: "people", fk: "section_id", gWord: "section", iWord: "person", iPlural: "people",
     gFields: [
       { name: "title", label: "Section title", required: true },
@@ -2828,7 +2828,7 @@
 
   var FAQ = {
     title: "FAQs", slug: "faqs",
-    intro: "Questions are grouped under category headings. The page shows categories top to bottom.",
+    intro: "Questions grouped by category, shown top to bottom.",
     gTable: "faq_categories", iTable: "faqs", fk: "category_id", gWord: "category", iWord: "FAQ", iPlural: "FAQs",
     gFields: [{ name: "title", label: "Category title", required: true }],
     iFields: [
@@ -2854,12 +2854,12 @@
     intro: "Links at the bottom of every page, grouped as columns, the bottom row, or social links. Changes show within a minute.",
     gTable: "footer_groups", iTable: "footer_links", fk: "group_id", gWord: "group", iWord: "link", iPlural: "links",
     gFields: [
-      { name: "title", label: "Heading", required: true, help: "Shown above a column of links. For the bottom row and social links it is just a name for you." },
+      { name: "title", label: "Heading", required: true, help: "Heading above a column. Just a label for the bottom row and social links." },
       { name: "placement", label: "Where it appears", type: "select", options: Object.keys(PLACEMENTS).map(function (k) { return { value: k, label: PLACEMENTS[k] }; }) }
     ],
     iFields: [
       { name: "label", label: "Link text", required: true },
-      { name: "url", label: "Address", required: true, help: "A full address starting https://, a page on this site such as faqs.html, or # as a placeholder until you have the real address." }
+      { name: "url", label: "Address", required: true, help: "Full https:// address, a page on this site (faqs.html), or # for now." }
     ],
     gSub: function (g) { return PLACEMENTS[g.placement] || ""; },
     iTitle: function (l) { return l.label; },
@@ -2868,7 +2868,7 @@
     isFixed: function (l) { return !!l && l.url === "privacy"; },
     fixedAction: { label: "Edit the privacy policy page", hash: "#privacy" },
     normalise: function (v) { v.url = v.url.trim(); v.label = v.label.trim(); return v; },
-    validate: function (v) { return footerUrlOk(v.url) ? null : "The address must start with https://, or be a page on this site (like faqs.html), or be # for now."; }
+    validate: function (v) { return footerUrlOk(v.url) ? null : "Use a https:// address, a page on this site (faqs.html), or #."; }
   };
 
   // ---- the privacy policy page: a rich text editor, kept in site_settings under page.privacy ----------------------
@@ -2898,7 +2898,7 @@
         }).catch(function (er) { errBox.textContent = friendly(er); errBox.hidden = false; }).then(function () { saveBtn.disabled = false; });
       });
       panel.lastChild.remove();
-      panel.appendChild(el("p", { class: "panel-intro" }, "This is the text on the Privacy policy page, linked from the footer. Saving updates the page straight away."));
+      panel.appendChild(el("p", { class: "panel-intro" }, "The Privacy policy page text, linked from the footer. Saving updates it straight away."));
       panel.appendChild(form);
       window.setTimeout(function () { editors.pending.forEach(function (fn) { fn(); }); }, 0);
     }).catch(function (e) { panel.lastChild.textContent = friendly(e); });
@@ -3047,7 +3047,7 @@
         el("p", null, "Each entry becomes a section on the Records page, read live from a Google Sheet. To get a link: in the sheet choose ",
           el("strong", null, "File > Share > Publish to web"), ", pick the tab, choose ", el("strong", null, "Comma-separated values (.csv)"),
           ", press Publish and paste the link here. Changes in the sheet appear on the site within a few minutes."),
-        el("p", null, "To move the records somewhere else later, edit the entry and paste the new link. Entries with no link are hidden from the public page.")),
+        el("p", null, "Entries with no link are hidden from the public page.")),
       el("p", null, "Loading…"));
     var settingQ = sb.from("site_settings").select("*").eq("key", SUBMIT_KEY).then(function (r) { return r; }, function (e) { return { error: e }; });
     Promise.all([sb.from("record_sources").select("*").order("sort_order"), settingQ]).then(function (both) {
@@ -3091,7 +3091,7 @@
       values: { url: current },
       saveLabel: "Save",
       fields: [{ name: "url", label: "Form link", type: "url", placeholder: "https://docs.google.com/forms/d/e/…/viewform",
-        help: "Where the “Submit a record” button at the top of the Records page goes. It opens in a new tab. Leave blank to hide the button." }],
+        help: "Where “Submit a record” goes (new tab). Blank hides the button." }],
       validate: function (v) { return v.url && !/^https:\/\//i.test(v.url) ? "The link must start with https://" : null; },
       onSave: function (v) {
         var q = exists ? sb.from("site_settings").update({ value: v.url }).eq("key", SUBMIT_KEY) : sb.from("site_settings").insert({ key: SUBMIT_KEY, value: v.url });
@@ -3309,7 +3309,7 @@
     }
     return null;
   }
-  var LINK_HELP = "A full address starting https://, a page on this site such as faqs.html, or # for now.";
+  var LINK_HELP = "Full https:// address, a page on this site (faqs.html), or # for now.";
 
   function homeCard(title, summary, actions, body) {
     return el("section", { class: "card home-card" },
@@ -3373,7 +3373,7 @@
     openForm({
       title: "Headline and buttons", values: hero, saveLabel: "Save",
       fields: [
-        { name: "title", label: "Headline", type: "textarea", rows: 3, required: true, help: "Put *stars* around words to highlight them in orange, like: The home of *drug tested* powerlifting." },
+        { name: "title", label: "Headline", type: "textarea", rows: 3, required: true, help: "*Stars* highlight words in orange: The home of *drug tested* powerlifting." },
         { name: "primaryLabel", label: "Button 1 text", required: true, half: true },
         { name: "primaryUrl", label: "Button 1 link", required: true, half: true, help: LINK_HELP },
         { name: "secondaryLabel", label: "Button 2 text", required: true, half: true },
@@ -3485,7 +3485,7 @@
     }));
     var note = !rows.length ? "No photos yet, so the home page uses the two that come with the site."
       : !active.length ? "Every photo is hidden, so the home page uses the two that come with the site."
-      : active.length === 1 ? "Only one photo is in the rotation, so it will not change from visit to visit. Add another to get a different one each time."
+      : active.length === 1 ? "Only one photo in rotation. Add another for variety."
       : active.length + " photos are in the rotation. Each visit shows one of them at random, never the same one twice in a row.";
     return homeCard("Hero photos", [el("p", { style: "margin:0;" }, note),
         el("p", { class: "help" }, "Tall (portrait) photos work best. The home page frame is nearly square and crops evenly from the centre, so keep the action in the middle.")],
@@ -3507,7 +3507,7 @@
   function editHeroAlt(r) {
     openForm({
       title: "Describe the photo", values: { alt: r.alt }, saveLabel: "Save",
-      fields: [{ name: "alt", label: "Description", required: true, help: "A few words for people who cannot see it, for example “A lifter pulling a deadlift, with a spotter behind the bar”." }],
+      fields: [{ name: "alt", label: "Description", required: true, help: "Describe it for screen readers, e.g. “A lifter pulling a deadlift”." }],
       onSave: function (v) { return sb.from("hero_images").update({ alt: v.alt }).eq("id", r.id).then(ok).then(function () { toast("Saved."); route(); }); }
     });
   }
