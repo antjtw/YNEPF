@@ -29,6 +29,7 @@ const sc = await import("../../supabase/functions/sync-clubs/index.ts");
 const cell = (c) => `<td class="x wixui-table__cell"><div class="a"><div class="g0">${c}</div></div></td>`;
 const epaHtml = `<table><tr>${cell("IronHQ ")}${cell("Club Contact: Luke Club Email: a@b.co Club Phone: 07")}</tr><tr>${cell("Roundy Strength &amp; Fitness")}${cell("Message Details: Club Contact: Dane")}</tr><tr>${cell("Not a club")}${cell("Something else")}</tr></table>`;
 assert.deepEqual(sc.parseEpaAffiliated(epaHtml), ["IronHQ", "Roundy Strength & Fitness"], "EPA names only, entities decoded, other rows ignored");
+assert(co.sessionParams({ entryId: "e", email: "a@b.co", name: "Lee Lifter", pence: 4000, competition: "NESC Open 2027", siteUrl: "https://x.y", expiresAt: 1 })["payment_intent_data[description]"] === "NESC Open 2027: Lee Lifter", "each payment is described in Stripe as the competition and the lifter");
 assert(co.formEncode(co.sessionParams({ entryId: "e", email: "a@b.co", name: "A", pence: 100, competition: "C", siteUrl: "https://x.y", expiresAt: 1, slug: "2027-test" })).includes(encodeURIComponent("https://x.y/entry-thanks?c=2027-test&session_id={CHECKOUT_SESSION_ID}")), "thanks page link carries the competition");
 const es = await import("../../supabase/functions/entry-status/index.ts");
 assert.equal(es.statusFrom([]), "unknown", "no such payment"); assert.equal(es.statusFrom([{ status: "pending", entries: { status: "held" } }]), "pending", "not confirmed yet");
