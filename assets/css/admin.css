@@ -201,21 +201,6 @@ body.dragging-lifter { user-select: none; cursor: grabbing; }
 .section-head.is-first { margin-top: var(--space-4); padding-top: 0; border-top: 0; }
 .section-head h2, .section-head h3 { margin: 0; }
 .section-head + .panel-intro, .section-head + p { margin-top: var(--space-2); }
-.stack > * + * { margin-top: var(--space-3); }
-.stack-lg > * + * { margin-top: var(--space-5); }
-
-/* Collapsible settings (Referees, Import, Helpers, who has signed up): a region, not bare text. */
-details.ol-settings { background: var(--surface-raised); border: 1px solid var(--navy-100); border-radius: var(--radius-lg); margin: var(--space-3) 0 0; }
-details.ol-settings > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); font-weight: 600; color: var(--text-heading); border-radius: var(--radius-lg); }
-details.ol-settings > summary::-webkit-details-marker { display: none; }
-details.ol-settings > summary::before { content: ""; flex: none; width: 0.55rem; height: 0.55rem; border-right: 2.5px solid currentColor; border-bottom: 2.5px solid currentColor; transform: rotate(-45deg); transition: transform var(--dur-fast) ease; margin-left: 0.15rem; }
-details.ol-settings[open] > summary::before { transform: rotate(45deg); }
-details.ol-settings[open] > summary { border-bottom: 1px solid var(--navy-50); border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
-details.ol-settings > summary:hover { background: var(--surface-page); }
-details.ol-settings > :not(summary) { margin-left: var(--space-4); margin-right: var(--space-4); }
-details.ol-settings > summary + * { margin-top: var(--space-3); }
-details.ol-settings > :last-child { margin-bottom: var(--space-4); }
-details.ol-settings .field:first-of-type { margin-top: 0; }
 
 /* Tables: numbers right-aligned, actions right-aligned, short cells never break in the middle. */
 .admin-table th.num, .admin-table td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }

@@ -830,3 +830,18 @@ body[data-page="my-entry"] .page-hero + .container { padding-top: var(--space-3)
 body[data-page="my-entry"] #live > .panel { margin-top: 0; }
 /* Like a callout, a green success box always leaves space below it for whatever follows */
 .success-panel { margin-bottom: var(--space-6); }
+
+/* A folded-away section (used by Manage your entry and the editor): one look everywhere */
+.stack > * + * { margin-top: var(--space-3); }
+.stack-lg > * + * { margin-top: var(--space-5); }
+details.ol-settings { background: var(--surface-raised); border: 1px solid var(--navy-100); border-radius: var(--radius-lg); margin: var(--space-3) 0 0; }
+details.ol-settings > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); font-weight: 600; color: var(--text-heading); border-radius: var(--radius-lg); }
+details.ol-settings > summary::-webkit-details-marker { display: none; }
+details.ol-settings > summary::before { content: ""; flex: none; width: 0.55rem; height: 0.55rem; border-right: 2.5px solid currentColor; border-bottom: 2.5px solid currentColor; transform: rotate(-45deg); transition: transform var(--dur-fast) ease; margin-left: 0.15rem; }
+details.ol-settings[open] > summary::before { transform: rotate(45deg); }
+details.ol-settings[open] > summary { border-bottom: 1px solid var(--navy-50); border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+details.ol-settings > summary:hover { background: var(--surface-page); }
+details.ol-settings > :not(summary) { margin-left: var(--space-4); margin-right: var(--space-4); }
+details.ol-settings > summary + * { margin-top: var(--space-3); }
+details.ol-settings > :last-child { margin-bottom: var(--space-4); }
+details.ol-settings .field:first-of-type { margin-top: 0; }

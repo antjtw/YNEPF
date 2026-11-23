@@ -23,6 +23,13 @@
   var when = function (d) { return new Date(d).toLocaleString("en-GB", { timeZone: Y.TZ || "Europe/London", dateStyle: "full", timeStyle: "short" }); };
 
   // ---- step 1 and 2: get in ----------------------------------------------------------------------------------------------
+  // OpenIPF link: accept the full address, one without https:// or www., or just the profile name ("anthonywhite1").
+  function ipfLink(s) {
+    s = String(s || "").trim();
+    var m = s.match(/^(?:https?:\/\/)?(?:www\.)?openipf\.org\/(?:u\/)?([A-Za-z0-9][A-Za-z0-9._-]*)\/?(?:[?#].*)?$/i) || s.match(/^(?:u\/)?([A-Za-z0-9][A-Za-z0-9._-]*)$/i);
+    return m ? "https://www.openipf.org/u/" + m[1] : "";
+  }
+
   function signIn() {
     var email = el("input", { type: "email", id: "me-email", autocomplete: "email", required: true, value: new URLSearchParams(location.search).get("email") || "" });
     var code = el("input", { type: "text", id: "me-code", inputmode: "numeric", autocomplete: "one-time-code", maxlength: "7" });
@@ -94,7 +101,7 @@
       // small changes, made straight away
       var name = el("input", { type: "text", id: "n-" + id, value: e.name, maxlength: "120", autocomplete: "name" });
       var ig = el("input", { type: "text", id: "i-" + id, value: e.instagram, maxlength: "31", autocomplete: "off", placeholder: "handle, no @" });
-      var url = el("input", { type: "url", id: "u-" + id, value: e.openipf_url, maxlength: "300", autocomplete: "off" });
+      var url = el("input", { type: "text", id: "u-" + id, value: e.openipf_url, maxlength: "300", autocomplete: "off" });
       var bp = el("input", { type: "text", id: "b-" + id, value: e.bp_number, maxlength: "30", autocomplete: "off" });
       var list = uni ? state.data.universities : state.data.clubs, inList = list.indexOf(e.club) >= 0, other = el("input", { type: "text", id: "o-" + id, maxlength: "120", value: inList ? "" : e.club, autocomplete: "off" });
       var club = el("select", { id: "c-" + id, class: "control" }, [el("option", { value: "" }, uni ? "Select your university" : "Unattached")].concat(list.map(function (c) { return el("option", { value: c, selected: c === e.club }, c); }), uni ? [el("option", { value: "__other__", selected: !inList && !!e.club }, "Other (not on this list)")] : []));
@@ -102,7 +109,8 @@
       club.addEventListener("change", function () { otherField.hidden = club.value !== "__other__"; });
       var save = el("button", { type: "button", class: "btn btn-secondary" }, "Save my details");
       save.addEventListener("click", function () {
-        var changes = { full_name: name.value, instagram: ig.value, openipf_url: url.value, bp_number: bp.value, club: uni && club.value === "__other__" ? other.value : club.value };
+        var changes = { full_name: name.value, instagram: ig.value, openipf_url: url.value.trim() ? ipfLink(url.value) : "", bp_number: bp.value, club: uni && club.value === "__other__" ? other.value : club.value };
+        if (url.value.trim() && !changes.openipf_url) return say("That does not look like an OpenIPF profile. Enter the link or just your profile name.", true);
         save.disabled = true; say("Saving…");
         post("entry_update", { entry_id: id, changes: changes }).then(function (b) {
           save.disabled = false;
