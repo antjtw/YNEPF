@@ -828,3 +828,5 @@ form > p.field-error:not([hidden])::before, #submit-error:not([hidden])::before,
 body[data-page="my-entry"] .page-hero { padding-block: var(--space-7) var(--space-3); }
 body[data-page="my-entry"] .page-hero + .container { padding-top: var(--space-3); }
 body[data-page="my-entry"] #live > .panel { margin-top: 0; }
+/* Like a callout, a green success box always leaves space below it for whatever follows */
+.success-panel { margin-bottom: var(--space-6); }
