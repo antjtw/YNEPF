@@ -329,3 +329,6 @@ details.ol-settings ~ .callout { margin-top: var(--space-4); max-width: none; }
   table.table-cards td.wide[data-label]::before { display: block; margin-bottom: 2px; }
 }
 @media (max-width: 40rem) { table.table-cards td, table.table-cards th { overflow-wrap: anywhere; } }
+
+/* Text straight after a row of buttons gets room to breathe. */
+.actions + .help, .actions + p.help { margin-top: var(--space-3); }

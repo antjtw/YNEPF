@@ -18,7 +18,7 @@
   function friendly(err) {
     if (err && err.code === "23505") return "That value is already used somewhere else (for example a web address or an email). Change it and try again.";
     if (err && /entries_competition_id_fkey|violates foreign key constraint/i.test(err.message || ""))
-      return "This competition has entries, so it cannot be deleted: we have to keep payment records. To take it off the website, open it and untick “Show on the website”. (A TEST competition can be cleared by an administrator in the database.)";
+      return "It has entries, so it can’t be deleted (payment records). Untick “Show on the website” to hide it. A TEST competition can be cleared in the database.";
     if (err && /row-level security|permission denied/i.test(err.message || "")) return "You do not have permission to do that. Try signing out and in again.";
     return (err && err.message) || "Something went wrong. Please try again.";
   }
@@ -183,7 +183,7 @@
         err,
         el("div", { class: "field" }, fileInput, drop, preview, info),
         el("div", { class: "field" }, el("label", { for: "img-alt" }, "Describe the picture"),
-          el("p", { class: "help", id: "img-alt-help" }, "A few words for people who cannot see it, for example “Lifters warming up before the first flight”. Required."), alt),
+          el("p", { class: "help", id: "img-alt-help" }, "Describe it for screen readers, e.g. “Lifters warming up”. Required."), alt),
         el("div", { class: "dialog-actions" }, add, cancel));
       dlg.appendChild(form);
       document.body.appendChild(dlg);
@@ -203,7 +203,7 @@
           preview.src = URL.createObjectURL(s.blob); preview.hidden = false;
           info.textContent = file.name + ": shrunk from " + fileSize(file.size) + " to " + fileSize(all.reduce(function (n, x) { return n + x.blob.size; }, 0)) +
             " (" + s.width + " × " + s.height + (all.length > 1 ? ", plus a smaller copy for phones" : "") + ")." +
-            (opts.frame ? " The home page shows it in a nearly square frame, cropped evenly from the centre, as in the preview." : "");
+            (opts.frame ? " Shown cropped to a near-square, as in the preview." : "");
           refresh(); alt.focus();
         }).catch(function (e) { if (mine !== token) return; info.textContent = ""; showErr(e.message); refresh(); });
       }
@@ -217,7 +217,7 @@
       form.addEventListener("submit", function (e) {
         e.preventDefault();
         if (busy || !shrunk) return;
-        if (!alt.value.trim()) { showErr("Describe the picture in a few words, so people using screen readers know what it shows."); alt.focus(); return; }
+        if (!alt.value.trim()) { showErr("Describe the picture for screen readers."); alt.focus(); return; }
         busy = true; showErr(""); add.textContent = "Uploading…"; refresh();
         uploadImage(shrunk, alt.value.trim(), opts).then(function (urls) { done({ url: urls[0], smallUrl: urls[1] || "", alt: alt.value.trim() }); })
           .catch(function (ex) { busy = false; add.textContent = "Add image"; refresh(); showErr("The picture could not be uploaded. " + friendly(ex)); });
@@ -343,7 +343,7 @@
     panel.replaceChildren(panelHead("Calendar", canComp() ? el("span", { class: "actions" },
         btn("Add competition", function () { go("#competitions/new"); }, "btn-primary"),
         btn("Add another event", function () { go("#competitions/new-event"); }, "btn-secondary")) : null),
-      el("p", { class: "panel-intro" }, "Competitions and other events (AGMs, referee courses and so on) all show on the Calendar. Open a competition to set it up once: details, places, when entry opens and closes, prices, and who has entered."),
+      el("p", { class: "panel-intro" }, "Everything on the Calendar. Open a competition to set it up."),
       el("p", null, "Loading…"));
     Promise.all([
       sb.from("competitions").select("*").order("start_date", { ascending: true }),
@@ -371,7 +371,7 @@
       sb.from("universities").select("*").order("name").then(ok).then(function (rows) {
         var live = rows.filter(function (r) { return r.active; }).length;
         box.replaceChildren(el("div", { class: "section-head is-first", style: "margin-top:0" }, el("h2", null, "Universities"), btn("Add a university", addUni, "btn-secondary")),
-          el("p", { class: "panel-intro" }, "For a university competition (tick the box on its Details tab), lifters choose the university they represent from this list, instead of a club. " + live + (live === 1 ? " university is" : " universities are") + " on the list. Switching one off hides it from new entries and keeps it on past ones."),
+          el("p", { class: "panel-intro" }, "Lifters at university competitions pick from this list instead of a club. " + live + (live === 1 ? " university is" : " universities are") + " on the list. Switching one off hides it from new entries and keeps it on past ones."),
           rows.length ? el("ul", { class: "item-list" }, rows.map(function (r) {
             return el("li", { class: "item-row" }, el("div", { class: "item-main" }, el("p", { class: "item-title" }, r.name, r.active ? null : el("span", { class: "tag tag-closed", style: "margin-left:var(--space-2)" }, "Switched off"))),
               el("span", { class: "actions" }, btn(r.active ? "Switch off" : "Switch on", function () { sb.from("universities").update({ active: !r.active }).eq("id", r.id).then(ok).then(draw).catch(function (e) { toast(friendly(e), "error"); }); }, r.active ? "btn-ghost" : "btn-secondary", { "aria-label": (r.active ? "Switch off " : "Switch on ") + r.name })));
@@ -379,7 +379,7 @@
       }).catch(function (e) { box.replaceChildren(el("h2", { style: "margin-top:0" }, "Universities"), el("p", { class: "form-error" }, friendly(e))); });
     }
     function addUni() {
-      openForm({ title: "Add a university", saveLabel: "Add it", values: {}, fields: [{ name: "name", label: "Name", required: true, help: "As lifters should see it on the entry form and the lifting order, for example Bradford University." }],
+      openForm({ title: "Add a university", saveLabel: "Add it", values: {}, fields: [{ name: "name", label: "Name", required: true, help: "As shown to lifters, e.g. Bradford University." }],
         onSave: function (v) {
           var name = String(v.name).trim();
           return sb.from("universities").insert({ name: name, active: true }).then(function (r) {
@@ -412,7 +412,7 @@
           }).catch(function (e) { toast(friendly(e), "error"); }).then(function () { button.disabled = false; });
       }, "btn-secondary");
       box.replaceChildren(el("h2", { style: "margin-top:0" }, "Club list"),
-        el("p", null, "Lifters in English divisions can choose their club from this list, which is copied from the English Powerlifting Association\u2019s list of approved clubs every few weeks. A club that is not on the EPA list cannot be chosen. Press the button after the EPA website has been updated."),
+        el("p", null, "Copied from the EPA\u2019s approved clubs every few weeks. Lifters in English divisions can only pick from it. Sync after the EPA site is updated."),
         el("p", null, line), el("p", null, button));
     });
     return box;
@@ -440,7 +440,7 @@
   function hideInstead(c, why) {
     openForm({
       title: "“" + c.name + "” cannot be deleted", saveLabel: "Hide it from the website", fields: [],
-      intro: why + " Entries and payments are records we need to keep, so this competition stays. You can hide it from the website instead: it keeps everything, but it disappears from the calendar and its entry page closes.",
+      intro: why + " It has entries and payments, so it stays. Hide it from the website instead.",
       onSave: function () {
         return sb.from("competitions").update({ published: false }).eq("id", c.id).then(ok).then(function () { c.published = false; toast("Hidden from the website."); route(); });
       }
@@ -456,11 +456,11 @@
       var what = c.kind === "event" ? "event" : "competition";
       openForm({
         title: "Delete “" + c.name + "”?", saveLabel: "Delete this " + what, danger: true, fields: [],
-        intro: "This cannot be undone." + (c.kind === "event" ? "" : " It deletes the " + what + " and everything set up for it: its entry settings and prices, extras, discount codes and waiting list. It has no entries, so no entrant is affected."),
+        intro: "This cannot be undone." + (c.kind === "event" ? "" : " It also deletes the " + what + "’s settings, prices, extras, codes and waiting list."),
         onSave: function () {
           return sb.from("competitions").delete().eq("id", c.id).then(function (r) {
             if (r.error) {
-              if (r.error.code === "23503" || /foreign key|violates/i.test(r.error.message || "")) { throw new Error("This " + what + " has entries or payments recorded against it, so it cannot be deleted. Hide it from the website instead (untick “Show on the website”)."); }
+              if (r.error.code === "23503" || /foreign key|violates/i.test(r.error.message || "")) { throw new Error("This " + what + " has entries or payments, so it can’t be deleted. Untick “Show on the website” to hide it."); }
               throw r.error;
             }
             toast(c.kind === "event" ? "Event deleted." : "Competition deleted."); go("#competitions");
@@ -474,7 +474,7 @@
     var what = c.kind === "event" ? "event" : "competition";
     return el("section", { class: "danger-zone", "aria-labelledby": "dz-title" },
       el("h2", { id: "dz-title" }, "Delete this " + what),
-      el("p", null, c.kind === "event" ? "Deleting cannot be undone." : "Deleting cannot be undone. A competition that has entries cannot be deleted, because entries and payments are records we keep: you can hide it from the website instead."),
+      el("p", null, c.kind === "event" ? "Deleting cannot be undone." : "Deleting cannot be undone. A competition with entries can’t be deleted: hide it instead."),
       el("button", { class: "btn btn-danger-solid", type: "button", onclick: function () { removeCompetition(c); } }, "Delete this " + what));
   }
 
@@ -616,7 +616,7 @@
         C({ name: "label", label: "Tag (optional)", help: "A small label next to the name, for example “Sponsor TBD”.", half: true }),
         C({ name: "slug", label: "Web address ending", help: "Made from the year and name if you leave it blank. Lower case letters, numbers and hyphens only. It is also the end of the entry and lifting order addresses.", half: true }),
         C({ name: "description", label: "Description", type: "textarea", rows: 5, help: "Plain text. Start lines with “- ” for bullet points. Links look like [text](https://…)." }),
-        C({ name: "is_university", label: "University competition", type: "checkbox", help: "Lifters choose the university they represent instead of a club, and it shows in place of the club on the entries and the lifting order. The list of universities is on the Calendar page." }),
+        C({ name: "is_university", label: "University competition", type: "checkbox", help: "Lifters choose a university instead of a club. The list is on the Calendar page." }),
         { heading: "When and where" },
         C({ name: "start_date", label: "First day", type: "date", required: true, half: true }),
         C({ name: "end_date", label: "Last day (if more than one day)", type: "date", half: true }),
@@ -641,23 +641,23 @@
         E({ name: "p_bench", label: "Bench only price (£)", type: "number", min: "0", half: true, show: isOnline }),
         E({ name: "p_sj", label: "Sub-junior price, any event (£, optional)", type: "number", min: "0", show: isOnline, help: "If set, sub-juniors pay this whatever they lift." }),
         { sub: "Franchise and qualifying", show: isOnline },
-        E({ name: "is_franchise", label: "This is a franchise competition (run by a host)", type: "checkbox", show: isOnline, help: "Tick it when a host runs the competition: they receive the entry fee less the federation's fixed amount for each entry. Leave it unticked for a competition the federation runs itself: the federation keeps the whole entry fee." }),
+        E({ name: "is_franchise", label: "This is a franchise competition (run by a host)", type: "checkbox", show: isOnline, help: "A host runs it and receives the entry fee less the federation's fixed amount per entry." }),
         E({ name: "qualification", label: "Qualifying standard", type: "select", show: isOnline, options: [
           { value: "none", label: "None: the OpenIPF link is optional" }, { value: "link", label: "OpenIPF link required, nothing checked" },
           { value: "glp", label: "A minimum GL score" }, { value: "totals", label: "A qualifying total for each weight class" }],
-          help: "With a minimum GL score or a qualifying total, the OpenIPF link is required on the entry form, and the form explains that we use it to check their GL points or total. Lifters give their OpenIPF link when they enter. Once they have paid, the site reads their results from OpenIPF (their best total and GL points in the 12 months before the competition, for the same event and kit) and checks them against this. You see the result on each entry." }),
+          help: "Makes the OpenIPF link required. After payment we check their best result from the 12 months before (same event and kit). The result shows on each entry." }),
         E({ name: "qualification_glp", label: "Minimum GL points", type: "number", min: "1", show: function (v) { return isOnline(v) && v.qualification === "glp"; } }),
         E({ name: "qualifying_totals_text", label: "Qualifying totals", type: "textarea", rows: 8, show: function (v) { return isOnline(v) && v.qualification === "totals"; },
-          help: "One per line: M or F, the weight class, then the total in kg. For example M 83: 450 or F 63: 300. Classes you leave out are not checked." }),
+          help: "One per line, e.g. M 83: 450 or F 63: 300. Classes left out aren’t checked." }),
         { sub: "Entry rules", show: isOnline },
         E({ name: "hold_minutes", label: "Minutes a place is held while paying", type: "number", min: "5", show: isOnline, help: "Between 5 and 30. A short hold stops places being parked." }),
-        E({ name: "guest_delay_days", label: "Guests can enter this many days after entry opens", type: "number", min: "0", show: isOnline, help: "A guest is anyone outside the Yorkshire & North East division. Usually 14 (two weeks). They are told the date on the entry form." }),
+        E({ name: "guest_delay_days", label: "Guests can enter this many days after entry opens", type: "number", min: "0", show: isOnline, help: "Guests are lifters outside the Yorkshire & North East division. Usually 14." }),
         { sub: "Priority and the waiting list", show: isOnline },
-        E({ name: "priority_hours", label: "Priority entry starts this many hours before general entry", type: "number", min: "1", show: isOnline, help: "People on the Codes and links priority list are emailed their personal link when this window opens, and can enter from then until general entry opens. 24 is one day." }),
-        E({ name: "priority_from_points", label: "Priority links for volunteers", type: "checkbox", show: isOnline, help: "Everyone with at least one volunteer point is emailed a personal priority link when the priority window opens. Using it costs 1 point, taken only once their entry is confirmed. Untick for a competition where volunteers should not get priority." }),
-        E({ name: "offer_window_hours", label: "Hours an offered place is held for the waiting list", type: "number", min: "1", show: isOnline, help: "When the competition is full, the waiting list opens by itself. When a place frees up, the person who has waited longest is emailed a personal link and has this long to use it (up to 168 hours). Then it passes to the next person." }),
+        E({ name: "priority_hours", label: "Priority entry starts this many hours before general entry", type: "number", min: "1", show: isOnline, help: "Personal links are emailed this many hours before general entry opens." }),
+        E({ name: "priority_from_points", label: "Priority links for volunteers", type: "checkbox", show: isOnline, help: "Emails everyone with a volunteer point a priority link. Costs 1 point, taken when the entry is confirmed. Untick for a competition where volunteers should not get priority." }),
+        E({ name: "offer_window_hours", label: "Hours an offered place is held for the waiting list", type: "number", min: "1", show: isOnline, help: "Hours each person has to use an offered place (max 168), then it passes on." }),
         { heading: "Full, closed and waiting list" },
-        C({ name: "entries_full", label: "Entries full", type: "checkbox", show: function (v) { return v.method !== "online"; }, help: "Tick when a competition that is entered somewhere else fills up. Online entry marks itself full when the places run out, and the waiting list opens by itself." }),
+        C({ name: "entries_full", label: "Entries full", type: "checkbox", show: function (v) { return v.method !== "online"; }, help: "For competitions entered elsewhere that fill up. Online entry marks itself full." }),
         E({ name: "entries_closed_manually", label: "Close entries now", type: "checkbox", show: isOnline, help: "Stops new online entries straight away. Untick to reopen." }),
         { heading: "On the website" },
         C({ name: "published", label: "Show on the website", type: "checkbox", help: "Untick to keep it as a draft. A draft can still be tried by signed-in entries staff." })
@@ -697,8 +697,8 @@
         if (!allowed) form.controls[f.name].input.disabled = true;
       });
       var note = null;
-      if (onlyEntry) note = "You can change the online entry settings (how entries are taken, events, prices, closing entries). The rest is looked after by the editors.";
-      else if (!canEntry()) note = "You can change the competition details. The online entry settings (how entries are taken, prices) are looked after by the entries team.";
+      if (onlyEntry) note = "You can change online entry settings. Editors look after the rest.";
+      else if (!canEntry()) note = "You can change the competition details. The entries team looks after online entry settings.";
       var formEl = el("form", { novalidate: true }, note ? el("p", { class: "callout" }, note) : null, form.el, bar.el);
       view.replaceChildren(formEl);
       if (!isNew && canComp()) view.appendChild(deleteZone(c));
@@ -891,7 +891,7 @@
           onSave: function (v) { return callWaitlist({ action: "entry_request_decide", request_id: r.id, approve: false, reason: v.reason }).then(function () { toast("Request declined. They have been emailed."); reload(); }); } });
       }
       var reqBox = pendingReqs.length ? el("section", { class: "card", "aria-labelledby": "req-h", style: "margin-bottom:var(--space-5)" }, el("h2", { id: "req-h" }, "Requests (" + pendingReqs.length + ")"),
-        el("p", { class: "help" }, "Lifters ask for a different weight class or equipment, or to cancel. Nothing changes until you approve it."),
+        el("p", { class: "help" }, "Change and cancel requests. Nothing changes until you approve."),
         el("ul", { class: "item-list" }, pendingReqs.map(function (r) {
           var e = rows.filter(function (x) { return x.id === r.entry_id; })[0] || {};
           return el("li", { class: "item-row" }, el("div", { class: "item-main" }, el("p", { class: "item-title" }, (e.full_name || "A lifter") + ": " + (r.kind === "cancel" ? "wants to cancel" : "change requested")),
@@ -1039,7 +1039,7 @@
   function renderResultsTab(view, c) {
     var form = pageForm([
       { name: "openipf_url", label: "OpenIPF meet results link", type: "url", placeholder: "https://www.openipf.org/meet/…",
-        help: "Paste the link to this competition's results page on OpenIPF once the results are up. A “View results” button then appears on the calendar. Clear the box to take it off." }
+        help: "OpenIPF results link. Adds a “View results” button on the calendar. Clear to remove." }
     ], { openipf_url: c.openipf_url || "" });
     var bar = saveBar(null, "Save");
     var f = el("form", { novalidate: true }, form.el, bar.el);
@@ -1274,7 +1274,7 @@
       }
       function editTimes(s) {
         var t = timesOf(s);
-        openForm({ title: "Day " + s.day + ", session " + s.sessionNo + ": times", intro: "UK time, like 09:30. Leave a box empty to use the usual time: weigh-in 08:00 for session 1 and 13:00 for session 2, lift-off two hours after weigh-in, and the awards estimated from the attempts.",
+        openForm({ title: "Day " + s.day + ", session " + s.sessionNo + ": times", intro: "UK time, like 09:30. Empty uses the usual: weigh-in 08:00 / 13:00, lift-off two hours later.",
           saveLabel: "Save times",
           fields: [{ name: "weighIn", label: "Weigh-in", type: "text", half: true, placeholder: hm(t.weighIn) }, { name: "liftOff", label: "Lift-off", type: "text", half: true, placeholder: hm(t.liftOff) }, { name: "awards", label: "Awards", type: "text", half: true, placeholder: hm(t.awards) }],
           values: { weighIn: s.weighIn ? hm(msOf(s.weighIn)) : "", liftOff: s.liftOff ? hm(msOf(s.liftOff)) : "", awards: s.awards ? hm(msOf(s.awards)) : "" },
@@ -1298,7 +1298,7 @@
         var notes = S.warnings.slice(); if (S.dropped) notes.push(S.dropped + (S.dropped === 1 ? " lifter" : " lifters") + " on the saved order has cancelled since, and has been taken out. Save to keep that.");
         if (!flights.length && noTotal) notes.push(noTotal + (noTotal === 1 ? " lifter has" : " lifters have") + " no best total yet (it comes from the OpenIPF check on the entry). They go first in their flight.");
         if (notes.length) kids.push(el("div", { class: "callout" }, el("ul", { style: "margin:0;padding-left:1.2em" }, notes.map(function (w) { return el("li", null, w); }))));
-        kids.push(el("p", { class: "visually-hidden", id: "lo-grip-help" }, "Press space to pick this lifter up, then the up and down arrow keys to move them through the order, space to drop them, delete to take them out, or escape to cancel."));
+        kids.push(el("p", { class: "visually-hidden", id: "lo-grip-help" }, "Space to pick up, arrow keys to move, space to drop, delete to remove, escape to cancel."));
         if (flights.length) {
           kids.push(el("section", { id: "lo-unplaced-zone", class: "lab-unplaced", "aria-labelledby": "lo-unplaced" }, el("h3", { id: "lo-unplaced" }, "Not in the lifting order" + (unplaced.length ? " (" + unplaced.length + ")" : "")),
             unplaced.length ? el("div", { class: "table-scroll" }, el("table", { class: "admin-table lab-table" }, el("caption", { class: "visually-hidden" }, "Lifters not yet in the lifting order"),
@@ -1393,10 +1393,10 @@
         el("p", { class: "help" }, "A CSV to import into OpenLifter."),
         el("div", { class: "actions" }, iconBtn("OpenLifter file", ICON_DOWNLOAD, olFile)),
         el("details", { class: "ol-settings" }, el("summary", null, "OpenLifter settings"),
-          el("div", { class: "field" }, el("label", { for: "ol-divisions" }, "Division codes"), el("p", { class: "help", id: "ol-div-help" }, "One per line, the code after the equals sign. Each must match a division set up in the OpenLifter meet exactly, or the import fails."), divText),
+          el("div", { class: "field" }, el("label", { for: "ol-divisions" }, "Division codes"), el("p", { class: "help", id: "ol-div-help" }, "One per line, the code after the equals sign. Must match the OpenLifter meet’s divisions exactly."), divText),
           el("div", { class: "field half" }, el("label", { for: "ol-classic" }, "Classic equipment"), classicBox),
           el("div", { class: "field half" }, el("label", { for: "ol-equipped" }, "Equipped equipment"), equippedBox),
-          el("div", { class: "field field-check" }, stdBox, el("div", null, el("label", { for: "ol-standard" }, "Use the public OpenLifter's columns"), el("p", { class: "help" }, "Leaves out Session, Novice and CanBreakRecords. Only for the public OpenLifter: ours accepts them."))),
+          el("div", { class: "field field-check" }, stdBox, el("div", null, el("label", { for: "ol-standard" }, "Use the public OpenLifter's columns"), el("p", { class: "help" }, "Leaves out Session, Novice and CanBreakRecords, for the public OpenLifter."))),
           el("div", { class: "field field-check" }, noviceBox, el("div", null, el("label", { for: "ol-novice" }, "This is a novice competition"), el("p", { class: "help" }, "Written to the Novice column."))),
           el("div", { class: "actions" }, btn("Save OpenLifter settings", function () {
             var st = olSettings(), nf = (olSaved.novice_for || []).filter(function (id) { return id !== c.id; }); if (st.novice) nf.push(c.id);
@@ -1416,7 +1416,7 @@
         finalBtn.className = "btn " + (isFinal ? "btn-secondary" : "btn-primary");
         finalBtn.disabled = !closed; finalBtn.title = closed ? "" : "Available once entries close";
         var autoNote = el("p", { class: "help", id: "lo-auto-note" }, closed
-          ? (isFinal ? "This order is final. Lifters have been emailed." : "Entries have closed and lifters have been told. Finalise lifting order publishes the final order and emails it to them.")
+          ? (isFinal ? "This order is final. Lifters have been emailed." : "Entries closed and lifters told. Finalise publishes the final order and emails it.")
           : "Lifters are emailed automatically when entries close. Finalise lifting order then sends the final order.");
         if (!published) {
           kids.push(el("p", { class: "help", id: "lo-pub-note", role: "status" }, "Not published yet. Save your changes first. Preview shows it before anyone else sees it."
@@ -1465,7 +1465,7 @@
         var n = lifterCount();
         if (closed) {
           // Entries have closed: publishing sends nothing. The only email left is the final order, sent by Finalise lifting order.
-          if (!window.confirm("Publish the lifting order? Anyone can see it, without lot numbers. No email goes out now: lifters are emailed the final order when you use Finalise lifting order.")) return;
+          if (!window.confirm("Publish the lifting order? Anyone can see it, without lot numbers. No email goes out until you finalise.")) return;
           doPublish(false); return;
         }
         openForm({ title: "Publish the lifting order", fields: [], saveLabel: "Publish and email " + lifters(n),
@@ -1502,7 +1502,7 @@
         if (!S.sessions.length) kids.push(el("p", { class: "help" }, "Sort the entries first."));
         else if (!ls.any) kids.push(el("div", { class: "actions" }, btn("Draw lot numbers", drawLots, "btn-secondary")));
         else {
-          kids.push(el("p", { class: ls.ok ? "help" : "form-error", role: "status" }, ls.ok ? "Lot numbers are drawn for " + n + (n === 1 ? " lifter." : " lifters.") : "Lifters have moved since the lot numbers were drawn, so some flights no longer have their own block. Redraw them once the order is settled."));
+          kids.push(el("p", { class: ls.ok ? "help" : "form-error", role: "status" }, ls.ok ? "Lot numbers are drawn for " + n + (n === 1 ? " lifter." : " lifters.") : "The order changed since lot numbers were drawn. Redraw once it’s settled."));
           var showBox = el("input", { type: "checkbox", id: "lo-show-lots" }); showBox.checked = !!S.showLots;
           showBox.addEventListener("change", function (e) { S.showLots = e.target.checked; draw(); });
           kids.push(el("div", { class: "field field-check" }, showBox, el("div", null, el("label", { for: "lo-show-lots" }, "Show lot numbers in the lists above"))));
@@ -1511,10 +1511,10 @@
         lotsBox.replaceChildren.apply(lotsBox, kids);
       }
       view.replaceChildren(
-        el("p", { class: "panel-intro" }, "Sort the entered lifters into sessions and flights, then drag anyone to change it. Best totals come from OpenIPF. Not public yet."),
+        el("p", { class: "panel-intro" }, "Sort into sessions and flights, then drag to adjust. Best totals come from OpenIPF. Not public yet."),
         form.el,
         el("section", { "aria-labelledby": "lo-build-h", style: "margin:var(--space-4) 0" }, el("h3", { id: "lo-build-h" }, "Build and save"),
-          el("p", { class: "help" }, "Sort the entries once to make the first order, then arrange it by hand. Save your progress as you go. Preview shows what is saved, to the entries team only."),
+          el("p", { class: "help" }, "Sort once for a first order, then arrange by hand. Save as you go. Preview shows the saved order to the entries team only."),
           el("div", { class: "actions", style: "margin:var(--space-3) 0" }, sortBtn, clearBtn, saveBtn, previewLink),
           statusNode),
         live, area,
@@ -1577,7 +1577,7 @@
     function adjust(sign, who) {
       var add = sign > 0;
       openForm({ title: add ? (who ? "Add points for " + (who.name || who.email) : "Add points") : who ? "Take points away from " + (who.name || who.email) : "Take points away", saveLabel: add ? "Add points" : "Take points away",
-        intro: who && add ? "Adding points for " + (who.name || who.email) + ". It goes in the ledger with your name, so there is a record." : who && !add ? (who.name || who.email) + " has " + (who.balance === undefined ? "" : who.balance + " points. ") + "For a spend (priority entry 1, £20 off 4, £40 off 8, half price BP membership 5, free membership 10) or a correction. It cannot take them below zero." : add ? "A thank you, a correction, or points earned somewhere we did not tick off. It goes in the ledger with your name, so there is a record." : "For a spend (priority entry 1, £20 off 4, £40 off 8, half price BP membership 5, free membership 10) or a correction. It cannot take someone below zero.",
+        intro: who && add ? "Adding points for " + (who.name || who.email) + ". It goes in the ledger with your name, so there is a record." : who && !add ? (who.name || who.email) + " has " + (who.balance === undefined ? "" : who.balance + " points. ") + "Spends (priority 1, £20 off 4, £40 off 8, half-price BP 5, free BP 10) or corrections. Can’t go below zero." : add ? "A thank you, correction or points earned elsewhere. Recorded with your name." : "Spends (priority 1, £20 off 4, £40 off 8, half-price BP 5, free BP 10) or corrections. Can’t go below zero.",
         values: who ? { email: who.email } : {}, fields: [{ name: "email", label: "Their email address", type: "email", required: true }].concat(add && !who ? [{ name: "name", label: "Their name (only for someone new)", help: "Leave empty for someone who already has points." }] : [])
           .concat([{ name: "points", label: "Points", type: "number", required: true, min: "1", max: "100", half: true }, { name: "date", label: "Date (optional)", type: "date", half: true, help: "For adding points retroactively. Points expire 24 months after this date." }, { name: "reason", label: "What is it for?", required: true, help: add ? "For example: Helped with the livestream." : "For example: Priority entry, March Open." }]),
         validate: function (v) { var n = Number(v.points); return !n || n < 1 || n > 100 || Math.round(n) !== n ? "Enter a whole number of points from 1 to 100." : null; },
@@ -1624,7 +1624,7 @@
         }).catch(function (e) { toast(friendly(e), "error"); });
       }
       refBox.replaceChildren(el("summary", null, "Referees"),
-        el("p", { class: "help" }, "Referees, the technical controller and the jury are picked from this roster on the rota, and their level is shown next to their name. Add our divisional referees here, or when you add someone on the rota."),
+        el("p", { class: "help" }, "Referees, TC and jury are picked from this roster on the rota. Add divisional referees here or from the rota."),
         el("div", { class: "actions" }, btn("Add a referee", function () { editRef(null); }, "btn-primary"), btn("Add from the committee page", fromCommittee, "btn-ghost")), body);
       refresh();
     }
@@ -1633,7 +1633,7 @@
     function drawImport() {
       var file = el("input", { type: "file", accept: ".csv,text/csv", id: "pts-file" }), out = el("div", { "aria-live": "polite" });
       importBox.replaceChildren(el("summary", null, "Import the old points sheet"),
-        el("p", { class: "help" }, "In the sheet, open the Master database tab and choose File, Download, Comma-separated values (.csv). Choose that file here. Nothing is saved until you press Import. Importing the same file again changes nothing."),
+        el("p", { class: "help" }, "In the sheet: Master database tab, File, Download, CSV. Choose it here. Nothing saves until Import; importing again changes nothing."),
         el("div", { class: "field" }, el("label", { for: "pts-file" }, "The CSV file"), file), out);
       file.addEventListener("change", function () {
         var f = file.files && file.files[0]; if (!f) return;
@@ -1666,7 +1666,7 @@
     function drawHelpers() {
       var sel = el("select", { class: "control", id: "help-comp" }), box = el("textarea", { id: "help-list", rows: "6", placeholder: "Jo Smith, jo@example.com\nAmir Khan, amir@example.com, 2" }), out = el("div", { "aria-live": "polite" });
       helpersBox.replaceChildren(el("summary", null, "Points for helpers at another host's competition"),
-        el("p", { class: "help" }, "A franchise competition's host staffs it, but their helpers still earn points. Paste the host's list, one person per line: name, email, and optionally the points (1 if left out). Each person earns once per competition."),
+        el("p", { class: "help" }, "The host’s helpers still earn points. One per line: name, email, optional points (default 1). Once per competition."),
         el("div", { class: "field" }, el("label", { for: "help-comp" }, "Competition"), sel), el("div", { class: "field" }, el("label", { for: "help-list" }, "Helpers"), box), out);
       sb.from("competitions").select("id,name,start_date").order("start_date", { ascending: false }).limit(60).then(ok).then(function (cs) { sel.replaceChildren.apply(sel, cs.map(function (x) { return el("option", { value: x.id }, x.name + " (" + x.start_date + ")"); })); });
       function parse() {
@@ -1721,12 +1721,12 @@
   // Add someone new: set them up (name, email, committee) and give them their first points in the same step.
   function addVolunteer(done) {
     openForm({ title: "Add someone new", saveLabel: "Add them", values: {},
-      intro: "For someone who is not in the points list yet, for example a committee member or a volunteer from another host. You can give them points now, or later from their row.",
+      intro: "For people not in the points list yet, such as committee or another host’s volunteers.",
       fields: [{ name: "full_name", label: "Name", required: true }, { name: "email", label: "Email address", type: "email", required: true, help: "Points are tied to this address." }, { name: "mobile", label: "Mobile number (optional)" },
-        { name: "committee", label: "Part of the committee", type: "checkbox", help: "Executive and supporting committee members earn 3 points at the end of every quarter. Untick when they step down." },
+        { name: "committee", label: "Part of the committee", type: "checkbox", help: "Committee members earn 3 points each quarter. Untick when they step down." },
         { sub: "Points to give them now (optional)" },
         { name: "points", label: "Points", type: "number", min: "1", max: "100", half: true }, { name: "date", label: "Date earned (optional)", type: "date", half: true },
-        { name: "reason", label: "What are they for?", help: "Needed if you add points, for example: Volunteered at the March Open. Points expire 24 months after the date earned." }],
+        { name: "reason", label: "What are they for?", help: "Needed when adding points, e.g. Volunteered at the March Open. Points expire after 24 months." }],
       validate: function (v) {
         if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(v.email || "").trim())) return "That email address does not look right.";
         var has = v.points !== "" && v.points !== null && v.points !== undefined;
@@ -1749,11 +1749,11 @@
     sb.from("vol_people").select("email,full_name,mobile,tshirt,committee").eq("email", person.email).maybeSingle().then(function (r) {
       var row = (r && r.data) || {};
       openForm({ title: "Edit " + (person.name || person.email), saveLabel: "Save changes",
-        intro: "A new name shows on the points list, sign-ups and rota. A new email address keeps their points, sign-ups and rota places, and any unused priority link or discount code moves to it. Each change is recorded with your name.",
+        intro: "A new email keeps their points, sign-ups and rota places, and moves unused links and codes. Changes are recorded with your name.",
         values: { full_name: row.full_name || person.name || "", email: person.email, mobile: row.mobile || "", tshirt: row.tshirt || "", committee: !!row.committee },
         fields: [{ name: "full_name", label: "Name", required: true }, { name: "email", label: "Email address", type: "email", required: true, help: "Points are tied to this address, and it is where their emails go." },
           { name: "mobile", label: "Mobile number (optional)", half: true }, { name: "tshirt", label: "T-shirt size (optional)", type: "select", half: true, options: [{ value: "", label: "Not given" }].concat(SIZES.map(function (z) { return { value: z, label: z }; })) },
-          { name: "committee", label: "Part of the committee", type: "checkbox", help: "Executive and supporting committee members earn 3 points at the end of every quarter. Untick when they step down." }],
+          { name: "committee", label: "Part of the committee", type: "checkbox", help: "Committee members earn 3 points each quarter. Untick when they step down." }],
         validate: function (v) { return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(v.email || "").trim()) ? null : "That email address does not look right."; },
         extra: extraActions || [],
         onSave: function (v) {
@@ -1795,7 +1795,7 @@
       var n = el("input", { class: "control", type: "number", id: "vol-n", min: "1", max: "8", value: "2", style: "max-width:8rem" });
       var su = el("input", { type: "checkbox", id: "vol-su" }), td = el("input", { type: "checkbox", id: "vol-td" });
       su.checked = true; td.checked = true;
-      view.replaceChildren(el("p", { class: "panel-intro" }, "Volunteers sign up for this competition, you decide who does what, then publish the rota. Start by saying how many sessions need staffing. The usual roles and numbers are filled in, and you can change every one."),
+      view.replaceChildren(el("p", { class: "panel-intro" }, "Volunteers sign up, you assign roles, then publish. Start with how many sessions need staffing. Usual roles are pre-filled."),
         el("div", { class: "field" }, el("label", { for: "vol-n" }, "How many sessions need staffing?"), el("p", { class: "help" }, "Lifting sessions, not counting set up and tear down."), n),
         el("div", { class: "field field-check" }, su, el("div", null, el("label", { for: "vol-su" }, "Include set up (usually the evening before)"))),
         el("div", { class: "field field-check" }, td, el("div", null, el("label", { for: "vol-td" }, "Include tear down (straight after the last session)"))),
@@ -1876,7 +1876,7 @@
     // anyone else: choose someone we know, or add a new person (an email is optional, but it is what points go to)
     function addPerson(session, place) {
       var known = V.signups.concat(V.people.filter(function (pp) { return !V.signups.some(function (su) { return su.email === pp.email; }); }));
-      openForm({ title: "Choose someone else", intro: "For someone who did not tick this role, or has not signed up. This is your choice, so they will not be flagged as unavailable. Pick a person we know, or add a new one below.", saveLabel: "Use this person",
+      openForm({ title: "Choose someone else", intro: "For someone who didn’t tick this role or hasn’t signed up. Your choice, so no unavailable flag.", saveLabel: "Use this person",
         fields: [{ name: "existing", label: "Someone we know", type: "select", options: [{ value: "", label: "A new person (fill in below)" }].concat(known.map(function (x) { return { value: x.email, label: x.full_name + " (" + x.email + ")" }; })) },
           { name: "full_name", label: "Name (for a new person)" }, { name: "email", label: "Email address (optional)", type: "email", half: true }, { name: "mobile", label: "Mobile number (optional)", half: true }],
         values: {}, validate: function (v) { if (!v.existing && !String(v.full_name || "").trim()) return "Choose someone, or enter a name."; return v.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(v.email).trim()) ? "That email address does not look right." : null; },
@@ -1889,7 +1889,7 @@
     }
     // a referee who is not on the roster yet: their level is required, so it shows on the rota
     function addReferee(session, place) {
-      openForm({ title: "Add a referee", intro: "They join the referee roster, so they are in the list next time. Their level is shown on the rota.", saveLabel: "Add and use",
+      openForm({ title: "Add a referee", intro: "Added to the referee roster. Their level shows on the rota.", saveLabel: "Add and use",
         fields: [{ name: "name", label: "Name", required: true }, { name: "level", label: "Level", type: "select", required: true, options: [{ value: "", label: "Choose a level" }].concat(REF_LEVELS) }, { name: "email", label: "Email address (optional)", type: "email", help: "Needed for them to earn volunteer points." }],
         values: {}, validate: function (v) { if (!v.level) return "Choose their level."; return v.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(v.email).trim()) ? "That email address does not look right." : null; },
         onSave: function (v) {
@@ -2041,7 +2041,7 @@
         el("hr"),
         el("div", { class: "vol-settings" },
           el("div", { class: "field", style: "max-width:22rem;margin:0" }, el("label", { for: "vol-closes" }, "Close sign-up automatically (optional)"), el("p", { class: "help", id: "vol-closes-help" }, "UK time. Leave empty to close it yourself."), when),
-          el("div", { class: "field field-check", style: "margin:0" }, shirts, el("div", null, el("label", { for: "vol-shirts" }, "Ask for a T-shirt size"), el("p", { class: "help" }, "Unisex sizes XS to 5XL. Turn it off for competitions where we are not providing T-shirts.")))));
+          el("div", { class: "field field-check", style: "margin:0" }, shirts, el("div", null, el("label", { for: "vol-shirts" }, "Ask for a T-shirt size"), el("p", { class: "help" }, "Unisex XS to 5XL. Off if we aren’t providing T-shirts.")))));
       // Publishing the rota can email each volunteer who has a role, once: what they are doing, with a link to the rota. Publishing again does not email again.
       function rotaPeople() { var seen = {}; V.sessions.forEach(function (s) { (s.vol_places || []).forEach(function (p) { if (p.email && (p.status || "planned") === "planned") seen[p.email.toLowerCase()] = 1; }); }); return Object.keys(seen).length; }
       function emailRota() {
@@ -2054,7 +2054,7 @@
         var n = rotaPeople(), now = function () { return { status: "published", published_at: new Date().toISOString() }; };
         if (V.rota.emailed_at || !n) { setRota(now(), "Rota published."); return; }          // already emailed once, or nobody to email: just publish
         openForm({ title: "Publish the rota", fields: [], saveLabel: "Publish and email " + n + (n === 1 ? " volunteer" : " volunteers"),
-          intro: "Publishing puts names and roles on a public page (no emails or mobile numbers). You can also email the " + n + (n === 1 ? " volunteer" : " volunteers") + " who " + (n === 1 ? "has" : "have") + " a role, telling them what they are doing and linking to the rota, from the competitions address. This email goes out once: publishing again later does not email them again.",
+          intro: "Publishing shows names and roles publicly (no emails or mobiles). You can also email the " + n + (n === 1 ? " volunteer" : " volunteers") + " who " + (n === 1 ? "has" : "have") + " a role, with a link to the rota. Sent once; publishing again doesn’t resend.",
           extra: [{ label: "Publish without emailing", onclick: function () { setRota(now(), "Rota published."); } }],
           onSave: function () {
             var patch = now();
@@ -2067,7 +2067,7 @@
       }
       var shareBox = el("section", { class: "card vol-card", "aria-labelledby": "vol-pub-h" },
         el("div", { class: "vol-card-head" }, el("h2", { id: "vol-pub-h" }, "Publishing"), published ? btn("Unpublish", function () { setRota({ status: "draft", published_at: null }, "Rota unpublished."); }, "btn-secondary") : el("button", { type: "button", class: "btn btn-sm btn-primary", onclick: publishRota }, "Publish")),
-        el("p", { class: "help", id: "vol-pub-note" }, published ? "The rota is published: anyone can see who is helping, by name and role. Changes show straight away." + (V.rota.emailed_at ? " Volunteers were emailed on " + stamp(new Date(V.rota.emailed_at)) + (V.rota.emailed_count ? " (" + V.rota.emailed_count + (V.rota.emailed_count === 1 ? " person" : " people") + ")" : "") + "." : "") : "The rota is not published. Publishing puts names and roles on a public page (no emails or mobile numbers). Preview shows it to the entries team first."),
+        el("p", { class: "help", id: "vol-pub-note" }, published ? "Published: anyone can see names and roles. Changes show straight away." + (V.rota.emailed_at ? " Volunteers were emailed on " + stamp(new Date(V.rota.emailed_at)) + (V.rota.emailed_count ? " (" + V.rota.emailed_count + (V.rota.emailed_count === 1 ? " person" : " people") + ")" : "") + "." : "") : "Not published. Publishing shows names and roles publicly (no emails or mobiles). Preview shows the entries team first."),
         el("div", { class: "actions" }, el("a", { class: "btn btn-sm btn-ghost", href: rotaUrl(true), target: "_blank", rel: "noopener" }, "Preview ", el("span", { class: "visually-hidden" }, "(opens in a new tab)")),
           published ? btn("Copy the rota link", function () { copyText(rotaUrl(false)); }, "btn-ghost") : null));
       var needs = [];
@@ -2084,7 +2084,7 @@
           el("p", null, "Press ", el("strong", null, "Arrived"), " beside a name to give them the role’s points straight away."),
           el("p", null, el("strong", null, "No show"), " is for someone who did not turn up and did not tell us. It removes all their points."),
           el("p", null, el("strong", null, "Told us"), " is for someone who let us know in advance. It costs them nothing."),
-          el("p", null, "Referees, the technical controller, the session manager and the platform manager are not on the sign-up form: you fill those in.")));
+          el("p", null, "Referees, TC, session manager and platform manager aren’t on the sign-up form: you fill those in.")));
       var kids = [statusRow, el("p", { class: "panel-intro" }, "Open sign-up, choose who does what in each session, and publish the rota."), signupBox];
       if (peopleBox) kids.push(peopleBox);
       kids.push(dayBox);
@@ -2161,7 +2161,7 @@
       function count(id) { return taken.filter(function (x) { return x.addon_id === id; }).reduce(function (n, x) { return n + x.quantity; }, 0); }
       view.replaceChildren(
         el("div", { class: "section-head is-first" }, el("h2", null, "Extras"), btn("Add an extra", function () { editExtra(c, null, function () { renderExtrasTab(view, c); }); }, "btn-primary")),
-        el("p", { class: "panel-intro" }, "Extras are offered on the entry form, after the lifting questions, and added to what the lifter pays. Discount codes take money off the entry only, never the extras. A photo package is paid to the photographer you name on the Money tab, merchandise is shared with the host by the percentage you set there, and anything marked as paid to the federation is kept by the federation."),
+        el("p", { class: "panel-intro" }, "Offered on the entry form and added to the price. Discount codes never apply to extras. Who receives the money is set on the Money tab."),
         items.length ? el("div", { class: "table-scroll" }, el("table", { class: "admin-table" },
           el("thead", null, el("tr", null, ["Extra", "Type", "Price", "Taken", "Actions"].map(function (h) { return el("th", { scope: "col", class: h === "Price" || h === "Taken" ? "num" : h === "Actions" ? "col-actions" : null }, h); }))),
           el("tbody", null, items.map(function (x) {
@@ -2241,11 +2241,11 @@
           rows.length ? btn("Record a payment sent", function () { recordPayout(c, rows, function () { renderMoneyTab(view, c); }); }, "btn-secondary") : null,
           franchise ? btn("Change this competition's amounts", function () { setCompetitionFees(c, own, feeDefaults, function () { renderMoneyTab(view, c); }); }) : null),
         el("h2", null, "How the money is split"),
-        franchise ? el("p", null, hostPayee ? "Host: " + hostPayee.name + "." : el("strong", null, "No host set yet: all the entry money stays with the federation until you set one.")) : el("p", null, el("strong", null, "Run by the federation."), " Not a franchise competition: the federation keeps the whole entry fee, so there is no host to pay."),
+        franchise ? el("p", null, hostPayee ? "Host: " + hostPayee.name + "." : el("strong", null, "No host set yet: all the entry money stays with the federation until you set one.")) : el("p", null, el("strong", null, "Run by the federation."), " Not a franchise: the federation keeps the whole fee."),
         franchise ? el("p", null, "From each entry the federation keeps a fixed amount: ", el("strong", null, fp("full_power", 1200) + " for a full power entry, " + fp("bench_only", 750) + " for bench only and " + fp("sub_junior", 450) + " for a sub-junior"),
           " (these are this competition's own amounts, whatever the host charges). Novice, junior, masters and open entries pay the full power amount. The host receives the rest of the entry fee.") : null,
         split.length ? el("ul", null, split) : null,
-        el("p", { class: "help" }, "The federation absorbs discounts and free places (the host is still paid on the full entry fee) and all of Stripe's processing fees. So a discounted entry can leave the federation's share lower, or even below nothing."),
+        el("p", { class: "help" }, "The federation absorbs discounts, free places and Stripe fees, so its share can fall below nothing."),
         el("h2", null, "Money to send"),
         el("p", { class: "panel-intro" }, "Taken so far: " + money(gross) + ". Stripe fees: " + money(fees) + ". To send to others: " + money(toSend) + ". The federation's share after fees: " + money(fed.reduce(function (n, r) { return n + r.net_pence; }, 0)) + ". Figures update as entries come in."),
         rows.length ? el("div", { class: "table-scroll" }, el("table", { class: "admin-table" },
@@ -2298,7 +2298,7 @@
   function setCompetitionFees(c, own, defaults, done) {
     openForm({
       title: "What the federation keeps: " + c.name, saveLabel: "Save",
-      intro: "A fixed amount from each entry in this competition, whatever the host charges. Novice, junior, masters and open entries pay the full power amount. This changes the report for this competition only, including entries already taken.",
+      intro: "Fixed amount per entry, whatever the host charges. Novice, junior, masters and open pay the full power amount. Changes this competition’s report only.",
       values: feeValues(own, defaults), fields: feeFields(),
       onSave: function (v) {
         return sb.rpc("save_competition_fees", { c: c.id, p: { full_power: Math.round(v.full_power * 100), bench_only: Math.round(v.bench_only * 100), sub_junior: Math.round(v.sub_junior * 100) } }).then(function (r) {
@@ -2312,7 +2312,7 @@
   function setDefaultFees(defaults, done) {
     openForm({
       title: "What the federation keeps from each entry", saveLabel: "Save",
-      intro: "These are the amounts new competitions start with. Competitions that already exist keep the amounts they started with, so their reports do not change. To change one, open its Money tab.",
+      intro: "Starting amounts for new competitions. Existing ones keep theirs: change those on the Money tab.",
       values: feeValues(null, defaults), fields: feeFields(),
       onSave: function (v) {
         return Promise.all(["full_power", "bench_only", "sub_junior"].map(function (k) { return sb.from("federation_fees").update({ pence: Math.round(v[k] * 100) }).eq("key", k).then(ok); }))
@@ -2328,7 +2328,7 @@
       var g = function (k, d) { return money(f[k] === undefined ? d : f[k]); };
       box.replaceChildren(el("h2", { style: "margin-top:0" }, "What the federation keeps from each entry"),
         el("p", null, g("full_power", 1200) + " for a full power entry, " + g("bench_only", 750) + " for bench only, " + g("sub_junior", 450) + " for a sub-junior. Novice, junior, masters and open entries pay the full power amount. The host receives the rest of the entry fee."),
-        el("p", { class: "help" }, "These are the amounts new competitions start with. Each competition keeps its own, so changing these never alters a past competition's report. Change one competition's amounts on its Money tab."),
+        el("p", { class: "help" }, "Starting amounts for new competitions. Existing ones keep theirs: change those on the Money tab."),
         el("p", null, btn("Change the defaults", function () { setDefaultFees(f, load); }, "btn-secondary")));
     }); }
     load();
@@ -2339,7 +2339,7 @@
     var others = rows.filter(function (r) { return r.payee_kind !== "federation"; });
     openForm({
       title: "Record a payment sent", saveLabel: "Record it",
-      intro: "This only records that you have sent the money (it does not send anything). The report then shows what is still to send.",
+      intro: "Only records that you’ve sent the money; it doesn’t send anything.",
       values: { payee_id: others[0] && others[0].payee_id, paid_on: Y.todayLondon() },
       fields: [
         { name: "payee_id", label: "Paid to", type: "select", options: others.map(function (r) { return { value: r.payee_id, label: r.payee_name + " (to send " + money(r.net_pence) + ")" }; }) },
@@ -2381,7 +2381,7 @@
           var rows = used.filter(function (e) { return byId[e.discount_code_id] && !(e.status === "held" && new Date(e.hold_expires_at) <= now); });
           var label = { paid: "Paid", comped: "Free entry", held: "Paying now", cancelled: "Cancelled", refunded: "Refunded" };
           return el("div", null, el("div", { class: "section-head" }, el("h2", null, "Who has used a code")),
-            el("p", { class: "panel-intro" }, "Every entry that used a code, newest first. The competitions inbox also gets an email each time a code is used."),
+            el("p", { class: "panel-intro" }, "Every entry that used a code, newest first. The inbox is emailed each time too."),
             rows.length ? el("div", { class: "table-scroll" }, el("table", { class: "admin-table" },
               el("thead", null, el("tr", null, ["When", "Code", "Used by", "Discount", "Entry"].map(function (h) { return el("th", { scope: "col" }, h); }))),
               el("tbody", null, rows.map(function (e) {
@@ -2400,7 +2400,7 @@
         }
         view.replaceChildren(
           el("div", { class: "section-head is-first" }, el("h2", null, "Discount codes"), btn("Make a discount code", function () { makeDiscount(c, function () { renderDiscountsTab(view, c); }); }, "btn-primary")),
-          el("p", { class: "panel-intro" }, "Give someone a code and they enter it on the last step of the entry form. A code can take pounds or a percentage off, and one that takes everything off makes the entry free. Tie a code to someone's email address and only they can use it."),
+          el("p", { class: "panel-intro" }, "Entered on the last step of the entry form. Takes off pounds or a percentage; 100% makes the entry free. Tie it to an email address so only they can use it."),
           codes.length ? el("div", { class: "table-scroll" }, el("table", { class: "admin-table" },
             el("thead", null, el("tr", null, ["Code", "Discount", "Used", "Valid until", "Status", "Actions"].map(function (h) { return el("th", { scope: "col", class: h === "Actions" ? "col-actions" : h === "Valid until" || h === "Used" || h === "Discount" ? "nowrap" : null }, h); }))),
             el("tbody", null, codes.map(function (d) {
@@ -2415,7 +2415,7 @@
                   btn("Copy", function () { copyText(d.code); }),
                   everUsed(d) && !d.active ? null : btn("Delete", function () {
                     var kept = everUsed(d);
-                    if (!window.confirm(kept ? "The code " + d.code + " has been used, so it cannot be deleted: its entries keep a record of it. It will be switched off, so nobody can use it again." : "Delete the code " + d.code + "?")) return;
+                    if (!window.confirm(kept ? "The code " + d.code + " has been used, so it can’t be deleted. It will be switched off instead." : "Delete the code " + d.code + "?")) return;
                     (kept ? sb.from("discount_codes").update({ active: false }).eq("id", d.id) : sb.from("discount_codes").delete().eq("id", d.id)).then(ok)
                       .then(function () { toast(kept ? "Switched off." : "Deleted."); renderDiscountsTab(view, c); }).catch(function (er) { toast(friendly(er), "error"); });
                   }, "btn-danger"))));
@@ -2431,7 +2431,7 @@
       half: { kind: "percent", value: 50, reason: "Volunteer points: half price" }, free: { kind: "percent", value: 100, reason: "Volunteer points: free entry" } };
     var api = openForm({
       title: "Make a discount code: " + c.name, saveLabel: "Make code",
-      intro: "The code is made for you from the name and the discount, plus random letters so it cannot be guessed. Send it to the person yourself.",
+      intro: "The code is generated for you. Send it to the person yourself.",
       values: { preset: "custom", kind: "amount", value: "", max_uses: 1, scope: "this" },
       fields: [
         { name: "preset", label: "Quick choice", type: "select", options: [{ value: "custom", label: "Something else (fill in below)" }, { value: "off20", label: "£20 off (volunteer)" }, { value: "off40", label: "£40 off (volunteer)" }, { value: "half", label: "Half price (volunteer)" }, { value: "free", label: "Free entry (volunteer)" }] },
@@ -2486,7 +2486,7 @@
     var classOptions = refs.classes.map(function (w) { return { value: w.id, label: (w.sex === "M" ? "Men's " : "Women's ") + w.label + " kg" }; });
     openForm({
       title: "Add an entry: " + c.name, saveLabel: "Add entry",
-      intro: "For someone who has been given a free place, or who paid another way (cash, bank transfer or a payment link). The same checks apply as on the entry form, but not the opening times or the guest delay. No email is sent.",
+      intro: "For free places or other payment (cash, bank transfer, payment link). Same checks as the entry form, except opening times and guest delay. No email is sent.",
       values: { mode: "comped", sex: "M", event: "full_power", equipment: "classic", photo: "no", division_id: refs.divisions[0] && refs.divisions[0].id, weight_class_id: classOptions[0] && classOptions[0].value },
       fields: [
         { name: "mode", label: "How is this entry paid?", type: "select", options: [{ value: "comped", label: "Free place (comped)" }, { value: "paid_elsewhere", label: "Paid another way" }] },
@@ -2536,7 +2536,7 @@
     openForm({
       title: "Cancel or refund: " + e.full_name, saveLabel: "Confirm",
       intro: (paid ? "Paid " + entryMoney(paid) + (refunded ? ", already refunded " + entryMoney(refunded) : "") + ". " : "") + (canRefund ? "Stripe keeps its processing fee on a refund, so the federation bears that cost. " : "") +
-        (closed ? "Entries have closed, so refunds are not normally given now. Use this only for unforeseen circumstances. " : "") + "The lifter is emailed unless you untick the box. This cannot be undone.",
+        (closed ? "Entries have closed: refund only in unforeseen circumstances. " : "") + "The lifter is emailed unless you untick the box. This cannot be undone.",
       values: { action: (closed && !opts.keepRefund) ? (options.filter(function (o) { return o.value === "cancel"; })[0] || options[0]).value : options[0].value, amount: "", reason: opts.reason || "", notify: true },
       fields: [
         { name: "action", label: "What would you like to do?", type: "select", options: options },
@@ -2672,9 +2672,9 @@
   function addPriority(c, done) {
     openForm({
       title: "Add people to the priority list", saveLabel: "Add to the list",
-      intro: "Their links are emailed to them automatically when priority entry opens. You can add people at any time before then, and again later.",
-      fields: [{ name: "people", label: "People, one per line", type: "textarea", rows: 10, required: true, help: "Email addresses. A name can come before the address, for example Sam Smith, sam@example.com. Pasting two columns from a spreadsheet works too." },
-        { name: "from_points", label: "Costs 1 volunteer point", type: "checkbox", help: "Tick this to give these people a priority link that costs 1 of their volunteer points, taken only once their entry is confirmed. Leave it unticked for a free link (a guest, a sponsor, a test). Everyone with points is added with a points link automatically when the priority window opens." }],
+      intro: "Links are emailed automatically when priority entry opens. Add people any time.",
+      fields: [{ name: "people", label: "People, one per line", type: "textarea", rows: 10, required: true, help: "Email addresses, optionally with a name first (Sam Smith, sam@example.com). Two spreadsheet columns work too." },
+        { name: "from_points", label: "Costs 1 volunteer point", type: "checkbox", help: "Costs 1 point, taken when the entry is confirmed. Untick for a free link (guest, sponsor, test)." }],
       onSave: function (v) {
         var r = parsePeople(v.people);
         if (v.from_points) r.people = r.people.map(function (x) { return Object.assign({}, x, { from_points: true }); });
@@ -2709,7 +2709,7 @@
         function stamp(d) { return new Date(d).toLocaleString("en-GB", { timeZone: Y.TZ, dateStyle: "medium", timeStyle: "short" }); }
         box.replaceChildren(el("div", { class: "section-head" }, el("h2", null, "Priority entry"), btn("Add people", function () { addPriority(c, next); }, "btn-primary")),
           el("p", { class: "panel-intro" }, start
-            ? "Everyone on this list is emailed their personal link automatically on " + stamp(start) + ", " + hours + " hours before general entry opens. They can enter from then. Volunteers with points are added automatically at that moment, and the point is only taken once their entry is confirmed."
+            ? "Everyone on this list is emailed their personal link automatically on " + stamp(start) + ", " + hours + " hours before general entry opens. Volunteers with points are added automatically."
             : "Set when entry opens on the Details tab first. Links are emailed automatically " + hours + " hours before it."),
           el("div", { class: "actions", style: "margin-bottom:var(--space-3)" },
             waiting.length ? btn("Send to everyone waiting now", function () { if (!window.confirm("Email the link now to the " + waiting.length + (waiting.length === 1 ? " person" : " people") + " still waiting?")) return; sendPriority(c, null, next); }, "btn-secondary") : null),
@@ -2733,7 +2733,7 @@
   // ---- news -----------------------------------------------------------------------
   function renderNews(panel) {
     panel.replaceChildren(panelHead("News", btn("New post", function () { editPost(); }, "btn-primary")),
-      el("p", { class: "panel-intro" }, "Posts show on the News page, newest first. A post dated in the future appears automatically on that date."),
+      el("p", { class: "panel-intro" }, "Newest first. A post dated in the future appears on that date."),
       el("p", null, "Loading…"));
     sb.from("posts").select("*").order("post_date", { ascending: false }).then(function (res) {
       var rows = ok(res);
@@ -2774,7 +2774,7 @@
         { name: "title", label: "Title", required: true },
         { name: "post_date", label: "Post date (UK time)", type: "datetime", required: true, half: true },
         { name: "slug", label: "Web address ending", required: true, half: true, help: "Made from the title. Letters, numbers and hyphens only." },
-        { name: "body_md", label: "Post", type: "md", images: true, help: "Use the toolbar for headings, lists, links and pictures. To add a picture, put the cursor on an empty line between paragraphs and press the picture button, or drop or paste a picture in. Switch to Markdown at the bottom if you prefer." },
+        { name: "body_md", label: "Post", type: "md", images: true, help: "To add a picture, use the picture button on an empty line, or drop or paste one in. Switch to Markdown at the bottom if you prefer." },
         { name: "published", label: "Published", type: "checkbox", help: "Untick to save as a draft that only editors can see." }
       ],
       validate: function (v) {
@@ -2804,7 +2804,7 @@
 
   var ORG = {
     title: "Organisation", slug: "organisation",
-    intro: "Everyone listed on the Committee page. Sections run top to bottom; people run left to right.",
+    intro: "The Committee page. Sections run top to bottom, people left to right.",
     gTable: "org_sections", iTable: "people", fk: "section_id", gWord: "section", iWord: "person", iPlural: "people",
     gFields: [
       { name: "title", label: "Section title", required: true },
@@ -2828,7 +2828,7 @@
 
   var FAQ = {
     title: "FAQs", slug: "faqs",
-    intro: "Questions are grouped under category headings. The page shows categories top to bottom.",
+    intro: "Questions grouped by category, shown top to bottom.",
     gTable: "faq_categories", iTable: "faqs", fk: "category_id", gWord: "category", iWord: "FAQ", iPlural: "FAQs",
     gFields: [{ name: "title", label: "Category title", required: true }],
     iFields: [
@@ -2851,15 +2851,15 @@
   var PLACEMENTS = { column: "A column of links", bottom: "The bottom row", social: "Social links under the logo" };
   var FOOTER = {
     title: "Footer", slug: "footer",
-    intro: "The links at the bottom of every page. Each group is either a column of links, the links in the bottom row (such as the privacy policy), or the social links under the logo. Rename groups, add links and reorder with the arrows. Changes show on the site within a minute.",
+    intro: "Links at the bottom of every page, grouped as columns, the bottom row, or social links. Changes show within a minute.",
     gTable: "footer_groups", iTable: "footer_links", fk: "group_id", gWord: "group", iWord: "link", iPlural: "links",
     gFields: [
-      { name: "title", label: "Heading", required: true, help: "Shown above a column of links. For the bottom row and social links it is just a name for you." },
+      { name: "title", label: "Heading", required: true, help: "Heading above a column. Just a label for the bottom row and social links." },
       { name: "placement", label: "Where it appears", type: "select", options: Object.keys(PLACEMENTS).map(function (k) { return { value: k, label: PLACEMENTS[k] }; }) }
     ],
     iFields: [
       { name: "label", label: "Link text", required: true },
-      { name: "url", label: "Address", required: true, help: "A full address starting https://, a page on this site such as faqs.html, or # as a placeholder until you have the real address." }
+      { name: "url", label: "Address", required: true, help: "Full https:// address, a page on this site (faqs.html), or # for now." }
     ],
     gSub: function (g) { return PLACEMENTS[g.placement] || ""; },
     iTitle: function (l) { return l.label; },
@@ -2868,7 +2868,7 @@
     isFixed: function (l) { return !!l && l.url === "privacy"; },
     fixedAction: { label: "Edit the privacy policy page", hash: "#privacy" },
     normalise: function (v) { v.url = v.url.trim(); v.label = v.label.trim(); return v; },
-    validate: function (v) { return footerUrlOk(v.url) ? null : "The address must start with https://, or be a page on this site (like faqs.html), or be # for now."; }
+    validate: function (v) { return footerUrlOk(v.url) ? null : "Use a https:// address, a page on this site (faqs.html), or #."; }
   };
 
   // ---- the privacy policy page: a rich text editor, kept in site_settings under page.privacy ----------------------
@@ -2898,7 +2898,7 @@
         }).catch(function (er) { errBox.textContent = friendly(er); errBox.hidden = false; }).then(function () { saveBtn.disabled = false; });
       });
       panel.lastChild.remove();
-      panel.appendChild(el("p", { class: "panel-intro" }, "This is the text on the Privacy policy page, linked from the footer. Saving updates the page straight away."));
+      panel.appendChild(el("p", { class: "panel-intro" }, "The Privacy policy page text, linked from the footer. Saving updates it straight away."));
       panel.appendChild(form);
       window.setTimeout(function () { editors.pending.forEach(function (fn) { fn(); }); }, 0);
     }).catch(function (e) { panel.lastChild.textContent = friendly(e); });
@@ -3044,10 +3044,10 @@
   function renderRecords(panel) {
     panel.replaceChildren(panelHead("Records", btn("Add record sheet", function () { editSource(); }, "btn-primary")),
       el("div", { class: "panel-intro" },
-        el("p", null, "Each entry below becomes a section on the Records page, read live from a Google Sheet (the divisional records layout is shown as a grid for each weight class). To get a link: in the sheet choose ",
+        el("p", null, "Each entry becomes a section on the Records page, read live from a Google Sheet. To get a link: in the sheet choose ",
           el("strong", null, "File > Share > Publish to web"), ", pick the tab, choose ", el("strong", null, "Comma-separated values (.csv)"),
           ", press Publish and paste the link here. Changes in the sheet appear on the site within a few minutes."),
-        el("p", null, "To move the records somewhere else later, edit the entry and paste the new link. Entries with no link are hidden from the public page.")),
+        el("p", null, "Entries with no link are hidden from the public page.")),
       el("p", null, "Loading…"));
     var settingQ = sb.from("site_settings").select("*").eq("key", SUBMIT_KEY).then(function (r) { return r; }, function (e) { return { error: e }; });
     Promise.all([sb.from("record_sources").select("*").order("sort_order"), settingQ]).then(function (both) {
@@ -3091,7 +3091,7 @@
       values: { url: current },
       saveLabel: "Save",
       fields: [{ name: "url", label: "Form link", type: "url", placeholder: "https://docs.google.com/forms/d/e/…/viewform",
-        help: "Where the “Submit a record” button at the top of the Records page goes. It opens in a new tab. Leave blank to hide the button." }],
+        help: "Where “Submit a record” goes (new tab). Blank hides the button." }],
       validate: function (v) { return v.url && !/^https:\/\//i.test(v.url) ? "The link must start with https://" : null; },
       onSave: function (v) {
         var q = exists ? sb.from("site_settings").update({ value: v.url }).eq("key", SUBMIT_KEY) : sb.from("site_settings").insert({ key: SUBMIT_KEY, value: v.url });
@@ -3123,7 +3123,7 @@
       fields: [
         { name: "title", label: "Heading on the page", required: true, placeholder: "Men's classic" },
         { name: "url", label: "Google Sheets link", type: "url", placeholder: "https://docs.google.com/spreadsheets/d/e/…/pub?output=csv",
-          help: "A Publish to web link (CSV) is best. A normal share link also works if the sheet is shared with “anyone with the link”. Leave blank to hide this table." }
+          help: "A Publish to web link (CSV) is best. A share link works if the sheet is shared with “anyone with the link”. Blank hides the table." }
       ],
       validate: function (v) {
         if (v.url && !Y.sheetCsvUrl(v.url)) return "That does not look like a usable link. It must start with https://";
@@ -3155,7 +3155,7 @@
           el("strong", null, "Competitions team"), " run entries and volunteers: settings, entries, refunds, reports and the volunteer rota. ",
           el("strong", null, "Editors"), " manage competitions, news, records, the organisation page and FAQs. ",
           el("strong", null, "Contributors"), " can write news posts only."),
-        el("p", null, "To give someone access, add their email address here. They then go to this page and either continue with Google or choose “Create your login”, using that same email. Removing someone takes their access away straight away.")),
+        el("p", null, "Add their email here. They then sign in on this page with Google or “Create your login”, using that email. Removing someone cuts access straight away.")),
       el("p", null, "Loading…"));
     sb.from("editors").select("*").order("created_at", { ascending: true }).then(function (res) {
       var rows = ok(res);
@@ -3309,7 +3309,7 @@
     }
     return null;
   }
-  var LINK_HELP = "A full address starting https://, a page on this site such as faqs.html, or # for now.";
+  var LINK_HELP = "Full https:// address, a page on this site (faqs.html), or # for now.";
 
   function homeCard(title, summary, actions, body) {
     return el("section", { class: "card home-card" },
@@ -3320,7 +3320,7 @@
 
   function renderHome(panel) {
     panel.replaceChildren(panelHead("Home page"),
-      el("p", { class: "panel-intro" }, "Change the wording and photos on the home page. “Upcoming events” and “Latest news” fill themselves from the Calendar and News tabs, so you only edit their headings and buttons here. Changes reach visitors within a minute or so, and a photo you add joins the rotation straight away for new visitors."),
+      el("p", { class: "panel-intro" }, "Wording and photos for the home page. Upcoming events and Latest news fill themselves, so only their headings and buttons are edited here. Changes show within a minute."),
       el("p", null, "Loading…"));
     Promise.all([
       sb.from("site_settings").select("key,value").like("key", "home.%"),
@@ -3373,7 +3373,7 @@
     openForm({
       title: "Headline and buttons", values: hero, saveLabel: "Save",
       fields: [
-        { name: "title", label: "Headline", type: "textarea", rows: 3, required: true, help: "Put *stars* around words to highlight them in orange, like: The home of *drug tested* powerlifting." },
+        { name: "title", label: "Headline", type: "textarea", rows: 3, required: true, help: "*Stars* highlight words in orange: The home of *drug tested* powerlifting." },
         { name: "primaryLabel", label: "Button 1 text", required: true, half: true },
         { name: "primaryUrl", label: "Button 1 link", required: true, half: true, help: LINK_HELP },
         { name: "secondaryLabel", label: "Button 2 text", required: true, half: true },
@@ -3485,7 +3485,7 @@
     }));
     var note = !rows.length ? "No photos yet, so the home page uses the two that come with the site."
       : !active.length ? "Every photo is hidden, so the home page uses the two that come with the site."
-      : active.length === 1 ? "Only one photo is in the rotation, so it will not change from visit to visit. Add another to get a different one each time."
+      : active.length === 1 ? "Only one photo in rotation. Add another for variety."
       : active.length + " photos are in the rotation. Each visit shows one of them at random, never the same one twice in a row.";
     return homeCard("Hero photos", [el("p", { style: "margin:0;" }, note),
         el("p", { class: "help" }, "Tall (portrait) photos work best. The home page frame is nearly square and crops evenly from the centre, so keep the action in the middle.")],
@@ -3507,7 +3507,7 @@
   function editHeroAlt(r) {
     openForm({
       title: "Describe the photo", values: { alt: r.alt }, saveLabel: "Save",
-      fields: [{ name: "alt", label: "Description", required: true, help: "A few words for people who cannot see it, for example “A lifter pulling a deadlift, with a spotter behind the bar”." }],
+      fields: [{ name: "alt", label: "Description", required: true, help: "Describe it for screen readers, e.g. “A lifter pulling a deadlift”." }],
       onSave: function (v) { return sb.from("hero_images").update({ alt: v.alt }).eq("id", r.id).then(ok).then(function () { toast("Saved."); route(); }); }
     });
   }
