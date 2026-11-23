@@ -921,6 +921,7 @@ create table if not exists public.vol_people (
   committee_until date                                      -- the last day they were part of it (when unticked)
 );
 alter table public.vol_people add column if not exists committee boolean not null default false;
+alter table public.vol_people add column if not exists priority_emails boolean not null default true;   -- false: asked us to stop the automatic priority link emails (they keep their points)
 alter table public.vol_people add column if not exists committee_from date;
 alter table public.vol_people add column if not exists committee_until date;
 -- The roles. on_form: volunteers can say they are happy to do it. The others (referees, technical controller, session manager,
@@ -2510,7 +2511,7 @@ begin
       select c.id, e.email, coalesce(p.full_name, ''), true
         from (select distinct l.email from public.points_ledger l) e
         left join public.vol_people p on p.email = e.email
-       where public.points_balance(e.email) >= 1
+       where public.points_balance(e.email) >= 1 and coalesce(p.priority_emails, true)
          and not exists (select 1 from public.invites i where i.competition_id = c.id and i.email = e.email)
          and not exists (select 1 from public.entries en where en.competition_id = c.id and en.email = e.email and en.status in ('paid', 'comped'));
     get diagnostics k = row_count; n := n + k;
