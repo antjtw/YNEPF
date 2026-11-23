@@ -468,6 +468,13 @@ await asUser(U.editor, async () => { ok((await q(`select count(*)::int n from pu
 await asUser(U.entries, async () => { ok((await q(`select count(*)::int n from public.entry_requests`))[0].n >= 4, "the entries team can see every request"); });
 ok((await q(`select count(*)::int n from public.audit_log where table_name = 'entry_requests'`))[0].n >= 3, "requests are in the audit log");
 
+// the FAQ about changing or cancelling an entry: goes in the best category, once
+await db.exec(`insert into public.faq_categories (id, title, sort_order) values ('cccccccc-0000-4000-8000-000000000001', 'About us', 1), ('cccccccc-0000-4000-8000-000000000002', 'Entering a competition', 2)`);
+const faqSql = fs.readFileSync(new URL("./faq-manage-entry.sql", import.meta.url), "utf8");
+await db.exec(faqSql); await db.exec(faqSql);
+const faqRows = await q(`select category_id, answer_md from public.faqs where question = 'How do I change or cancel my entry?'`);
+ok(faqRows.length === 1 && faqRows[0].category_id === "cccccccc-0000-4000-8000-000000000002" && /Manage your entry/.test(faqRows[0].answer_md) && /competitions@ynepf\.co\.uk/.test(faqRows[0].answer_md), "the FAQ is added once, in the category about entering, and mentions both ways to change an entry");
+
 // the entry page asks the database for the time (so a phone with the wrong clock is not told entry is closed)
 await db.exec("set role anon");
 const stime = (await db.query("select public.server_time() t")).rows[0].t;
