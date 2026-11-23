@@ -62,3 +62,11 @@ A first-pass review of the YNEPF site, database and Edge Functions, done by the 
 ## Keeping it this way
 
 New tables created in Supabase get open privileges by default. The SQL file removes the risky ones for existing tables, but **every new table needs row security turned on and a policy**, or it is open to the public. The attack tests in `docs/entry-system/waitlist.test.mjs` check the list of functions the public can run, so a new one shows up as a failing test.
+
+## Added later: Manage your entry (`/my-entry`)
+
+Reviewed as it was built, with tests in `docs/entry-system/waitlist.test.mjs`:
+- Access is by an emailed one-time code (hashed, 15 minutes, five wrong tries lock it, five codes an hour per address). An address with no entry gets the same answer as one with an entry.
+- A lifter can only ever see and change their own entries (the address is checked on every call). The page never shows a date of birth or guardian details.
+- Only small, low-risk fields change without approval. Weight class, equipment and cancellation are requests the entries team decides. The team's decision can only be made through the server after it has checked the person is on the entries team.
+- Every request and small change is recorded in `entry_requests` and in the audit log. The public cannot read or write it.

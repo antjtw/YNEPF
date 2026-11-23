@@ -372,3 +372,28 @@ Every email the site sends is now a branded HTML email with a plain text version
 3. When the order is ready, press **Finalise lifting order**. It marks the order final, publishes it if it was not, and emails the final order to the lifters in it. It only works once entries have closed. **Send the final order again** is there if you ever need it.
 
 **The internal notes** to the competitions inbox (new entry, refund, volunteer, points and so on) and the **contact form** messages use the same design, with a gold "Internal" tag and a button to the right page in the editor.
+
+## Part 14: Manage your entry
+
+Lifters can now look at their own entry and ask for changes, at `/my-entry`. The confirmation email has a **Manage your entry** button that goes there, and so does the "What happens next" list on the thank-you page.
+
+**How a lifter gets in:** they enter their email address and we email a 6 digit code (it works for 15 minutes, five wrong tries lock it, and an address with no entry is told nothing different). There is no password.
+
+| What they want | What happens |
+|---|---|
+| Change their name, club or university, Instagram, OpenIPF link or membership number | Done straight away. It is recorded, and a new OpenIPF link starts the lookup again. |
+| A different weight class or equipment | A **request**. Nothing changes until the entries team approves it. They only see weight classes allowed for their sex and age category. |
+| Cancel | A **request**. The entries team approves it through **Cancel or refund**, so refunds work as they always have. |
+| Event, date of birth, sex, or anything to do with money | They email `competitions@ynepf.co.uk`. |
+
+**After entries close** there are no changes at all, only a cancellation request, and there is no refund.
+
+**For the entries team:** on a competition's **Entries** tab, a **Requests** box appears at the top whenever something is waiting (and the entry rows carry a tag). Press **Review** and:
+
+- **Approve** (the main button) makes the change and emails the lifter. If they are in a lifting order, it tells you which session and flight and reminds you to update it. The lifting order is never moved for you. If the new class is below a qualifying standard, it says so.
+- **Decline…** asks for a reason, which is emailed to the lifter. Their entry stays as it is.
+- For a **cancellation**, Approve opens **Cancel or refund** with their reason filled in (and no refund selected if entries have closed). Once that is done, the request is marked approved. The cancelled place goes to the waiting list as usual.
+
+You get an email at `competitions@` for every new request, with a button straight to the entries desk. Everything a lifter asks for or changes is kept: open an entry and look under **Requests and changes made by the lifter**.
+
+**To switch it on** (in this order): merge the branch, run the all-in-one SQL file, then replace the `waitlist`, `stripe-webhook` and `entry-checkout` functions (the other two functions are unchanged). Keep each function's Verify JWT setting as it is.

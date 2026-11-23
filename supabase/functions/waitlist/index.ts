@@ -445,6 +445,69 @@ export function entriesClosedEmail(o: Who & { link?: string }): EmailSpec {
     ],
   };
 }
+// ---- Manage your entry: the one-time code, and the emails about change and cancellation requests -----------------------------------------
+export function entryCodeEmail(o: { name: string; code: string; entriesEmail?: string }): EmailSpec {
+  const shown = /^\d{6}$/.test(o.code) ? `${o.code.slice(0, 3)} ${o.code.slice(3)}` : o.code;
+  return {
+    entriesEmail: o.entriesEmail, preheader: `Your one-time code is ${shown}. It works for 15 minutes.`,
+    why: "You are getting this email because someone asked to manage an entry for this address.",
+    blocks: [
+      ["h1", "Your one-time code"],
+      ["p", `${hi(o.name)}, use this code to look at your entry and ask for changes. It works for 15 minutes and can be used more than once until then.`],
+      ["code", shown],
+      ["small", "Did not ask for this? You can ignore this email. Nothing has changed."],
+    ],
+  };
+}
+const rows = (m: Record<string, string>): Array<[string, string]> => Object.entries(m ?? {}).map(([k, v]) => [k, String(v)] as [string, string]);
+const changeRows = (before: Record<string, string>, after: Record<string, string>): Array<[string, string]> =>
+  Object.keys(after ?? {}).map((k) => [k, before && before[k] ? `${before[k]} to ${after[k]}` : String(after[k])] as [string, string]);
+export function requestReceivedEmail(o: Who & { kind: "change" | "cancel"; before: Record<string, string>; after: Record<string, string>; note?: string; open: boolean; link: string }): EmailSpec {
+  const cancel = o.kind === "cancel";
+  return {
+    entriesEmail: o.entriesEmail, why: "You are getting this email because you asked for a change to your entry.",
+    preheader: cancel ? "We have your cancellation request. The entries team will look at it." : "We have your request. Nothing changes until the entries team approves it.",
+    blocks: [
+      ["h1", cancel ? "We have your cancellation request" : "We have your request"],
+      ["p", cancel ? `${hi(o.name)}, we have your request to cancel your entry in ${b(o.competition)}. The entries team will look at it and email you.`
+        : `${hi(o.name)}, we have your request to change your entry in ${b(o.competition)}. It has been sent to the entries team. <b>Nothing changes until they approve it</b>, and we will email you either way.`],
+      ["details", changeRows(o.before, o.after)],
+      ...(o.note ? [["small", `Your note: ${esc(o.note)}`] as Block] : []),
+      ...(cancel ? [["note", o.open ? "Refunds are available until entries close. The entries team will tell you what is refunded." : "Entries have closed, so there is no refund. Cancelling means your place is freed up and the lifting order is updated.", o.open ? "info" : "warn"] as Block] : []),
+      ["button2", "See your request", o.link],
+    ],
+  };
+}
+export function requestDecidedEmail(o: Who & { kind: "change" | "cancel"; approved: boolean; before: Record<string, string>; after: Record<string, string>; reason?: string; link: string }): EmailSpec {
+  const cancel = o.kind === "cancel";
+  return {
+    entriesEmail: o.entriesEmail, why: "You are getting this email because you asked for a change to your entry.",
+    preheader: o.approved ? "Your change has been made." : cancel ? "We could not cancel your entry." : "We could not make that change.",
+    blocks: o.approved ? [
+      ["h1", "Your change has been made"],
+      ["p", `${hi(o.name)}, the entries team has approved your request for ${b(o.competition)}.`],
+      ["details", rows(o.after)],
+      ["p", "If you are in the lifting order, the team will update it. We will email you when the lifting order is published, as usual."],
+      ["button2", "See your entry", o.link],
+    ] : [
+      ["h1", cancel ? "We could not cancel your entry" : "We could not make that change"],
+      ["p", `${hi(o.name)}, the entries team could not approve your request for ${b(o.competition)}. ${cancel ? "Your entry stays as it is." : "Your entry has not changed."}`],
+      ["note", `<b>Reason:</b> ${esc(o.reason || "")}`, "warn"],
+      ["p", "If you think something is wrong, reply to this email and we will look again."],
+      ["button2", "See your entry", o.link],
+    ],
+  };
+}
+export function requestNotification(o: { name: string; email: string; competition: string; kind: "change" | "cancel"; before: Record<string, string>; after: Record<string, string>; note?: string; open: boolean; deskUrl?: string }): EmailSpec {
+  const cancel = o.kind === "cancel";
+  return { internal: true, preheader: `${o.name} has asked ${cancel ? "to cancel" : "for a change"} in ${o.competition}.`, blocks: [
+    ["h1", cancel ? "Cancellation requested" : "Change requested"],
+    ["p", `${b(o.name)} (${esc(o.email)}) has asked ${cancel ? "to cancel their entry" : "to change their entry"} in ${b(o.competition)}.`],
+    ["details", [...changeRows(o.before, o.after), o.note ? ["Their note", o.note] as [string, string] : null]],
+    ...(cancel && !o.open ? [["note", "<b>Entries have closed:</b> no refund is due.", "warn"] as Block] : []),
+    ...(o.deskUrl ? [["button", "View request", o.deskUrl] as Block] : []),
+  ] };
+}
 // Internal: what the automatic emails did.
 export function liftingSharedNotification(o: { competition: string; kind: "provisional" | "final"; sent: number; failed: number; link: string }): EmailSpec {
   return { internal: true, preheader: `The ${o.kind} lifting order was emailed to ${o.sent} ${o.sent === 1 ? "lifter" : "lifters"}.`, blocks: [
@@ -824,6 +887,80 @@ if (typeof Deno !== "undefined") {
       await send(email, `Your £${pounds} discount: ${out.competition}`, pointsDiscountEmail({ name: out.name, code: out.code, competition: out.competition, pounds, points: out.points, expires: out.expires_at, link: `${siteUrl}/enter?c=${encodeURIComponent(out.slug)}`, entriesEmail: copy }));
       await send(copy, `Volunteer points spent: ${out.name || email}`, pointsRedeemedNotification({ name: out.name || email, email, competition: out.competition, pounds, points: out.points, code: out.code, deskUrl: `${siteUrl}/admin/#competitions/${String(body.competition_id)}/discounts` }));
       return reply(200, { ok: true, code: out.code, pounds, points: out.points, competition: out.competition, available_after: out.available_after, slug: out.slug });
+    }
+
+    // ---- manage your entry: a one-time emailed code, then look at the entry, change small things, or ask the team for a change or to cancel ----
+    if (action === "entry_start" || action === "entry_portal" || action === "entry_update" || action === "entry_request" || action === "entry_withdraw") {
+      if (!allowTry(ip + "|entry", Date.now(), 30)) return reply(429, { ok: false, message: "Too many tries. Please wait a few minutes and try again." });
+      const email = String(body.email ?? "").trim().toLowerCase();
+      const sorry = { ok: false, message: "We could not do that just now. Please try again in a moment." };
+      if (action === "entry_start") {
+        const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, "0");
+        const r = await rpc("entry_login_start", { p_email: email, th: await sha256Hex(code) });
+        const out = await r.json().catch(() => null);
+        if (!r.ok || !out) return reply(500, sorry);
+        if (out.error === "rate") return reply(429, { ok: false, message: "That is a few codes already. Please wait an hour and try again." });
+        if (out.error === "invalid_email") return reply(400, { ok: false, message: "That email address does not look right." });
+        if (out.send) await send(email, "Your code to manage your entry", entryCodeEmail({ name: out.name, code, entriesEmail: copy }));
+        return reply(200, { ok: true });          // the same answer whether or not the address has an entry
+      }
+      const th = await sha256Hex(String(body.code ?? "").replace(/\s/g, ""));
+      const BAD_CODE = "That code did not work. It may have run out, or been used too many times. You can ask for a new one.";
+      const ERR: Record<string, string> = {
+        closed: "Entries have closed, so entries cannot be changed now. You can still ask to cancel.", not_found: "We could not find that entry.", pending: "You already have a request waiting. Withdraw it first if you want to ask for something else.",
+        nothing: "Choose what you would like to change.", "invalid:weight_class": "That weight class is not available for you.", "invalid:equipment": "That choice of equipment is not available.",
+        "invalid:full_name": "Please enter your first and last name.", "invalid:instagram": "That does not look like an Instagram handle.", "invalid:club": "Please choose your club from the list.",
+        "invalid:university": "Please enter your university.", "invalid:openipf": "Enter your OpenIPF profile link, starting https://www.openipf.org/", "invalid:bp_number": "Please enter your membership number.", "invalid:kind": "We could not do that.",
+      };
+      const rpcOut = async (fn: string, args: Record<string, unknown>) => { const r = await rpc(fn, args); const out = await r.json().catch(() => null); return { r, out }; };
+      if (action === "entry_portal") {
+        const { r, out } = await rpcOut("entry_portal", { p_email: email, th });
+        if (!r.ok || !out) return reply(500, sorry);
+        return reply(200, out.ok ? out : { ok: false, message: BAD_CODE });
+      }
+      if (action === "entry_update") {
+        const { r, out } = await rpcOut("entry_update", { p_email: email, th, eid: String(body.entry_id ?? ""), p: body.changes ?? {} });
+        if (!r.ok || !out) return r.status === 400 ? reply(200, { ok: false, message: "We could not do that." }) : reply(500, sorry);
+        if (!out.ok) return reply(200, { ok: false, error: out.error, message: out.error === "code" ? BAD_CODE : ERR[out.error] ?? "We could not do that." });
+        return reply(200, out);
+      }
+      if (action === "entry_withdraw") {
+        const { r, out } = await rpcOut("entry_request_withdraw", { p_email: email, th, rid: String(body.request_id ?? "") });
+        if (!r.ok || !out) return reply(500, sorry);
+        return reply(200, out.ok ? out : { ok: false, message: out.error === "code" ? BAD_CODE : "We could not find that request." });
+      }
+      // entry_request
+      const { r, out } = await rpcOut("entry_request_create", { p_email: email, th, eid: String(body.entry_id ?? ""), p: { kind: body.kind, weight_class_id: body.weight_class_id, equipment: body.equipment, note: body.note } });
+      if (!r.ok || !out) return reply(500, sorry);
+      if (!out.ok) return reply(200, { ok: false, error: out.error, message: out.error === "code" ? BAD_CODE : ERR[out.error] ?? "We could not do that." });
+      const who = { name: out.name as string, competition: out.competition as string, date: dateText(out.start_date), entriesEmail: copy };
+      await send(email, out.kind === "cancel" ? `We have your cancellation request: ${out.competition}` : `We have your request: ${out.competition}`, requestReceivedEmail({ ...who, kind: out.kind, before: out.before, after: out.after, note: out.note, open: !!out.open, link: `${siteUrl}/my-entry?email=${encodeURIComponent(email)}` }));
+      await send(copy, `${out.kind === "cancel" ? "Cancellation requested" : "Change requested"}: ${out.name}, ${out.competition}`, requestNotification({ name: out.name, email: out.email, competition: out.competition, kind: out.kind, before: out.before, after: out.after, note: out.note, open: !!out.open, deskUrl: `${siteUrl}/admin/#competitions/${out.competition_id}/entries` }));
+      return reply(200, { ok: true, id: out.id, kind: out.kind });
+    }
+
+    // ---- the entries team decides a request: approve (a change is made) or decline (with a reason the lifter is emailed) ----
+    if (action === "entry_request_decide") {
+      const token = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
+      let allowed = false, actor = "";
+      if (token && token !== anon) {
+        const who = await fetch(`${url}/rest/v1/rpc/is_entries`, { method: "POST", headers: { apikey: anon!, authorization: `Bearer ${token}`, "content-type": "application/json" }, body: "{}" });
+        allowed = who.ok && (await who.json()) === true;
+        if (allowed) { const u = await fetch(`${url}/auth/v1/user`, { headers: { apikey: anon!, authorization: `Bearer ${token}` } }); actor = String((await u.json().catch(() => ({})))?.email ?? ""); }
+      }
+      if (!allowed) return reply(401, { error: "not_allowed" });
+      const approve = body.approve === true;
+      const r = await rpc("entry_request_decide", { rid: String(body.request_id ?? ""), approve, reason: String(body.reason ?? ""), actor });
+      const out = await r.json().catch(() => null);
+      if (!r.ok || !out) { console.error("entry_request_decide failed", JSON.stringify(out)); return reply(500, { ok: false, message: "That did not work. Please try again." }); }
+      if (!out.ok) return reply(200, { ok: false, error: out.error, message: ({ not_pending: "That request has already been dealt with.", reason: "Please give a reason: it is emailed to the lifter.", entry_not_cancelled: "Cancel the entry first, then approve the request.", entry_not_live: "That entry is no longer live.", "invalid:weight_class": "That weight class is no longer allowed for this lifter." } as Record<string, string>)[out.error] ?? "We could not do that." });
+      const kind = out.kind as "change" | "cancel";
+      // A cancellation that is approved has already had its own email (from Cancel or refund). Everything else tells the lifter the outcome.
+      if (!(kind === "cancel" && out.status === "approved")) {
+        await send(out.email, out.status === "approved" ? `Your change has been made: ${out.competition}` : kind === "cancel" ? `We could not cancel your entry: ${out.competition}` : `We could not make that change: ${out.competition}`,
+          requestDecidedEmail({ name: out.name, competition: out.competition, date: dateText(out.start_date), entriesEmail: copy, kind, approved: out.status === "approved", before: out.before, after: out.after, reason: out.reason, link: `${siteUrl}/my-entry?email=${encodeURIComponent(out.email)}` }));
+      }
+      return reply(200, { ok: true, status: out.status, kind, lifting_order: out.lifting_order, qualification: out.qualification });
     }
 
     // ---- the lifting order is published (provisional) or marked final: email the lifters in it ---------------------------------------

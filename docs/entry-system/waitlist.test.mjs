@@ -390,6 +390,91 @@ await db.exec("reset role");
 const pubFns = (await q(`select p.proname from pg_proc p where p.pronamespace = 'public'::regnamespace and p.prosecdef and has_function_privilege('anon', p.oid, 'execute') order by 1`)).map((r) => r.proname);
 ok(pubFns.join(",") === "can_post,is_admin,is_editor,is_entries,my_role,places_left,places_open,places_taken,points_public_count,points_public_search,volunteer_form", "the only privileged functions the public can run are the known, reviewed ones: " + pubFns.join(", "));
 
+// ---- manage your entry: one-time code, small changes straight away, requests the team decides ----
+const ME = "bbbbbbbb-0000-4000-8000-0000000000e1";
+await db.exec(`insert into public.competitions (id,name,start_date,capacity,published,slug,entry_method,entry_closes) values ('${ME}','Manage Open','2027-09-20',50,true,'manage-open','yne', now() + interval '10 days');
+ insert into public.entry_settings (competition_id, events, equipment) values ('${ME}', array['full_power','bench_only'], array['classic','equipped']);`);
+const mClasses = await q(`select id, label from public.weight_classes where sex = 'M' and active and min_age_category = '' order by sort_order limit 3`);
+const fClass = (await q(`select id from public.weight_classes where sex = 'F' and active and min_age_category = '' order by sort_order limit 1`))[0].id;
+const dvm = (await q(`select id from public.divisions limit 1`))[0].id;
+const mkEntry = async (email, name, cls, status = "paid") => (await q(`insert into public.entries (competition_id,status,email,full_name,date_of_birth,sex,division_id,weight_class_id,equipment,event,price_pence,bp_number,club) values ('${ME}','${status}',$1,$2,'1990-05-05','M','${dvm}','${cls}','classic','full_power',4000,'BP1','') returning id`, [email, name]))[0].id;
+const eMe = await mkEntry("lifter@x.com", "Lee Lifter", mClasses[0].id), eOther = await mkEntry("other@x.com", "Olly Other", mClasses[0].id);
+const mcode = async (email) => { const c = "123456"; await db.exec(`insert into public.entry_login (email, code_hash, expires_at) values ('${email}', '${await hash(c)}', now() + interval '15 minutes')`); return await hash(c); };
+const startL = (email) => call("entry_login_start", [email, "hh"]);
+ok((await startL("lifter@x.com")).send === true && (await startL("nobody@x.com")).send === false && (await startL("nope")).error === "invalid_email", "a code is only made for an address with an upcoming entry, and the answer is the same either way (send true or false is decided server side)");
+for (let i = 0; i < 6; i++) await startL("lifter@x.com");
+ok((await startL("lifter@x.com")).error === "rate", "asking for codes again and again is limited");
+await db.exec(`delete from public.entry_login`);
+const mth = await mcode("lifter@x.com");
+ok((await call("entry_portal", ["lifter@x.com", await hash("000000")])).error === "code", "a wrong code shows nothing");
+const mpor = await call("entry_portal", ["lifter@x.com", mth]);
+ok(mpor.ok && mpor.entries.length === 1 && mpor.entries[0].name === "Lee Lifter" && mpor.entries[0].open === true && mpor.entries[0].classes.length >= 2 && mpor.entries[0].classes.every((x) => /^Men's/.test(x.text)), "the right code shows only their own entry, and the weight classes they may move to (their sex only): " + JSON.stringify(mpor.entries?.[0]?.classes?.slice(0, 2)));
+ok(!JSON.stringify(mpor).includes("Olly Other") && !JSON.stringify(mpor).includes("1990-05-05"), "it never shows other people's entries or the date of birth");
+for (let i = 0; i < 5; i++) await call("entry_portal", ["lifter@x.com", await hash("bad" + i)]);
+ok((await call("entry_portal", ["lifter@x.com", mth])).error === "code", "five wrong tries lock the code");
+await db.exec(`delete from public.entry_login`); const mth2 = await mcode("lifter@x.com");
+// small changes
+const mupd = (p, t = mth2) => call("entry_update", ["lifter@x.com", t, eMe, JSON.stringify(p)]);
+let mu1 = await mupd({ full_name: "  Leigh   Lifter ", instagram: "@leigh.lifts", club: "" , bp_number: "BP999" });
+ok(mu1.ok && mu1.applied.Name === "Leigh Lifter" && mu1.applied.Instagram === "@leigh.lifts" && (await q(`select full_name, instagram, bp_number from public.entries where id = '${eMe}'`))[0].instagram === "leigh.lifts", "name, Instagram and membership number are changed straight away: " + JSON.stringify(mu1));
+ok((await q(`select count(*)::int n from public.entry_requests where entry_id = '${eMe}' and kind = 'update' and status = 'applied'`))[0].n === 1, "and the change is recorded");
+ok((await mupd({ instagram: "bad handle!" })).error === "invalid:instagram" && (await mupd({ full_name: "x" })).error === "invalid:full_name" && (await mupd({ openipf_url: "https://evil.com/u/x" })).error === "invalid:openipf" && (await mupd({ club: "Not A Real Club" })).error === "invalid:club", "bad values are refused");
+ok((await mupd({ instagram: "leigh.lifts" })).unchanged === true, "no change is no change");
+ok((await call("entry_update", ["other@x.com", mth2, eMe, JSON.stringify({ full_name: "Hijack" })])).error === "code" && (await call("entry_update", ["lifter@x.com", mth2, eOther, JSON.stringify({ full_name: "Hijack" })])).error === "not_found", "someone else's entry cannot be changed, with a code for one address or another");
+await mupd({ openipf_url: "https://www.openipf.org/u/leigh" });
+ok((await q(`select openipf_status from public.entries where id = '${eMe}'`))[0].openipf_status === "pending", "a new OpenIPF link starts the lookup again");
+// requests
+const mrq = (p, t = mth2) => call("entry_request_create", ["lifter@x.com", t, eMe, JSON.stringify(p)]);
+ok((await mrq({ kind: "change", weight_class_id: fClass })).error === "invalid:weight_class", "a weight class for the other sex is refused");
+ok((await mrq({ kind: "change", equipment: "equipped" })).ok && (await mrq({ kind: "change", weight_class_id: mClasses[1].id })).error === "pending", "one request at a time");
+const mpend = (await q(`select id from public.entry_requests where entry_id = '${eMe}' and status = 'pending'`))[0].id;
+ok((await call("entry_request_withdraw", ["other@x.com", mth2, mpend])).error === "code", "only the lifter can withdraw it");
+ok((await call("entry_request_withdraw", ["lifter@x.com", mth2, mpend])).ok, "they can withdraw a request");
+const mr1 = await mrq({ kind: "change", weight_class_id: mClasses[1].id, equipment: "equipped", note: "I have gained a bit" });
+ok(mr1.ok && mr1.after["Weight class"] === `Men's ${mClasses[1].label} kg` && mr1.before["Weight class"] === `Men's ${mClasses[0].label} kg` && mr1.after.Equipment === "Equipped", "a change request records before and mafter in words: " + JSON.stringify(mr1.after));
+ok((await q(`select weight_class_id from public.entries where id = '${eMe}'`))[0].weight_class_id === mClasses[0].id, "and nothing changes until the team approves it");
+// the team decides
+ok((await call("entry_request_decide", [mr1.id, false, "", "ed"])).error === "reason", "declining needs a reason");
+await db.exec(`insert into public.lo_sessions (id, competition_id, day, session_no) values ('bbbbbbbb-0000-4000-8000-0000000000f1', '${ME}', 1, 2); insert into public.lo_flights (id, session_id, letter) values ('bbbbbbbb-0000-4000-8000-0000000000f2', 'bbbbbbbb-0000-4000-8000-0000000000f1', 'C'); insert into public.lo_assignments (entry_id, flight_id, position) values ('${eMe}', 'bbbbbbbb-0000-4000-8000-0000000000f2', 1)`);
+const mdec = await call("entry_request_decide", [mr1.id, true, "", "ed@ynepf.co.uk"]);
+const mafter = (await q(`select weight_class_id, equipment from public.entries where id = '${eMe}'`))[0];
+ok(mdec.ok && mdec.status === "approved" && mafter.weight_class_id === mClasses[1].id && mafter.equipment === "equipped", "approving makes the change");
+ok(mdec.lifting_order && mdec.lifting_order.flight === "C" && mdec.lifting_order.session_no === 2, "and says the lifter is in the lifting order (session and flight), so the team can update it: " + JSON.stringify(mdec.lifting_order));
+ok((await call("entry_request_decide", [mr1.id, true, "", "ed"])).error === "not_pending", "a request is decided once");
+const mr2 = await mrq({ kind: "change", equipment: "classic" }); const md2 = await call("entry_request_decide", [mr2.id, false, "Kit check is at weigh-in", "ed"]);
+ok(md2.ok && md2.status === "declined" && md2.reason === "Kit check is at weigh-in" && (await q(`select equipment from public.entries where id = '${eMe}'`))[0].equipment === "equipped", "declining leaves the entry as it was");
+// cancel
+const mrc = await mrq({ kind: "cancel", note: "Injured" });
+ok(mrc.ok && mrc.after.Cancellation.includes("refund is possible"), "a cancellation request says a refund is possible while entries are open");
+ok((await call("entry_request_decide", [mrc.id, true, "", "ed"])).error === "entry_not_cancelled", "approving a cancellation needs the entry to have been cancelled first (through Cancel or refund)");
+await db.exec(`update public.entries set status = 'refunded' where id = '${eMe}'`);
+ok((await call("entry_request_decide", [mrc.id, true, "", "ed"])).status === "approved", "then it is recorded as approved");
+await db.exec(`update public.entries set status = 'paid' where id = '${eMe}'`);
+// mafter entries close
+await db.exec(`update public.competitions set entry_closes = now() - interval '1 hour' where id = '${ME}'`);
+const mpor2 = await call("entry_portal", ["lifter@x.com", mth2]);
+ok(mpor2.entries[0].open === false, "once entries close the page says changes are closed");
+ok((await mupd({ full_name: "New Name" })).error === "closed" && (await mrq({ kind: "change", equipment: "classic" })).error === "closed", "no small changes and no change requests mafter the close");
+const mrc2 = await mrq({ kind: "cancel" });
+ok(mrc2.ok && mrc2.after.Cancellation.includes("no refund") && mrc2.changes?.refund_possible !== true, "but a cancellation request still works, and says there is no refund: " + JSON.stringify(mrc2.after));
+// who can call what
+await db.exec("set role anon");
+ok(!(await can(`select public.entry_portal('lifter@x.com','x')`)) && !(await can(`select public.entry_update('lifter@x.com','x','${eMe}','{}')`)) && !(await can(`select public.entry_request_decide('${mrc2.id}', true, '', 'x')`)) && !(await can(`select * from public.entry_requests`)) && !(await can(`select * from public.entry_login`)), "the public cannot call any of it or read the requests");
+await db.exec("reset role");
+await db.exec("set role authenticated");
+ok(!(await can(`select public.entry_request_decide('${mrc2.id}', true, '', 'x')`)) && !(await can(`select public.entry_portal('lifter@x.com','x')`)), "signed-in users cannot approve a request by calling the function directly (only our server can, mafter checking they are on the entries team)");
+await db.exec("reset role");
+await asUser(U.editor, async () => { ok((await q(`select count(*)::int n from public.entry_requests`))[0].n === 0, "a content editor cannot see the requests"); });
+await asUser(U.entries, async () => { ok((await q(`select count(*)::int n from public.entry_requests`))[0].n >= 4, "the entries team can see every request"); });
+ok((await q(`select count(*)::int n from public.audit_log where table_name = 'entry_requests'`))[0].n >= 3, "requests are in the audit log");
+
+// the FAQ about changing or cancelling an entry: goes in the best category, once
+await db.exec(`insert into public.faq_categories (id, title, sort_order) values ('cccccccc-0000-4000-8000-000000000001', 'About us', 1), ('cccccccc-0000-4000-8000-000000000002', 'Entering a competition', 2)`);
+const faqSql = fs.readFileSync(new URL("./faq-manage-entry.sql", import.meta.url), "utf8");
+await db.exec(faqSql); await db.exec(faqSql);
+const faqRows = await q(`select category_id, answer_md from public.faqs where question = 'How do I change or cancel my entry?'`);
+ok(faqRows.length === 1 && faqRows[0].category_id === "cccccccc-0000-4000-8000-000000000002" && /Manage your entry/.test(faqRows[0].answer_md) && /competitions@ynepf\.co\.uk/.test(faqRows[0].answer_md), "the FAQ is added once, in the category about entering, and mentions both ways to change an entry");
+
 // the entry page asks the database for the time (so a phone with the wrong clock is not told entry is closed)
 await db.exec("set role anon");
 const stime = (await db.query("select public.server_time() t")).rows[0].t;

@@ -192,3 +192,26 @@ console.log("function helper tests passed");
   assert(ce.html.includes('<html lang="en-GB"') && ce.html.includes("Website message") && !ce.html.includes("entries team") && ce.html.includes("email-logo.png") && /^[\x00-\x7F]*$/.test(ce.subject), "branded, marked internal, with a plain subject line");
   assert(wl.renderEmail({ blocks: [["h1", "Hi"]] }).html.includes("prefers-color-scheme: dark"), "dark mode styles are included");
 }
+
+{ // manage your entry: the code, the requests and their outcomes, and the confirmation's new button
+  const wl = await import("../../supabase/functions/waitlist/index.ts");
+  const stw = await import("../../supabase/functions/stripe-webhook/index.ts");
+  const who = { name: "Sam Taylor", competition: "NESC Open 2027", date: "27 February 2027", entriesEmail: "competitions@ynepf.co.uk" };
+  const T = (spec) => wl.renderEmail(spec);
+  const code = T(wl.entryCodeEmail({ name: "Sam", code: "123456", entriesEmail: "x" }));
+  assert(code.text.includes("123 456") && /15 minutes/.test(code.text) && code.html.includes("123 456"), "the manage-your-entry code email");
+  const before = { "Weight class": "Men's 93 kg" }, after = { "Weight class": "Men's 105 kg" };
+  const rc = T(wl.requestReceivedEmail({ ...who, kind: "change", before, after, note: "I gained a bit", open: true, link: "https://x/my-entry" }));
+  assert(/Nothing changes until they approve it/.test(rc.text) && rc.text.includes("Weight class: Men's 93 kg to Men's 105 kg") && rc.text.includes("I gained a bit") && rc.text.includes("https://x/my-entry"), "the request received email says nothing changes yet, and shows before and after: " + rc.text.slice(0, 300));
+  const cc = T(wl.requestReceivedEmail({ ...who, kind: "cancel", before: {}, after: { Cancellation: "Requested after entries closed (no refund)" }, open: false, link: "l" })), co = T(wl.requestReceivedEmail({ ...who, kind: "cancel", before: {}, after: { Cancellation: "Requested" }, open: true, link: "l" }));
+  assert(/no refund/i.test(cc.text) && /Refunds are available until entries close/.test(co.text), "a cancellation request says whether a refund is possible");
+  const ok1 = T(wl.requestDecidedEmail({ ...who, kind: "change", approved: true, before, after, link: "l" })), no1 = T(wl.requestDecidedEmail({ ...who, kind: "change", approved: false, before, after, reason: "Kit check is at weigh-in", link: "l" }));
+  assert(/Your change has been made/.test(ok1.text) && ok1.text.includes("Weight class: Men's 105 kg") && /could not make that change/i.test(no1.text) && no1.text.includes("Reason: Kit check is at weigh-in") && !no1.text.includes("has been made"), "approved and declined emails");
+  const nt = T(wl.requestNotification({ name: "Sam Taylor", email: "sam@x.com", competition: "NESC Open 2027", kind: "change", before, after, note: "n", open: true, deskUrl: "https://x/admin/#competitions/c/entries" }));
+  assert(nt.html.includes("Internal") && nt.text.includes("View request: https://x/admin/#competitions/c/entries") && nt.text.includes("sam@x.com"), "the team is told about a request, with a direct link to the entries desk");
+  const evil = '<script>alert(1)</script>';
+  assert(!T(wl.requestReceivedEmail({ ...who, name: evil, kind: "change", before, after, note: evil, open: true, link: "l" })).html.includes("<script>"), "what a lifter types in a request note is escaped");
+  const conf = (o) => stw.renderEmail(stw.confirmationEmail({ name: "A", competition: "C", date: "2027-02-27", event: "e", equipment: "q", pence: 6000, under18: false, entriesEmail: "competitions@ynepf.co.uk", ...o })).text;
+  assert(conf({ manageUrl: "https://www.ynepf.co.uk/my-entry" }).includes("Manage your entry: https://www.ynepf.co.uk/my-entry") && /event, date of birth or sex/.test(conf({ manageUrl: "https://x/my-entry" })) && !/Email us about your entry/.test(conf({ manageUrl: "https://x/my-entry" })), "the confirmation links to Manage your entry, and says what still needs an email");
+  assert(/Email us about your entry/.test(conf({})), "without the link it falls back to the email button");
+}

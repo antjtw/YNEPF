@@ -839,7 +839,13 @@
       sb.from("weight_classes").select("id,sex,label,sort_order").order("sort_order"),
       sb.from(c.is_university ? "universities" : "clubs").select("name").eq("active", true).order("name")          // a university competition picks universities instead of clubs
     ]).then(function (res) {
+      var ids = (res[0].data || []).map(function (x) { return x.id; });
+      if (!ids.length) { res.push({ data: [] }); return res; }
+      return sb.from("entry_requests").select("*").in("entry_id", ids).order("created_at", { ascending: true }).then(function (rr) { res.push(rr); return res; }, function () { res.push({ data: [] }); return res; });
+    }).then(function (res) {
       var rows = ok(res[0]), refs = { divisions: res[1].data || [], classes: res[2].data || [], clubs: res[3].data || [], clubLabel: c.is_university ? "University" : "Club" };
+      var reqs = ((res[4] && !res[4].error && res[4].data) || []).filter(function (r) { return r.kind !== "update"; }), pendingReqs = reqs.filter(function (r) { return r.status === "pending"; }), pendByEntry = {};
+      pendingReqs.forEach(function (r) { pendByEntry[r.entry_id] = r; });
       var dup = duplicateIds(rows), now = new Date();
       var S = { q: "", status: "entered", guests: false, dupes: false, sort: "newest" };
       var live = rows.filter(function (e) { return e.status === "paid" || e.status === "comped"; });
@@ -849,6 +855,49 @@
       var list = el("div", { class: "entry-list" }), count = el("p", { class: "help", role: "status" });
 
       function reload() { renderEntriesTab(view, c); }
+      // ---- requests from lifters: approve or decline (a different weight class or equipment, or cancelling) ----------------------------
+      function callWaitlist(body) {
+        return sb.auth.getSession().then(function (g) {
+          var token = g.data && g.data.session && g.data.session.access_token;
+          return fetch((window.YNEPF_CONFIG.supabaseUrl || "").replace(/\/$/, "") + "/functions/v1/waitlist", { method: "POST", headers: { "Content-Type": "application/json", apikey: window.YNEPF_CONFIG.supabaseAnonKey || "", Authorization: "Bearer " + (token || "") }, body: JSON.stringify(body) });
+        }).then(function (r) { return r.json().catch(function () { return {}; }).then(function (b) { if (r.status === 401) throw new Error("You do not have permission to do that."); if (!r.ok || b.ok === false) throw new Error(b.message || "That did not work. Please try again."); return b; }); });
+      }
+      function afterDialog(fn) { var d = $("dlg"); d.addEventListener("close", function once() { d.removeEventListener("close", once); fn(); }); }
+      function reqWords(r) { return Object.keys(r.after || {}).map(function (k) { return k + ": " + (r.before && r.before[k] ? r.before[k] + " to " + r.after[k] : r.after[k]); }).join("; "); }
+      function reviewRequest(r) {
+        var e = rows.filter(function (x) { return x.id === r.entry_id; })[0]; if (!e) return;
+        var cancel = r.kind === "cancel", closed = c.entry_closes && new Date(c.entry_closes) <= new Date();
+        sb.from("lo_assignments").select("flight_id, lo_flights(letter, lo_sessions(session_no, day))").eq("entry_id", e.id).maybeSingle().then(function (lo) {
+          var fl = lo && lo.data && one(lo.data.lo_flights), ss = fl && one(fl.lo_sessions), where = fl ? "session " + (ss ? ss.session_no : "?") + ", flight " + fl.letter : "";
+          openForm({
+            title: (cancel ? "Cancellation request: " : "Change request: ") + e.full_name, saveLabel: cancel ? "Approve and cancel the entry…" : "Approve", fields: [],
+            intro: reqWords(r) + "." + (r.note ? " Their note: “" + r.note + "”." : "") + (cancel ? (closed || (r.changes && r.changes.refund_possible === false) ? " Entries have closed, so no refund is due." : " Approving opens Cancel or refund so you can choose what to refund.") : " Approving makes the change and emails them.") + (where ? " They are in the lifting order (" + where + "), so it will need updating." : ""),
+            extra: [{ label: "Decline…", onclick: function () { declineRequest(r, e); } }],
+            onSave: function () {
+              if (cancel) { afterDialog(function () { cancelOrRefund(e, c, reload, { reason: r.note || "Cancellation requested by the lifter", onDone: function () { return callWaitlist({ action: "entry_request_decide", request_id: r.id, approve: true }).then(function () { toast("Request approved."); }); } }); }); return Promise.resolve(); }
+              return callWaitlist({ action: "entry_request_decide", request_id: r.id, approve: true }).then(function (b) {
+                var notes = []; if (b.lifting_order) notes.push(e.full_name + " is in the lifting order (session " + b.lifting_order.session_no + ", flight " + b.lifting_order.flight + "). The change is made, but the lifting order has not moved them: please update it.");
+                if (b.qualification === "not_met") notes.push("They are now below the qualifying standard for this competition.");
+                toast("Request approved. They have been emailed.");
+                afterDialog(function () { reload(); if (notes.length) openForm({ title: "Remember the lifting order", fields: [], saveLabel: b.lifting_order ? "Open the lifting order" : "Close", intro: notes.join(" "), onSave: function () { if (b.lifting_order) location.hash = "#competitions/" + c.id + "/lifting"; return Promise.resolve(); } }); });
+              });
+            }
+          });
+        });
+      }
+      function declineRequest(r, e) {
+        openForm({ title: "Decline: " + e.full_name, saveLabel: "Decline request", danger: true, intro: "They are emailed the reason. Their entry stays as it is.",
+          fields: [{ name: "reason", label: "Reason", type: "textarea", rows: 3, required: true }],
+          onSave: function (v) { return callWaitlist({ action: "entry_request_decide", request_id: r.id, approve: false, reason: v.reason }).then(function () { toast("Request declined. They have been emailed."); reload(); }); } });
+      }
+      var reqBox = pendingReqs.length ? el("section", { class: "card", "aria-labelledby": "req-h", style: "margin-bottom:var(--space-5)" }, el("h2", { id: "req-h" }, "Requests (" + pendingReqs.length + ")"),
+        el("p", { class: "help" }, "Lifters ask for a different weight class or equipment, or to cancel. Nothing changes until you approve it."),
+        el("ul", { class: "item-list" }, pendingReqs.map(function (r) {
+          var e = rows.filter(function (x) { return x.id === r.entry_id; })[0] || {};
+          return el("li", { class: "item-row" }, el("div", { class: "item-main" }, el("p", { class: "item-title" }, (e.full_name || "A lifter") + ": " + (r.kind === "cancel" ? "wants to cancel" : "change requested")),
+            el("p", { class: "item-sub" }, reqWords(r) + (r.note ? " · “" + r.note + "”" : "") + " · asked " + new Date(r.created_at).toLocaleString("en-GB", { timeZone: Y.TZ, dateStyle: "medium", timeStyle: "short" }))),
+            el("span", { class: "actions" }, el("button", { type: "button", class: "btn btn-sm btn-primary", onclick: function () { reviewRequest(r); } }, "Review", el("span", { class: "visually-hidden" }, " " + (e.full_name || "request")))));
+        }))) : null;
       function matches(e) {
         if (S.status === "entered" && !(e.status === "paid" || e.status === "comped")) return false;
         if (S.status === "paying" && !(e.status === "held")) return false;
@@ -880,6 +929,7 @@
           el("span", { class: "entry-lift" }, [(e.sex === "M" ? "Men's " : "Women's ") + (wc ? wc.label + " kg" : ""), cat, e.event === "bench_only" ? "Bench only" : "Full power", e.equipment === "equipped" ? "Equipped" : "Classic"].filter(Boolean).join(" · ")),
           el("span", { class: "entry-flags" }, el("span", { class: STATUS_TAG[e.status] || "tag" }, ENTRY_STATUS[e.status] || e.status),
             e.is_guest && !e.membership_checked ? [" ", el("span", { class: "tag tag-position" }, "Guest: check")] : null,
+            pendByEntry[e.id] ? [" ", el("span", { class: "tag tag-position" }, pendByEntry[e.id].kind === "cancel" ? "Cancel request" : "Change request")] : null,
             dup[e.id] ? [" ", el("span", { class: "tag tag-full" }, "Possible duplicate")] : null,
             e.qualification === "not_met" && (e.status === "paid" || e.status === "comped") ? [" ", el("span", { class: "tag tag-full" }, "Below qualifying standard")] : null),
           el("span", { class: "entry-money" }, entryMoney(e.price_pence)));
@@ -949,6 +999,7 @@
             }) : null,
             e.status === "paid" || e.status === "comped" || e.status === "held" ? btn("Cancel or refund…", function () { cancelOrRefund(e, c, reload); }, "btn-danger") : null,
             btn("Show history", function () { showHistory(body, e); }))].filter(Boolean));
+          showRequestHistory(body, e);
       }
 
       // Toolbar
@@ -961,12 +1012,13 @@
       var dp = el("div", { class: "field-check" }, el("input", { type: "checkbox", id: "entry-dupes", onchange: function (ev) { S.dupes = ev.target.checked; draw(); } }), el("label", { for: "entry-dupes" }, "Possible duplicates"));
 
       view.replaceChildren(
+        reqBox,
         el("div", { class: "actions", style: "margin-bottom:var(--space-3)" },
           btn("Add entry", function () { addEntry(c, refs, reload); }, "btn-primary"),
           c.slug ? el("a", { class: "btn btn-sm btn-secondary", href: "../entries?c=" + encodeURIComponent(c.slug), target: "_blank", rel: "noopener" }, "Public list") : null,
           btn("Download CSV", function () { downloadEntries(c); }, "btn-ghost")),
         el("p", { class: "panel-intro" }, live.length + " entered of " + (c.capacity || "?") + " places. Entry money taken: " + entryMoney(total) + "." +
-          (toCheck ? " " + toCheck + (toCheck === 1 ? " guest" : " guests") + " to check." : "") + (belowStd ? " " + belowStd + " below the qualifying standard." : "") + (Object.keys(dup).length ? " " + Object.keys(dup).length + " entries share an email or membership number with another." : "")),
+          (toCheck ? " " + toCheck + (toCheck === 1 ? " guest" : " guests") + " to check." : "") + (belowStd ? " " + belowStd + " below the qualifying standard." : "") + (pendingReqs.length ? " " + pendingReqs.length + (pendingReqs.length === 1 ? " request" : " requests") + " waiting." : "") + (Object.keys(dup).length ? " " + Object.keys(dup).length + " entries share an email or membership number with another." : "")),
         el("div", { class: "control-row" }, q, st, so), el("div", { class: "control-row checks" }, g, dp), count, list);
       draw();
     }).catch(function (e) { view.replaceChildren(el("p", { class: "form-error" }, friendly(e))); });
@@ -2470,7 +2522,8 @@
 
   // Cancel an entry and/or refund through Stripe. The entry-refund function checks the caller is on the entries team,
   // moves the money, records who did it and why, frees the place, and emails the lifter.
-  function cancelOrRefund(e, c, reload) {
+  function cancelOrRefund(e, c, reload, opts) {
+    opts = opts || {};
     var pays = (e.payments || []).filter(function (p) { return p.status === "succeeded"; }), pay = pays[0];
     var paid = pay ? pay.amount_pence : 0, refunded = pay ? (pay.refunds || []).reduce(function (n, r) { return n + r.amount_pence; }, 0) : 0, left = Math.max(paid - refunded, 0);
     var canRefund = e.status === "paid" && left > 0;
@@ -2484,7 +2537,7 @@
       title: "Cancel or refund: " + e.full_name, saveLabel: "Confirm",
       intro: (paid ? "Paid " + entryMoney(paid) + (refunded ? ", already refunded " + entryMoney(refunded) : "") + ". " : "") + (canRefund ? "Stripe keeps its processing fee on a refund, so the federation bears that cost. " : "") +
         (closed ? "Entries have closed, so refunds are not normally given now. Use this only for unforeseen circumstances. " : "") + "The lifter is emailed unless you untick the box. This cannot be undone.",
-      values: { action: options[0].value, amount: "", reason: "", notify: true },
+      values: { action: (closed && !opts.keepRefund) ? (options.filter(function (o) { return o.value === "cancel"; })[0] || options[0]).value : options[0].value, amount: "", reason: opts.reason || "", notify: true },
       fields: [
         { name: "action", label: "What would you like to do?", type: "select", options: options },
         canRefund ? { name: "amount", label: "Amount to refund, for the part options (£)", type: "number", min: "0", help: "Up to " + entryMoney(left) + ". Leave blank for the full amount." } : null,
@@ -2507,8 +2560,20 @@
             body: JSON.stringify({ entry_id: e.id, refund_pence: pence, cancel: v.action !== "part", reason: v.reason, notify: !!v.notify })
           });
         }).then(function (r) { return r.json().catch(function () { return {}; }).then(function (b) { if (!r.ok) throw new Error(b.message || "That did not work. Please try again."); return b; }); })
-          .then(function (b) { toast(b.refunded_pence ? entryMoney(b.refunded_pence) + " refunded." : "Entry cancelled."); reload(); });
+          .then(function (b) { toast(b.refunded_pence ? entryMoney(b.refunded_pence) + " refunded." : "Entry cancelled."); return opts.onDone ? Promise.resolve(opts.onDone(b)).catch(function (er) { toast(friendly(er), "error"); }) : null; }).then(function () { reload(); });
       }
+    });
+  }
+
+  // Everything the lifter asked for or changed themselves on this entry, newest first: kept as a record.
+  function showRequestHistory(body, e) {
+    sb.from("entry_requests").select("*").eq("entry_id", e.id).order("created_at", { ascending: false }).then(function (r) {
+      var list = (r && !r.error && r.data) || []; if (!list.length) return;
+      var STATE = { pending: "Waiting", approved: "Approved", declined: "Declined", withdrawn: "Withdrawn by the lifter", applied: "Changed by the lifter" };
+      body.appendChild(el("div", { class: "entry-history" }, el("h3", null, "Requests and changes made by the lifter"), el("ul", { class: "history-list" }, list.map(function (q) {
+        var what = Object.keys(q.after || {}).map(function (k) { return k + ": " + (q.before && q.before[k] ? q.before[k] + " to " + q.after[k] : q.after[k]); }).join("; ");
+        return el("li", null, el("strong", null, (q.kind === "cancel" ? "Cancellation" : q.kind === "update" ? "Details" : "Change") + " · " + (STATE[q.status] || q.status)), " · " + new Date(q.created_at).toLocaleString("en-GB", { timeZone: Y.TZ, dateStyle: "medium", timeStyle: "short" }) + (what ? " · " + what : "") + (q.note ? " · “" + q.note + "”" : "") + (q.decline_reason ? " · Reason: " + q.decline_reason : "") + (q.decided_by && q.status !== "pending" && q.status !== "applied" ? " · by " + q.decided_by : ""));
+      }))));
     });
   }
 
