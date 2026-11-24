@@ -397,3 +397,10 @@ Lifters can now look at their own entry and ask for changes, at `/my-entry`. The
 You get an email at `competitions@` for every new request, with a button straight to the entries desk. Everything a lifter asks for or changes is kept: open an entry and look under **Requests and changes made by the lifter**.
 
 **To switch it on** (in this order): merge the branch, run the all-in-one SQL file, then replace the `waitlist`, `stripe-webhook` and `entry-checkout` functions (the other two functions are unchanged). Keep each function's Verify JWT setting as it is.
+
+## Part 15: Visitor statistics (Vercel Web Analytics)
+
+Counts visits without cookies, so there is no cookie banner. Switch it on once in Vercel: your project, **Analytics**, **Enable**. Nothing shows until you do, and for a day or so after.
+
+- `assets/js/analytics.js` loads it on the public pages only. It stays off for the editor, Manage your entry, and any link carrying a token or email (priority and offer links, volunteer edit links, the payment return page). Only plain competition and post links (`?c=` and `?p=`) are counted. It respects Do Not Track.
+- Mention it on the Privacy page (edit it in the editor): *"We use Vercel Web Analytics to count visits to the website. It does not use cookies or follow you across other sites, and we cannot identify you from it."*
