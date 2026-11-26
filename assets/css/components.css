@@ -865,3 +865,12 @@ details.ol-settings.points-info { margin: var(--space-5) 0; }
 .pass-qr { width: min(18rem, 100%); margin: var(--space-5) auto; padding: var(--space-3); background: #fff; border: 2px solid var(--border-subtle, #d9dee6); border-radius: var(--radius-lg); }
 .pass-qr svg { display: block; width: 100%; height: auto; }
 .flow-row-title.is-plain { font-family: var(--font-body); font-weight: 700; letter-spacing: normal; }
+
+/* Buttons on a green panel (the "done" and "valid" panels) are dark green, not orange: orange on green clashes. White text on this green is 9:1. */
+.success-panel, .pass-verdict.is-good, .pass-verdict.is-done {
+  --green-btn: var(--sage-800); --green-btn-deep: var(--sage-900);
+}
+:is(.success-panel, .pass-verdict.is-good, .pass-verdict.is-done) .btn-primary { --btn-bg: var(--green-btn); --btn-fg: #fff; --btn-border: var(--green-btn); --btn-fill: var(--green-btn-deep); --btn-fg-hover: #fff; }
+:is(.success-panel, .pass-verdict.is-good, .pass-verdict.is-done) .btn-secondary { --btn-bg: transparent; --btn-fg: var(--green-btn); --btn-border: var(--green-btn); --btn-fill: var(--green-btn); --btn-fg-hover: #fff; }
+:is(.success-panel, .pass-verdict.is-good, .pass-verdict.is-done) .btn-ghost { --btn-fg: var(--green-btn); --btn-fill: var(--sage-100); --btn-fg-hover: var(--green-btn-deep); }
+:is(.success-panel, .pass-verdict.is-good, .pass-verdict.is-done) .btn:active { --btn-fill: var(--green-btn-deep); }
