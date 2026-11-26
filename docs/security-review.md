@@ -70,3 +70,11 @@ Reviewed as it was built, with tests in `docs/entry-system/waitlist.test.mjs`:
 - A lifter can only ever see and change their own entries (the address is checked on every call). The page never shows a date of birth or guardian details.
 - Only small, low-risk fields change without approval. Weight class, equipment and cancellation are requests the entries team decides. The team's decision can only be made through the server after it has checked the person is on the entries team.
 - Every request and small change is recorded in `entry_requests` and in the audit log. The public cannot read or write it.
+
+## Added later: gym day passes (`/pass`)
+
+Reviewed as it was built, with tests in `docs/entry-system/waitlist.test.mjs` and `docs/entry-system/daypass-function.test.mjs`:
+- A pass is a 192 bit random secret in the address. Only its SHA-256 hash is stored, so a pass cannot be read back out of the database or the audit log.
+- The scan page needs no login, so it shows only the name, gym and dates, never an email address. Using a pass is a single atomic update, so two scans cannot both succeed. A scan only checks; the gym presses a button to use it.
+- Points are taken when the pass is claimed and returned if it is given back unused, cancelled by the entries team, or the email could not be sent. The public cannot read or write the tables; everything goes through server-only functions. Gyms and passes are in the audit log.
+- Limits: the scan and claim actions are rate limited per address. Anyone holding a pass link can mark it used (the same person who holds the QR code), so volunteers are asked not to share it.

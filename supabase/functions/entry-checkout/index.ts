@@ -125,7 +125,8 @@ export type Block =
   | ["p", string] | ["small", string]                       // html allowed: escape anything typed by a person
   | ["details", Array<[string, string] | null | false | undefined>] | ["details", Array<[string, string] | null | false | undefined>, "boldLast"]
   | ["button", string, string] | ["button", string, string, "fallback"] | ["button2", string, string]
-  | ["code", string] | ["note", string, Note] | ["bullets", string[]] | ["quote", string];
+  | ["code", string] | ["note", string, Note] | ["bullets", string[]] | ["quote", string]
+  | ["qr", string, string];                                 // a QR code picture: its address (or cid: for one sent with the email) and a description
 export interface EmailSpec {
   preheader?: string; blocks: Block[]; entriesEmail?: string; siteUrl?: string; why?: string; title?: string;
   noQuestions?: boolean;                                   // leave out the generic "Any questions?" line
@@ -144,6 +145,10 @@ const button = (label: string, href: string) => `<table role="presentation" cell
 const buttonSecondary = (label: string, href: string) => `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px;"><tr>
     <td align="center" style="border:2px solid ${BRAND.iron};border-radius:10px;">
       <a class="btn2" href="${esc(href)}" target="_blank" style="display:inline-block;padding:12px 26px;font-family:${FONT};font-size:16px;line-height:1.2;font-weight:700;color:${BRAND.ironDark};text-decoration:none;border-radius:10px;">${esc(label)}</a>
+    </td></tr></table>`;
+const qrBox = (src: string, alt: string) => `<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:8px auto 24px;"><tr>
+    <td align="center" bgcolor="#FFFFFF" style="background-color:#FFFFFF;border:2px solid ${BRAND.line};border-radius:12px;padding:14px;">
+      <img src="${esc(src)}" width="220" height="220" alt="${esc(alt)}" style="display:block;width:220px;height:220px;border:0;">
     </td></tr></table>`;
 const linkFallback = (href: string) => small(`If the button does not work, copy this link into your browser:<br><a class="lnk" href="${esc(href)}" style="color:${BRAND.navy};word-break:break-all;">${esc(href)}</a>`);
 const codeBox = (code: string) => `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:8px 0 24px;"><tr>
@@ -253,6 +258,7 @@ export function renderEmail(e: EmailSpec): { html: string; text: string } {
     else if (t === "quote") { html.push(quoteBox(k[1])); text.push(`> ${String(k[1]).replace(/\n/g, "\n> ")}`, ""); }
     else if (t === "note") { html.push(noteBox(k[1], k[2])); text.push(plain(k[1]), ""); }
     else if (t === "bullets") { html.push(bulletList(k[1])); text.push(...k[1].map((x) => `- ${x}`), ""); }
+    else if (t === "qr") { html.push(qrBox(k[1], k[2])); }
   }
   const siteUrl = (e.siteUrl || SITE_DEFAULT).replace(/\/$/, "");
   const body = html.join("\n");

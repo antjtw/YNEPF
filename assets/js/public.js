@@ -718,6 +718,7 @@
           el("div", { class: "stack" },
             el("p", null, el("strong", null, "Priority entry: 1 point. "), "If you have a point, we email you a personal link before general entry opens, usually 24 hours before, at around 9am. It normally arrives between 9:00 and 9:10. Nothing to ask for. The point is only taken once your entry is confirmed, so if you do not use the link you keep it. ", el("a", { href: "faqs#what-is-priority-entry" }, "More about priority entry"), "."),
             el("p", null, el("strong", null, "Entry discounts: 4 points for £20 off, 8 for £40 off. "), "Use Spend your points below to get a code for a competition."),
+            el("p", null, el("strong", null, "Gym day pass: 2 points. "), "A free day at one of our partner gyms. Use Spend your points below to pick the gym. We email you a QR code to show at reception."),
             el("p", null, el("strong", null, "British Powerlifting membership: 5 points for half price, 10 for free. "), "Email ", el("a", { href: "mailto:info@ynepf.co.uk" }, "info@ynepf.co.uk"), " and say which you would like."),
             el("p", null, el("strong", null, "How long points last: "), "24 months from the day you earn them. Then they expire, oldest first."))),
         spendPoints());
@@ -784,6 +785,47 @@
           });
         });
         lines.push(el("div", { class: "field" }, el("label", { for: "sp-comp" }, "Which competition?"), comp), el("div", { class: "field" }, el("label", { for: "sp-steps" }, "How much?"), steps), el("div", { class: "actions" }, go));
+      }
+      // Gym day passes: 2 points for a day at a partner gym. The pass is emailed, with a QR code the gym scans.
+      var PP = o.pass_points || 2, when = function (d) { return new Date(d).toLocaleString("en-GB", { timeZone: Y.TZ || "Europe/London", dateStyle: "long" }); };
+      if ((o.gyms || []).length || (o.passes || []).length) {
+        lines.push(el("h3", { class: "flow-sub" }, "Gym day passes"));
+        var live = (o.passes || []).filter(function (x) { return x.state === "valid"; });
+        if ((o.gyms || []).length) {
+          var gym = el("select", { class: "control", id: "sp-gym" }, o.gyms.map(function (g) { return el("option", { value: g.id }, g.name + (g.address ? " (" + g.address + ")" : "")); }));
+          var getPass = el("button", { type: "button", class: "btn btn-primary" }, "Get my day pass");
+          lines.push(el("p", { class: "help" }, PP + " points for one free day at a partner gym. We email you a QR code to show at reception, and tell the gym you are coming."));
+          if (o.available < PP) lines.push(el("p", null, "You need at least " + PP + " free points for a day pass."));
+          else {
+            getPass.addEventListener("click", function () {
+              getPass.disabled = true; say("Getting your pass…");
+              post("pass_claim", { code: code.value, gym_id: gym.value }).then(function (b) {
+                getPass.disabled = false; if (!b.ok) return say(b.message || "We could not make your pass.", true);
+                say(""); step2.hidden = true; step3.hidden = false;
+                step3.replaceChildren(el("div", { class: "success-panel", role: "status" }, el("h2", null, "Your day pass at " + b.gym),
+                  el("p", { class: "lead" }, "We have emailed you the QR code. Show it at reception."), el("p", null, "Use it by " + b.expires + ". It works once."),
+                  el("p", { class: "actions" }, el("a", { class: "btn btn-secondary", href: b.pass_url + "&show=1" }, "Open your pass")),
+                  el("p", null, b.available_after + (b.available_after === 1 ? " point" : " points") + " still free to spend.")));
+              });
+            });
+            lines.push(el("div", { class: "field" }, el("label", { for: "sp-gym" }, "Which gym?"), gym), el("div", { class: "actions" }, getPass));
+          }
+        }
+        if ((o.passes || []).length) {
+          lines.push(el("h3", { class: "flow-sub" }, "Your day passes"), el("p", { class: "help" }, "The QR code is in the email we sent when you got the pass. Not going to use one? Give it back for its points."),
+            el("ul", { class: "flow-list" }, o.passes.map(function (x) {
+              var sub = x.state === "used" ? "Used " + when(x.used_at) : x.state === "expired" ? "Ran out " + when(x.expires_at) : "Ready to use until " + when(x.expires_at);
+              var back = x.state === "valid" ? el("button", { type: "button", class: "btn btn-secondary btn-sm", "aria-label": "Give back the pass at " + x.gym }, "Give the points back") : null;
+              if (back) back.addEventListener("click", function () {
+                back.disabled = true; say("Giving the points back…");
+                post("pass_release", { code: code.value, pass_id: x.id }).then(function (b) {
+                  back.disabled = false; if (!b.ok) return say(b.message || "We could not do that.", true);
+                  post("points_options", { code: code.value }).then(function (o2) { say("Done: " + b.points + " points are back."); if (o2.ok) drawOptions(o2); });
+                });
+              });
+              return el("li", { class: "flow-row" }, el("div", { class: "flow-row-main" }, el("p", { class: "flow-row-title is-plain" }, x.gym), el("p", { class: "flow-row-sub" }, sub)), back);
+            })));
+        }
       }
       step3.hidden = false; step3.replaceChildren.apply(step3, lines);
     }

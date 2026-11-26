@@ -846,4 +846,54 @@ await db.exec("reset role"); await db.query(`select set_config('request.uid','${
 ok(await can(`select public.waitlist_remove('${target}')`), "the entries team can");
 await db.exec("reset role");
 ok((await state("d@x.com")) === "removed" && (await cands()).every((x) => x.email !== "d@x.com"), "a removed person is never offered a place");
+
+// ---- gym day passes: 2 points, a QR secret that is only ever stored as a hash, one use, points back if unused
+const GY1 = "b4b4b4b4-0000-4000-8000-000000000001", GY2 = "b4b4b4b4-0000-4000-8000-000000000002", GY3 = "b4b4b4b4-0000-4000-8000-000000000003";
+await db.exec(`insert into public.gyms (id, name, address, contact_email, details) values ('${GY1}', 'Strength Vault', '1 Iron Street, York', 'vault@x.com', 'Open 6am to 9pm'), ('${GY2}', 'Heavy Metal Gym', '2 Plate Road, Leeds', 'metal@x.com', ''), ('${GY3}', 'Closed Gym', '', '', '');
+  update public.gyms set active = false where id = '${GY3}';
+  insert into public.vol_people (email, full_name) values ('gym@x.com', 'Gym Goer') on conflict (email) do nothing;
+  insert into public.points_ledger (email, delta, reason, kind, earned_at, created_by) values ('gym@x.com', 5, 'test', 'import', now(), 'test');`);
+const gp_login = async (c) => { await q(`insert into public.points_login (email, code_hash, expires_at) values ('gym@x.com', $1, now() + interval '15 minutes')`, [await hash(c)]); return await hash(c); };   // (the real emailed code is limited to 5 an hour, so the test makes its own)
+const gp_claim = async (c, gym, tok) => q(`select public.pass_claim('gym@x.com', $1, $2::uuid, $3) r`, [await gp_login(c), gym, await hash(tok)]).then((r) => r[0].r);
+ok((await q(`select public.pass_claim('gym@x.com', $1, '${GY1}'::uuid, $2) r`, [await hash("nope"), await hash("t0")]).then((r) => r[0].r)).error === "code", "a wrong or missing emailed code claims nothing");
+ok((await gp_claim("g-1", GY3, "t-closed")).error === "gym", "a gym that is switched off cannot be chosen");
+const gp1 = await gp_claim("g-2", GY1, "tok-one");
+ok(gp1.ok && gp1.points === 2 && gp1.gym.name === "Strength Vault" && gp1.gym.contact_email === "vault@x.com" && (await q(`select public.points_balance('gym@x.com') b`))[0].b === 3, "claiming takes 2 points and returns the gym's details");
+ok((await q(`select token_hash from public.day_passes where id = '${gp1.pass_id}'`))[0].token_hash === (await hash("tok-one")) && !JSON.stringify(await q(`select * from public.day_passes`)).includes("tok-one"), "only the hash of the secret is stored");
+ok((await gp_claim("g-3", GY1, "tok-two")).error === "have_one", "one pass per gym at a time");
+const gp2 = await gp_claim("g-4", GY2, "tok-three");
+ok(gp2.ok && (await q(`select public.points_balance('gym@x.com') b`))[0].b === 1, "a pass at a different gym is fine");
+ok((await gp_claim("g-5", GY2, "tok-four")).error === "have_one" && (await q(`select public.pass_claim('gym@x.com', $1, '${GY1}'::uuid, 'not-a-hash') r`, [await gp_login("g-6")]).then((r) => r[0].r)).error === "bad_request", "a bad secret is refused");
+await db.exec(`delete from public.day_passes where id = '${gp2.pass_id}'`);
+ok((await gp_claim("g-7", GY2, "tok-five")).error === "points", "with fewer than 2 free points there is no pass");
+const gpLook = async (t) => q(`select public.pass_lookup($1) r`, [await hash(t)]).then((r) => r[0].r);
+const gpUse = async (t) => q(`select public.pass_use($1) r`, [await hash(t)]).then((r) => r[0].r);
+ok((await gpLook("tok-one")).status === "valid" && (await gpLook("tok-one")).name === "Gym Goer" && (await gpLook("tok-one")).gym === "Strength Vault" && (await gpLook("who")).status === "unknown", "a scan shows valid, with the name and gym; an unknown code shows unknown");
+ok(!JSON.stringify(await gpLook("tok-one")).includes("gym@x.com"), "a scan never shows the email address");
+const gu1 = await gpUse("tok-one"), gu2 = await gpUse("tok-one");
+ok(gu1.just_used === true && gu1.status === "used" && gu2.just_used === false && gu2.status === "used", "the first use works, the second is told it has been used");
+ok((await q(`select public.pass_release('gym@x.com', $1, '${gp1.pass_id}'::uuid) r`, [await gp_login("g-8")]).then((r) => r[0].r)).error === "used", "a used pass cannot be given back");
+await db.exec(`insert into public.day_passes (id, gym_id, email, full_name, points, token_hash, expires_at) values ('b5b5b5b5-0000-4000-8000-000000000001', '${GY2}', 'gym@x.com', 'Gym Goer', 2, '${await hash("tok-six")}', now() + interval '10 days')`);
+await db.exec(`insert into public.points_ledger (email, delta, reason, kind, earned_at, created_by) values ('gym@x.com', -2, 'Gym day pass: Heavy Metal Gym', 'spent', now(), 'test')`);
+const gpBefore = (await q(`select public.points_balance('gym@x.com') b`))[0].b;
+const gpRel = await q(`select public.pass_release('gym@x.com', $1, 'b5b5b5b5-0000-4000-8000-000000000001'::uuid) r`, [await gp_login("g-9")]).then((r) => r[0].r);
+ok(gpRel.ok && gpRel.points === 2 && gpRel.balance === gpBefore + 2 && (await gpLook("tok-six")).status === "cancelled" && (await gpUse("tok-six")).just_used === false, "giving back an unused pass returns the points and the code stops working");
+await db.exec(`insert into public.day_passes (id, gym_id, email, full_name, points, token_hash, expires_at) values ('b5b5b5b5-0000-4000-8000-000000000002', '${GY1}', 'other@x.com', 'Other Person', 2, '${await hash("tok-seven")}', now() + interval '10 days'), ('b5b5b5b5-0000-4000-8000-000000000003', '${GY1}', 'old@x.com', 'Old Pass', 2, '${await hash("tok-old")}', now() - interval '1 day')`);
+ok((await q(`select public.pass_release('gym@x.com', $1, 'b5b5b5b5-0000-4000-8000-000000000002'::uuid) r`, [await gp_login("g-10")]).then((r) => r[0].r)).error === "not_found", "nobody can give back someone else's pass");
+ok((await gpLook("tok-old")).status === "expired" && (await gpUse("tok-old")).just_used === false, "an expired pass is shown as expired and cannot be used");
+const gpo = await q(`select public.pass_options('gym@x.com', $1) r`, [await gp_login("g-11")]).then((r) => r[0].r);
+ok(gpo.ok && gpo.pass_points === 2 && gpo.gyms.length === 2 && gpo.gyms.every((x) => x.name !== "Closed Gym") && gpo.passes.every((x) => x.gym) && !JSON.stringify(gpo).includes("tok-"), "the options list the active gyms and the person's own passes, nothing secret");
+// who may do what
+await db.exec("set role anon");
+ok(!(await can(`select * from public.day_passes`)) && !(await can(`select * from public.gyms`)) && !(await can(`insert into public.gyms (name) values ('Hacked Gym')`)) && !(await can(`select public.pass_use('x')`)) && !(await can(`select public.pass_lookup('x')`)) && !(await can(`select public.pass_claim('gym@x.com', 'x', '${GY1}'::uuid, 'x')`)) && !(await can(`select public.pass_release('gym@x.com', 'x', '${GY1}'::uuid)`)) && !(await can(`select public.pass_options('gym@x.com', 'x')`)) && !(await can(`select public.pass_cancel('${GY1}'::uuid)`)), "the public can read nothing here and call none of it (the server does it for them)");
+await db.exec("reset role");
+await asUser(U.editor, async () => { ok((await q(`select count(*)::int n from public.day_passes`))[0].n === 0 && !(await can(`select public.pass_cancel('b5b5b5b5-0000-4000-8000-000000000002'::uuid)`)) && !(await can(`insert into public.gyms (name) values ('Editor Gym')`)), "an editor cannot see passes, cancel one, or add a gym"); });
+await asUser(U.entries, async () => {
+  ok(await can(`insert into public.gyms (name, contact_email) values ('Third Gym', 'third@x.com')`) && !(await can(`insert into public.gyms (name, contact_email) values ('Bad Gym', 'not an email')`)) && (await q(`select count(*)::int n from public.day_passes`))[0].n >= 3, "the entries team can add gyms (with a real email address) and see every pass");
+  ok(!(await can(`insert into public.day_passes (gym_id, email, token_hash, expires_at) values ('${GY1}', 'x@x.com', 'h', now())`)) && !(await can(`update public.day_passes set used_at = null where used_at is not null`)), "even they change passes only through the functions");
+  const gpPc = (await q(`select public.pass_cancel('b5b5b5b5-0000-4000-8000-000000000002'::uuid) r`))[0].r;
+  ok(gpPc.ok && (await q(`select public.pass_cancel('b5b5b5b5-0000-4000-8000-000000000002'::uuid) r`))[0].r.error === "not_found", "they can cancel an unused pass, once");
+  ok((await q(`select public.pass_cancel('${gp1.pass_id}'::uuid) r`))[0].r.error === "used", "but not one already used");
+});
+ok((await q(`select count(*)::int n from public.audit_log where table_name = 'day_passes'`))[0].n >= 3 && (await q(`select count(*)::int n from public.audit_log where table_name = 'gyms'`))[0].n >= 1, "passes and gyms are in the audit log");
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

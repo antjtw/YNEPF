@@ -848,3 +848,20 @@ details.ol-settings .field:first-of-type { margin-top: 0; }
 
 /* Volunteer points page: the folded explainer sits apart from the panel that follows it */
 details.ol-settings.points-info { margin: var(--space-5) 0; }
+
+/* Gym day pass (/pass): a big plain verdict for the gym, and the volunteer's own pass with its QR code */
+.pass-verdict { max-width: 34rem; margin: var(--space-5) auto; padding: var(--space-7) var(--space-6); border-radius: var(--radius-lg); border: 3px solid; text-align: center; }
+.pass-verdict:focus { outline: none; }
+.pass-verdict.is-good, .pass-verdict.is-done { background: var(--success-bg); border-color: var(--success-border); color: var(--success-text); }
+.pass-verdict.is-bad { background: var(--error-bg); border-color: var(--error-border); color: var(--error-text); }
+.pass-headline { margin: 0 0 var(--space-4); font-size: var(--fs-39, 2.4rem); line-height: 1.1; color: inherit; }
+.pass-line { margin: 0 0 var(--space-2); font-size: var(--fs-23, 1.4rem); font-weight: 600; color: inherit; }
+.pass-line:first-of-type { font-size: var(--fs-27, 1.7rem); }
+.pass-actions { margin-top: var(--space-6); display: grid; gap: var(--space-3); justify-items: center; }
+.pass-actions .btn { min-width: 14rem; min-height: 3.5rem; font-size: 1.25rem; }
+.pass-actions .help { color: inherit; margin: 0; }
+.pass-mine { max-width: 34rem; margin-inline: auto; text-align: center; }
+.pass-mine .entry-dl { text-align: left; }
+.pass-qr { width: min(18rem, 100%); margin: var(--space-5) auto; padding: var(--space-3); background: #fff; border: 2px solid var(--border-subtle, #d9dee6); border-radius: var(--radius-lg); }
+.pass-qr svg { display: block; width: 100%; height: auto; }
+.flow-row-title.is-plain { font-family: var(--font-body); font-weight: 700; letter-spacing: normal; }

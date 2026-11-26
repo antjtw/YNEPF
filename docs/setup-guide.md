@@ -404,3 +404,19 @@ Counts visits without cookies, so there is no cookie banner. Switch it on once i
 
 - `assets/js/analytics.js` loads it on the public pages only. It stays off for the editor, Manage your entry, and any link carrying a token or email (priority and offer links, volunteer edit links, the payment return page). Only plain competition and post links (`?c=` and `?p=`) are counted. It respects Do Not Track.
 - Mention it on the Privacy page (edit it in the editor): *"We use Vercel Web Analytics to count visits to the website. It does not use cookies or follow you across other sites, and we cannot identify you from it."*
+
+## Part 16: Gym day passes
+
+Volunteers can spend 2 points on a free day pass at a partner gym (Volunteer points page, **Spend your points**, **Gym day passes**).
+
+**What happens.** The volunteer gets an email with a QR code. The gym gets an email saying who is coming. The competitions inbox gets a note. At the gym, scanning the code opens `/pass`, which shows a big green **Valid day pass** with the person's name and a **Mark as used** button. Nothing changes until the gym presses it. Scanning again later shows **Already used**. A pass lasts 90 days, works once, and is only ever stored as a hash, so nobody (including us) can read a pass back out of the database.
+
+**To switch it on:**
+1. Merge the branch, run the all-in-one SQL file, and paste in the `waitlist` function. (The other functions were only re-stamped with the shared email code and do not need pasting.)
+2. In the editor, open **Points**, then **Gym day passes**, and add each gym: name, address, a contact email someone reads, and anything good to know (opening hours, bring ID). Until a gym has an email address, the competitions inbox note asks you to tell them yourself.
+3. Run `docs/entry-system/faq-day-passes.sql` to add the FAQ.
+4. **Test it once with your own points:** claim a pass at a gym whose contact email is yours. Check the volunteer email shows the QR code (it is sent as an attachment so it displays without loading images), scan it with a phone and press **Mark as used**, then scan again to see **Already used**.
+
+**Giving a pass back.** A volunteer can give an unused pass back on the points page for its points. The entries team can cancel any unused pass from the editor (Points, Gym day passes, Recent passes). No email goes to the volunteer when you cancel, so tell them.
+
+**Good to know.** The gym presses the button, not the scan, so phones and email scanners that open links automatically cannot use a pass up. The page works for anyone holding the link, because the secret in the address is the pass; it shows only the name, gym and dates, never an email address. If a volunteer opens their own pass link and presses nothing, nothing happens.
