@@ -710,10 +710,16 @@
         }).catch(function () { if (mine === seq) hint.textContent = "We could not search just now. Please try again in a moment."; });
       }
       q.addEventListener("input", function () { clearTimeout(timer); timer = setTimeout(draw, 250); });
-      root.replaceChildren(el("p", null, "Volunteers earn points for every session or set up and tear down they help with. Points can be spent on priority entry and discounts, and last 24 months. ", el("a", { href: "faqs#how-do-i-earn-points" }, "How points work"), "."),
+      root.replaceChildren(el("p", null, "Volunteers earn points for every session or set up and tear down they help with. ", el("a", { href: "faqs#how-do-i-earn-points" }, "How points work"), "."),
         el("div", { class: "field" }, el("label", { for: "points-q" }, "Find a name"), q),
         hint,
         (tableWrap = el("div", { class: "table-wrap", hidden: "" }, el("table", { class: "data" }, el("caption", { class: "visually-hidden" }, "Volunteer points"), el("thead", null, el("tr", null, el("th", { scope: "col" }, "Name"), el("th", { scope: "col" }, "Points"))), tbody))),
+        el("details", { class: "ol-settings points-info" }, el("summary", null, "What can I spend points on?"),
+          el("div", { class: "stack" },
+            el("p", null, el("strong", null, "Priority entry: 1 point. "), "If you have a point, we email you a personal link before general entry opens, usually 24 hours before, at around 9am. It normally arrives between 9:00 and 9:10. Nothing to ask for. The point is only taken once your entry is confirmed, so if you do not use the link you keep it. ", el("a", { href: "faqs#what-is-priority-entry" }, "More about priority entry"), "."),
+            el("p", null, el("strong", null, "Entry discounts: 4 points for £20 off, 8 for £40 off. "), "Use Spend your points below to get a code for a competition."),
+            el("p", null, el("strong", null, "British Powerlifting membership: 5 points for half price, 10 for free. "), "Email ", el("a", { href: "mailto:info@ynepf.co.uk" }, "info@ynepf.co.uk"), " and say which you would like."),
+            el("p", null, el("strong", null, "How long points last: "), "24 months from the day you earn them. Then they expire, oldest first."))),
         spendPoints());
       draw();
     }).catch(function (e) { fail(root, e); });
