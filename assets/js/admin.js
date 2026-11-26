@@ -1722,7 +1722,7 @@
             el("thead", null, el("tr", null, ["Who", "Gym", "Claimed", "Status", ""].map(function (h, i) { return el("th", { scope: "col", class: i === 4 ? "col-actions" : null }, h || el("span", { class: "visually-hidden" }, "Actions")); }))),
             el("tbody", null, passes.map(function (d) {
               var live = !d.cancelled_at && !d.used_at;
-              return el("tr", null, el("th", { scope: "row" }, d.full_name || d.email, el("small", null, d.email)), el("td", null, d.gyms && d.gyms.name), el("td", null, when(d.created_at)), el("td", null, state_(d)),
+              return el("tr", null, el("th", { scope: "row" }, d.full_name || d.email, el("small", null, d.email)), el("td", { class: "wide" }, d.gyms && d.gyms.name), el("td", { class: "wide" }, when(d.created_at)), el("td", { class: "wide" }, state_(d)),
                 el("td", { class: "col-actions" }, live ? btn("Cancel and give points back", function () {
                   if (!window.confirm("Cancel this pass and give " + d.points + " points back to " + (d.full_name || d.email) + "? The pass stops working. No email is sent, so tell them.")) return;
                   sb.rpc("pass_cancel", { p_pass: d.id }).then(function (r) { if (r.error) throw r.error; toast(r.data && r.data.ok ? "Cancelled. The points are back." : "That pass cannot be cancelled any more."); drawGyms(); load().then(function () { drawRows(); }); }).catch(function (e) { toast(friendly(e), "error"); });
