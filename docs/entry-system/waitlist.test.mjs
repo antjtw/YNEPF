@@ -849,7 +849,7 @@ ok((await state("d@x.com")) === "removed" && (await cands()).every((x) => x.emai
 
 // ---- gym day passes: 2 points, a QR secret that is only ever stored as a hash, one use, points back if unused
 const GY1 = "b4b4b4b4-0000-4000-8000-000000000001", GY2 = "b4b4b4b4-0000-4000-8000-000000000002", GY3 = "b4b4b4b4-0000-4000-8000-000000000003";
-await db.exec(`insert into public.gyms (id, name, address, contact_email, details) values ('${GY1}', 'Strength Vault', '1 Iron Street, York', 'vault@x.com', 'Open 6am to 9pm'), ('${GY2}', 'Heavy Metal Gym', '2 Plate Road, Leeds', 'metal@x.com', ''), ('${GY3}', 'Closed Gym', '', '', '');
+await db.exec(`insert into public.gyms (id, name, address, contact_email, details) values ('${GY1}', 'Strength Vault', '1 Iron Street, York', 'vault@x.com', 'Open 6am to 9pm'), ('${GY2}', 'Heavy Metal Gym', '2 Plate Road, Leeds', 'metal@x.com', ''), ('${GY3}', 'Closed Gym', '', 'closed@x.com', '');
   update public.gyms set active = false where id = '${GY3}';
   insert into public.vol_people (email, full_name) values ('gym@x.com', 'Gym Goer') on conflict (email) do nothing;
   insert into public.points_ledger (email, delta, reason, kind, earned_at, created_by) values ('gym@x.com', 5, 'test', 'import', now(), 'test');`);
@@ -889,7 +889,7 @@ ok(!(await can(`select * from public.day_passes`)) && !(await can(`select * from
 await db.exec("reset role");
 await asUser(U.editor, async () => { ok((await q(`select count(*)::int n from public.day_passes`))[0].n === 0 && !(await can(`select public.pass_cancel('b5b5b5b5-0000-4000-8000-000000000002'::uuid)`)) && !(await can(`insert into public.gyms (name) values ('Editor Gym')`)), "an editor cannot see passes, cancel one, or add a gym"); });
 await asUser(U.entries, async () => {
-  ok(await can(`insert into public.gyms (name, contact_email) values ('Third Gym', 'third@x.com')`) && !(await can(`insert into public.gyms (name, contact_email) values ('Bad Gym', 'not an email')`)) && (await q(`select count(*)::int n from public.day_passes`))[0].n >= 3, "the entries team can add gyms (with a real email address) and see every pass");
+  ok(await can(`insert into public.gyms (name, contact_email) values ('Third Gym', 'third@x.com')`) && !(await can(`insert into public.gyms (name, contact_email) values ('Bad Gym', 'not an email')`)) && !(await can(`insert into public.gyms (name, contact_email) values ('No Email Gym', '')`)) && !(await can(`insert into public.gyms (name) values ('Missing Email Gym')`)) && (await q(`select count(*)::int n from public.day_passes`))[0].n >= 3, "the entries team can add gyms, but every gym must have a real email address, and they see every pass");
   ok(!(await can(`insert into public.day_passes (gym_id, email, token_hash, expires_at) values ('${GY1}', 'x@x.com', 'h', now())`)) && !(await can(`update public.day_passes set used_at = null where used_at is not null`)), "even they change passes only through the functions");
   const gpPc = (await q(`select public.pass_cancel('b5b5b5b5-0000-4000-8000-000000000002'::uuid) r`))[0].r;
   ok(gpPc.ok && (await q(`select public.pass_cancel('b5b5b5b5-0000-4000-8000-000000000002'::uuid) r`))[0].r.error === "not_found", "they can cancel an unused pass, once");

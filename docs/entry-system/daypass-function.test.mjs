@@ -7,10 +7,10 @@ globalThis.Deno = { env: { get: (k) => ({ SUPABASE_URL: "https://x.supabase.co",
 await import("../../supabase/functions/waitlist/index.ts");
 assert(handler, "the function registers a handler");
 
-let rpcs, mails, rpcAnswers, mailOk;
+let rpcs, mails, rpcAnswers, mailOk, failTo;
 globalThis.fetch = async (url, init) => {
   const u = String(url), body = init?.body ? JSON.parse(init.body) : {};
-  if (u.startsWith("https://api.resend.com/emails")) { mails.push(body); return new Response(JSON.stringify({ id: "m" }), { status: mailOk ? 200 : 500 }); }
+  if (u.startsWith("https://api.resend.com/emails")) { mails.push(body); return new Response(JSON.stringify({ id: "m" }), { status: mailOk && !(failTo && body.to[0] === failTo) ? 200 : 500 }); }
   const fn = u.split("/rpc/")[1]; rpcs.push({ fn, body });
   return new Response(JSON.stringify(rpcAnswers[fn] ?? null), { status: 200 });
 };
@@ -18,7 +18,7 @@ const call = async (action, extra = {}) => {
   const r = await handler(new Request("https://x/f", { method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": "9.9.9." + Math.floor(Math.random() * 250) }, body: JSON.stringify({ action, ...extra }) }));
   return r.json();
 };
-const reset = (a = {}, ok = true) => { rpcs = []; mails = []; rpcAnswers = a; mailOk = ok; };
+const reset = (a = {}, ok = true, fail = null) => { rpcs = []; mails = []; rpcAnswers = a; mailOk = ok; failTo = fail; };
 const sha = (s) => crypto.createHash("sha256").update(s).digest("hex");
 const gym = { name: "Strength Vault", address: "1 Iron Street, York", details: "Open 6am to 9pm", contact_email: "vault@gym.example" };
 const claimed = { ok: true, pass_id: "p1", name: "Sam Carter", expires_at: "2027-03-01T12:00:00Z", points: 2, available_after: 3, gym };
@@ -43,10 +43,10 @@ assert(mg.to[0] === "vault@gym.example" && mg.text.includes("Sam Carter") && mg.
 assert(mi.to[0] === "competitions@ynepf.co.uk" && mi.text.includes("Sam Carter") && mi.text.includes("Yes") && !mi.html.includes(tok), "the competitions inbox gets a note");
 assert(mails.every((m) => !m.html.includes("<script")), "no scripts in the emails");
 
-// a gym with no email address: the team is told to tell them
-reset({ pass_claim: { ...claimed, gym: { ...gym, contact_email: "" } } });
+// the gym's email cannot be sent: the volunteer still gets their pass, and the team is told to tell the gym
+reset({ pass_claim: claimed }, true, "vault@gym.example");
 r = await call("pass_claim", { email: "sam@x.com", code: "123456", gym_id: "g1" });
-assert(r.ok && mails.length === 2 && mails[1].text.includes("no email address for this gym") && mails[1].text.includes("tell the gym yourself"), "with no gym email, the inbox note asks the team to tell the gym");
+assert(r.ok && mails.length === 3 && mails[2].text.includes("did not send") && mails[2].text.includes("tell them yourself"), "if the gym's email fails the volunteer still has a pass and the inbox note asks the team to tell the gym");
 
 // the volunteer's email cannot be sent: the claim is undone and nothing is taken
 reset({ pass_claim: claimed }, false);

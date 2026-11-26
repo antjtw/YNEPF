@@ -874,3 +874,15 @@ details.ol-settings.points-info { margin: var(--space-5) 0; }
 :is(.success-panel, .pass-verdict.is-good, .pass-verdict.is-done) .btn-secondary { --btn-bg: transparent; --btn-fg: var(--green-btn); --btn-border: var(--green-btn); --btn-fill: var(--green-btn); --btn-fg-hover: #fff; }
 :is(.success-panel, .pass-verdict.is-good, .pass-verdict.is-done) .btn-ghost { --btn-fg: var(--green-btn); --btn-fill: var(--sage-100); --btn-fg-hover: var(--green-btn-deep); }
 :is(.success-panel, .pass-verdict.is-good, .pass-verdict.is-done) .btn:active { --btn-fill: var(--green-btn-deep); }
+
+/* Rows of buttons on public panels: even gaps in both directions, and a text (tertiary) button at the start of a row lines its words up with the text above it. */
+.success-panel .actions, .flow .actions, .pass-mine .actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-4); }
+:is(.event-actions, .success-panel .actions, .flow .actions) > .btn-ghost:first-child { margin-left: -1.5em; }
+:is(.event-actions, .success-panel .actions, .flow .actions) > .btn-ghost.btn-sm:first-child { margin-left: -1.1em; }
+
+/* The gym's "mark as used" confirmation */
+.pass-confirm { text-align: left; max-width: 30rem; width: calc(100% - 2rem); padding: var(--space-6); border: 0; border-radius: var(--radius-lg); box-shadow: 0 20px 60px rgba(8, 20, 30, 0.35); color: var(--text-default); background: var(--surface-raised, #fff); }
+.pass-confirm::backdrop { background: rgba(8, 20, 30, 0.55); }
+.pass-confirm h2 { margin: 0 0 var(--space-3); font-size: var(--fs-27, 1.7rem); }
+.pass-confirm p { margin: 0 0 var(--space-3); }
+.pass-confirm .actions { margin-top: var(--space-5); display: flex; flex-wrap: wrap; gap: var(--space-3); }

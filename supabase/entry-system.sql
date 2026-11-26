@@ -3254,7 +3254,7 @@ create table if not exists public.gyms (
   id uuid primary key default gen_random_uuid(),
   name text not null check (length(btrim(name)) between 2 and 120),
   address text not null default '' check (length(address) <= 300),
-  contact_email text not null default '' check (contact_email = '' or contact_email ~ '^[^@\s]+@[^@\s]+\.[^@\s]+$'),
+  contact_email text not null check (contact_email ~ '^[^@\s]+@[^@\s]+\.[^@\s]+$'),                 -- always: this is where the gym is told a volunteer is coming
   details text not null default '' check (length(details) <= 600),            -- what the pass covers, opening times, anything to bring
   active boolean not null default true,
   sort_order integer not null default 100,

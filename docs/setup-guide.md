@@ -409,11 +409,11 @@ Counts visits without cookies, so there is no cookie banner. Switch it on once i
 
 Volunteers can spend 2 points on a free day pass at a partner gym (Volunteer points page, **Spend your points**, **Gym day passes**).
 
-**What happens.** The volunteer gets an email with a QR code. The gym gets an email saying who is coming. The competitions inbox gets a note. At the gym, scanning the code opens `/pass`, which shows a big green **Valid day pass** with the person's name and a **Mark as used** button. Nothing changes until the gym presses it. Scanning again later shows **Already used**. A pass lasts 90 days, works once, and is only ever stored as a hash, so nobody (including us) can read a pass back out of the database.
+**What happens.** The volunteer gets an email with a QR code. The gym gets an email saying who is coming. The competitions inbox gets a note. At the gym, scanning the code opens `/pass`, which shows a big green **Valid day pass** with the person's name and a **Mark as used** button. Nothing changes until the gym presses it. The page asks the gym to confirm first, because marking a pass used is for good and only the gym should do it. Scanning again later shows **Already used**. A pass lasts 90 days, works once, and is only ever stored as a hash, so nobody (including us) can read a pass back out of the database.
 
 **To switch it on:**
 1. Merge the branch, run the all-in-one SQL file, and paste in the `waitlist` function. (The other functions were only re-stamped with the shared email code and do not need pasting.)
-2. In the editor, open **Points**, then **Gym day passes**, and add each gym: name, address, a contact email someone reads, and anything good to know (opening hours, bring ID). Until a gym has an email address, the competitions inbox note asks you to tell them yourself.
+2. In the editor, open **Points**, then **Gym day passes**, and add each gym: name, address, a contact email someone reads (required: it is where the gym is told a volunteer is coming), and anything good to know (opening hours, bring ID).
 3. Run `docs/entry-system/faq-day-passes.sql` to add the FAQ.
 4. **Test it once with your own points:** claim a pass at a gym whose contact email is yours. Check the volunteer email shows the QR code (it is sent as an attachment so it displays without loading images), scan it with a phone and press **Mark as used**, then scan again to see **Already used**.
 

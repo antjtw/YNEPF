@@ -1701,8 +1701,8 @@
         var gyms = res[0], passes = res[1];
         function editGym(g) {
           openForm({ title: g ? "Edit " + g.name : "Add a gym", saveLabel: g ? "Save" : "Add the gym", values: g || { active: true },
-            intro: "Volunteers can spend 2 points on a day pass here. We email the gym each time, so give an address someone reads.",
-            fields: [{ name: "name", label: "Gym name", required: true, max: 120 }, { name: "address", label: "Address", max: 300 }, { name: "contact_email", label: "Contact email", type: "email", help: "Where we tell the gym a volunteer is coming. Leave empty and the competitions inbox asks you to tell them." },
+            intro: "Volunteers can spend 2 points on a day pass here. We email the gym each time a pass is claimed, so use an address someone reads.",
+            fields: [{ name: "name", label: "Gym name", required: true, max: 120 }, { name: "address", label: "Address", max: 300 }, { name: "contact_email", label: "Contact email", type: "email", required: true, help: "Where we tell the gym a volunteer is coming." },
               { name: "details", label: "Good to know", type: "textarea", rows: 3, max: 600, help: "Shown to the volunteer: opening hours, what to bring." }, { name: "active", label: "Offer this gym", type: "checkbox", help: "Untick to stop new passes. Passes already claimed still work." }],
             onSave: function (v) {
               var row = { name: String(v.name).trim(), address: String(v.address || "").trim(), contact_email: String(v.contact_email || "").trim(), details: String(v.details || "").trim(), active: !!v.active };
@@ -1711,10 +1711,10 @@
         }
         function state_(d) { return d.cancelled_at ? "Given back" : d.used_at ? "Used " + when(d.used_at) : new Date(d.expires_at) <= new Date() ? "Ran out " + when(d.expires_at) : "Ready, until " + when(d.expires_at); }
         gymBox.replaceChildren(el("summary", null, "Gym day passes"),
-          el("p", { class: "help" }, "Partner gyms for the 2 point day pass. The volunteer gets a QR code by email and the gym is told by email; scanning the code opens a page where the gym marks it used."),
+          el("p", { class: "help" }, "Partner gyms for the 2 point day pass. The volunteer gets a QR code by email and the gym is emailed too. The gym scans the code and marks the pass used."),
           gyms.length ? el("div", { class: "table-scroll" }, el("table", { class: "admin-table" }, el("caption", { class: "visually-hidden" }, "Partner gyms"),
             el("thead", null, el("tr", null, ["Gym", "Contact email", "Offered", ""].map(function (h, i) { return el("th", { scope: "col", class: i === 3 ? "col-actions" : null }, h || el("span", { class: "visually-hidden" }, "Actions")); }))),
-            el("tbody", null, gyms.map(function (g) { return el("tr", null, el("th", { scope: "row" }, g.name, g.address ? el("small", null, g.address) : null), el("td", null, g.contact_email || "None: you tell them"), el("td", null, g.active ? "Yes" : "No"), el("td", { class: "col-actions" }, btn("Edit", function () { editGym(g); }, "btn-sm"))); }))))
+            el("tbody", null, gyms.map(function (g) { return el("tr", null, el("th", { scope: "row" }, g.name, g.address ? el("small", null, g.address) : null), el("td", null, g.contact_email), el("td", null, g.active ? "Yes" : "No"), el("td", { class: "col-actions" }, btn("Edit", function () { editGym(g); }, "btn-sm"))); }))))
             : el("p", { class: "empty" }, "No gyms yet."),
           el("div", { class: "actions" }, btn("Add a gym", function () { editGym(null); }, "btn-secondary")),
           el("h3", { class: "form-sub" }, "Recent passes"),

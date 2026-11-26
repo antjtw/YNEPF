@@ -608,7 +608,7 @@ export function dayPassEmail(o: { name: string; gym: string; address: string; de
       ["qr", `cid:${o.cid}`, `QR code for your day pass at ${o.gym}`],
       ["details", [["Gym", o.gym], o.address ? ["Address", o.address] : null, o.details ? ["Good to know", o.details] : null, ["Use it by", o.expires]]],
       ["button", "Open your pass", `${o.passUrl}&show=1`, "fallback"],
-      ["note", "Your pass works once. Please do not share this email: anyone with the QR code could use it.", "warn"],
+      ["note", "Your pass works once, and only the gym marks it used. Please do not share this email: anyone with the QR code could use it.", "warn"],
       ["small", `It cost ${o.points} volunteer points. If you will not use it, you can give it back for your points on the volunteer points page before you use it.`],
     ],
   };
@@ -623,7 +623,7 @@ export function dayPassGymEmail(o: { name: string; gym: string; expires: string;
       ["p", `${b(o.name)} has claimed a day pass at ${b(o.gym)}, as a thank you from the Yorkshire & North East Powerlifting Federation for volunteering at our competitions. Thank you for taking part.`],
       ["details", [["Pass for", o.name], ["Valid until", o.expires], ["Uses", "One visit"]]],
       ["h2", "When they arrive"],
-      ["bullets", ["Ask them to show the QR code on their phone.", "Scan it with any phone camera. It opens a page that says whether the pass is valid, and who it is for.", "Press Mark as used once they are in. If someone tries the same code again, the page will say it has been used."]],
+      ["bullets", ["Ask them to show the QR code on their phone.", "Scan it with any phone camera. It opens a page that says whether the pass is valid, and who it is for.", "Press Mark as used once they are in. The page asks you to confirm, because it uses the pass up for good: only the gym should do this. If someone tries the same code again, the page will say it has been used."]],
       ["small", "Nothing is sent to us when you scan. It only changes when you press the button."],
     ],
   };
@@ -636,12 +636,12 @@ export function dayPassGymCancelledEmail(o: { name: string; gym: string; entries
     blocks: [["h1", "A day pass has been given back"], ["p", `${b(o.name)} will not be using their YNEPF day pass at ${b(o.gym)}. The pass no longer works, so there is nothing for you to do.`]],
   };
 }
-export function dayPassNotification(o: { name: string; email: string; gym: string; expires: string; points: number; gymTold: boolean; hasGymEmail: boolean; deskUrl?: string }): EmailSpec {
+export function dayPassNotification(o: { name: string; email: string; gym: string; expires: string; points: number; gymTold: boolean; deskUrl?: string }): EmailSpec {
   return { internal: true, preheader: `${o.name} claimed a day pass at ${o.gym}.`, blocks: [
     ["h1", "Gym day pass claimed"],
     ["p", `${b(o.name)} (${esc(o.email)}) spent ${o.points} points on a day pass at ${b(o.gym)}.`],
-    ["details", [["Gym", o.gym], ["Valid until", o.expires], ["Gym told by email", o.gymTold ? "Yes" : o.hasGymEmail ? "No: the email did not send" : "No: there is no email address for this gym"]]],
-    ...(o.gymTold ? [] : [["note", "Please tell the gym yourself that this person is coming.", "warn"] as Block]), ...note(o, "Open the points page")] };
+    ["details", [["Gym", o.gym], ["Valid until", o.expires], ["Gym told by email", o.gymTold ? "Yes" : "No: the email did not send"]]],
+    ...(o.gymTold ? [] : [["note", "The gym's email did not send. Please tell them yourself that this person is coming.", "warn"] as Block]), ...note(o, "Open the points page")] };
 }
 export function dayPassGivenBackNotification(o: { name: string; email: string; gym: string; points: number; deskUrl?: string }): EmailSpec {
   return { internal: true, preheader: `${o.name} gave back an unused day pass.`, blocks: [
@@ -1153,7 +1153,7 @@ if (typeof Deno !== "undefined") {
           return reply(200, { ok: false, message: "We could not email your pass, so no points have been taken. Please try again in a moment." });
         }
         const gymTold = g.contact_email ? await send(g.contact_email, `YNEPF day pass: ${out.name || email}`, dayPassGymEmail({ name: out.name || email, gym: g.name, expires, entriesEmail: copy })) : false;
-        await send(copy, `Gym day pass claimed: ${g.name}`, dayPassNotification({ name: out.name || email, email, gym: g.name, expires, points: out.points, gymTold, hasGymEmail: !!g.contact_email, deskUrl: `${siteUrl}/admin/#points` }));
+        await send(copy, `Gym day pass claimed: ${g.name}`, dayPassNotification({ name: out.name || email, email, gym: g.name, expires, points: out.points, gymTold, deskUrl: `${siteUrl}/admin/#points` }));
         return reply(200, { ok: true, gym: g.name, expires, available_after: out.available_after, pass_url: passUrl });
       }
       if (action === "pass_release") {

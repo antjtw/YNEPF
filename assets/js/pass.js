@@ -43,16 +43,25 @@
     if (d.status !== "valid") return verdict("bad", d.status === "used" ? "Already used" : d.status === "expired" ? "Expired" : d.status === "cancelled" ? "Not valid" : "Not recognised",
       (d.name ? [d.name + (d.gym ? " at " + d.gym : "")] : []).concat(reason(d)));
     var msg = el("p", { class: "help", role: "status" }), use = el("button", { type: "button", class: "btn btn-primary btn-lg" }, "Mark as used");
-    use.addEventListener("click", function () {
-      use.disabled = true; msg.textContent = "Marking it used…";
+    var yes = el("button", { type: "button", class: "btn btn-primary" }, "Yes, mark as used"), no = el("button", { type: "button", class: "btn btn-secondary" }, "Not yet");
+    var dlg = el("dialog", { class: "pass-confirm", "aria-labelledby": "pass-confirm-h" },
+      el("h2", { id: "pass-confirm-h" }, "Mark this pass as used?"),
+      el("p", null, el("strong", null, d.name), " at ", d.gym, "."),
+      el("p", null, "This is only for the gym to do. Once you mark it, the pass is used up and cannot be used again."),
+      el("div", { class: "actions" }, yes, no));
+    no.addEventListener("click", function () { dlg.close(); use.focus(); });
+    use.addEventListener("click", function () { if (dlg.showModal) dlg.showModal(); else if (window.confirm("Mark this pass as used? It cannot be used again.")) yes.click(); });
+    yes.addEventListener("click", function () {
+      yes.disabled = true; no.disabled = true; use.disabled = true; msg.textContent = "Marking it used…";
       post("pass_use").then(function (r) {
+        if (dlg.open) dlg.close();
         if (r.just_used) return verdict("done", "Marked as used", [r.name + " at " + r.gym, "Thank you. This pass will not work again."]);
-        if (r.status === "valid") { use.disabled = false; msg.textContent = r.message || "That did not work. Please try again."; return; }
+        if (r.status === "valid") { use.disabled = false; yes.disabled = false; no.disabled = false; msg.textContent = r.message || "That did not work. Please try again."; return; }
         gymView(r);        // someone else got there first, or it has run out
       });
     });
     verdict("good", "Valid day pass", [d.name, "Day pass at " + d.gym, "Use it by " + dateOnly(d.expires_at) + ". One visit."],
-      el("div", { class: "pass-actions" }, use, msg, el("p", { class: "help" }, "Press the button once they are in. Nothing changes until you do.")));
+      el("div", { class: "pass-actions" }, use, msg, el("p", { class: "help" }, "Only the gym should press this, once the person is in. It uses the pass up for good."), dlg));
   }
 
   function volunteerView(d) {
