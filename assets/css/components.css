@@ -845,3 +845,6 @@ details.ol-settings > :not(summary) { margin-left: var(--space-4); margin-right:
 details.ol-settings > summary + * { margin-top: var(--space-3); }
 details.ol-settings > :last-child { margin-bottom: var(--space-4); }
 details.ol-settings .field:first-of-type { margin-top: 0; }
+
+/* Volunteer points page: the folded explainer sits apart from the panel that follows it */
+details.ol-settings.points-info { margin: var(--space-5) 0; }
