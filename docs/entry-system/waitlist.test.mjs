@@ -846,4 +846,14 @@ await db.exec("reset role"); await db.query(`select set_config('request.uid','${
 ok(await can(`select public.waitlist_remove('${target}')`), "the entries team can");
 await db.exec("reset role");
 ok((await state("d@x.com")) === "removed" && (await cands()).every((x) => x.email !== "d@x.com"), "a removed person is never offered a place");
+
+// ---- news attachments: a list of up to 10 { name, url, size } on a post
+await db.exec(`insert into public.posts (id, title, slug, body_md, published) values ('c6c6c6c6-0000-4000-8000-000000000001', 'With a file', 'with-a-file', 'x', true)`);
+ok((await q(`select attachments a from public.posts where slug = 'with-a-file'`))[0].a.length === 0, "a post starts with no attachments");
+ok(await can(`update public.posts set attachments = '[{"name":"Entry pack","url":"https://x.supabase.co/storage/v1/object/public/news-files/a.pdf","size":1000}]'::jsonb where slug = 'with-a-file'`), "attachments can be saved on a post");
+ok(!(await can(`update public.posts set attachments = '"just text"'::jsonb where slug = 'with-a-file'`)) && !(await can(`update public.posts set attachments = '{"a":1}'::jsonb where slug = 'with-a-file'`)), "attachments must be a list");
+ok(!(await can(`update public.posts set attachments = (select jsonb_agg(jsonb_build_object('name','f' || i,'url','https://x/' || i,'size',1)) from generate_series(1, 11) i) where slug = 'with-a-file'`)) && await can(`update public.posts set attachments = (select jsonb_agg(jsonb_build_object('name','f' || i,'url','https://x/' || i,'size',1)) from generate_series(1, 10) i) where slug = 'with-a-file'`), "no more than 10, and exactly 10 is fine");
+await db.exec("set role anon");
+ok((await q(`select jsonb_array_length(attachments) n from public.posts where slug = 'with-a-file'`))[0].n === 10 && !(await can(`update public.posts set attachments = '[]'::jsonb where slug = 'with-a-file'`)), "anyone can see a published post's attachments, nobody but editors can change them");
+await db.exec("reset role");
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

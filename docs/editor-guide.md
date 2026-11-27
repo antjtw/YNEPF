@@ -427,6 +427,7 @@ Open the **News** tab and press **New post**.
 | **Post date (UK time)** | Required. Defaults to now. See scheduling below. |
 | **Web address ending** | Made from the title for you (letters, numbers, hyphens). Used in the post's link. |
 | **Post** | The body, written in a visual editor. |
+| **Attachments** | PDFs shown as links under the post. Press **Add a PDF**, choose the file, and change the name people will see. Up to 10 files, 10 MB each, PDFs only. **Remove** takes a file off the post and deletes it. |
 | **Published** | Untick to save as a **draft** that only editors can see. |
 
 The **author** is filled in automatically from the editor's display name. You do not choose it, which is why it is worth setting your name properly under [Account](#13-your-account).
