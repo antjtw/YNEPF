@@ -61,7 +61,8 @@
       });
     });
     verdict("good", "Valid day pass", [d.name, "Day pass at " + d.gym, "Use it by " + dateOnly(d.expires_at) + ". One visit."],
-      el("div", { class: "pass-actions" }, use, msg, el("p", { class: "help" }, "Only the gym should press this, once the person is in. It uses the pass up for good."), dlg));
+      el("div", { class: "pass-actions" }, use, msg, el("p", { class: "help" }, "Only the gym should press this, once the person is in. It uses the pass up for good.")));
+    root.appendChild(dlg);          // outside the green panel, so its buttons are the normal orange ones
   }
 
   function volunteerView(d) {
