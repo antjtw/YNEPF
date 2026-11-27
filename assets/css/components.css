@@ -326,6 +326,7 @@ main:has(> .page-hero:first-child), main:has(> .lo-hero:first-child) { padding-t
 .tag { display: inline-flex; align-items: center; padding: 0.15rem 0.75rem; border-radius: var(--radius-pill); font-family: var(--font-body); font-size: var(--fs-14); font-weight: 700; line-height: 1.4; white-space: nowrap; }
 .tag-open { background: var(--tag-open-bg); color: var(--tag-open-text); }
 .tag-closed { background: var(--tag-closed-bg); color: var(--tag-closed-text); }
+.tag-priority { background: var(--navy-100); color: var(--navy-800); }       /* before general entry opens, personal links only */
 .tag-position { background: var(--tag-position-bg); color: var(--tag-position-text); }
 .tag-event { background: var(--tag-alpha-bg); color: var(--tag-alpha-text); }
 .tag-full { background: var(--tag-full-bg); color: var(--tag-full-text); }
@@ -786,7 +787,6 @@ table.lifters thead th { overflow-wrap: normal; }
 
 /* Calendar cards: the entry status is a line of its own (not another bullet), and every action reads as a button. */
 .event-entry-line { margin: var(--space-3) 0 0; font-weight: 600; color: var(--text-heading); }
-.event .event-actions .btn-ghost { border-color: var(--border-strong); }       /* calendar cards only: the thank-you page keeps its quiet text button */
 
 /* ==========================================================================
    Entry journey: a clear step marker, an error that looks like every other error, an emphasised total
