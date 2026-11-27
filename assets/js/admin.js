@@ -74,7 +74,8 @@
     var api = {
       get: function (n) { return controls[n].get(); },
       set: function (n, v) { controls[n].set(v); },
-      input: function (n) { return controls[n].input; }
+      input: function (n) { return controls[n].input; },
+      control: function (n) { return controls[n]; }
     };
 
     form.addEventListener("submit", function (e) {
@@ -120,7 +121,7 @@
   // "Add image": choose or drop a picture, it is shrunk in the browser, the editor describes it (alt text is
   // required), and it is uploaded to the public news-images bucket. It then sits in the post at the width of
   // the text. Pasting or dropping a picture straight into the editor opens the same step.
-  var IMG_BUCKET = "news-images", IMG_MAX_WIDTH = 1600;
+  var IMG_BUCKET = "news-images", IMG_MAX_WIDTH = 1600, FILES_BUCKET = "news-files";
   function fileSize(n) { return n >= 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB"; }
 
   // Never wider than 1600px (never scaled up), re-saved as WebP (or JPEG where the browser cannot), which also
@@ -272,6 +273,48 @@
         get: function () { return ed ? ed.getMarkdown().trim() : (value || ""); },
         set: function (v) { if (ed) ed.setMarkdown(v); else pendingSet = v; }
       };
+    }
+
+    // Attached files (PDFs). Each is uploaded as soon as it is chosen; the editor names it as lifters will see it. get() returns [{ name, url, size }].
+    if (type === "files") {
+      var items = (Array.isArray(value) ? value : []).map(function (x) { return { name: x.name, url: x.url, size: x.size }; });
+      var uploaded = [], listEl = el("ul", { class: "attach-list" }), note = el("p", { class: "help", role: "status", "aria-live": "polite" });
+      input = el("input", { type: "file", id: id, accept: "application/pdf,.pdf", class: "visually-hidden", "aria-describedby": help ? id + "-help" : false });
+      var addBtn = el("button", { type: "button", class: "btn btn-secondary btn-sm" }, "Add a PDF");
+      addBtn.addEventListener("click", function () { input.click(); });
+      var draw = function () {
+        listEl.replaceChildren.apply(listEl, items.map(function (it, i) {
+          var nm = el("input", { type: "text", class: "control", value: it.name, maxlength: "120", "aria-label": "Name of file " + (i + 1) });
+          nm.addEventListener("input", function () { it.name = nm.value; });
+          return el("li", { class: "attach-row" }, nm, el("span", { class: "attach-size" }, "PDF, " + fileSize(it.size || 0)),
+            el("a", { class: "btn btn-sm btn-ghost", href: it.url, target: "_blank", rel: "noopener" }, "Open"),
+            el("button", { type: "button", class: "btn btn-sm btn-danger", "aria-label": "Remove " + it.name, onclick: function () { items.splice(i, 1); draw(); } }, "Remove"));
+        }));
+        addBtn.disabled = items.length >= 10;
+        if (items.length >= 10) note.textContent = "That is the most (10 files).";
+      };
+      input.addEventListener("change", function () {
+        var file = input.files && input.files[0]; input.value = "";
+        if (!file) return;
+        if (items.length >= 10) { note.textContent = "That is the most (10 files)."; return; }
+        if (file.size > 10 * 1048576) { note.textContent = "That file is over 10 MB. Try a smaller one."; return; }
+        file.slice(0, 5).text().then(function (head) {
+          if (head !== "%PDF-") throw new Error("That is not a PDF. Save or export it as a PDF first.");
+          note.textContent = "Uploading…";
+          var now = new Date(), rand = Math.random().toString(36).slice(2, 8), base = file.name.replace(/\.pdf$/i, "");
+          var path = now.getUTCFullYear() + "/" + ("0" + (now.getUTCMonth() + 1)).slice(-2) + "/" + (slugify(base).slice(0, 50) || "file") + "-" + rand + ".pdf";
+          var bucket = sb.storage.from(FILES_BUCKET);
+          return bucket.upload(path, file, { contentType: "application/pdf", cacheControl: "31536000", upsert: false }).then(function (res) {
+            if (res.error) throw res.error;
+            var url = bucket.getPublicUrl(path).data.publicUrl; uploaded.push(url);
+            items.push({ name: base.replace(/[-_]+/g, " ").trim() || "Attachment", url: url, size: file.size });
+            note.textContent = "Added. Change its name above if you like."; draw();
+          });
+        }).catch(function (e) { note.textContent = (e && e.message) ? friendly(e) : "We could not upload that file."; });
+      });
+      draw();
+      wrap = el("div", { class: "field" }, el("span", { class: "label" }, f.label), help, listEl, el("div", { class: "actions" }, addBtn, input), note);
+      return { wrap: wrap, input: addBtn, uploaded: uploaded, get: function () { return items.map(function (x) { return { name: String(x.name || "").trim() || "Attachment", url: x.url, size: x.size }; }); }, set: function () {} };
     }
 
     if (type === "textarea") {
@@ -2805,12 +2848,13 @@
     var api = openForm({
       title: isNew ? "New post" : "Edit post",
       saveLabel: isNew ? "Publish post" : "Save changes",
-      values: { title: p.title, slug: p.slug, post_date: p.post_date ? Y.toLondonInput(p.post_date) : nowLocalInput(), published: isNew ? true : p.published, body_md: p.body_md },
+      values: { title: p.title, slug: p.slug, post_date: p.post_date ? Y.toLondonInput(p.post_date) : nowLocalInput(), published: isNew ? true : p.published, body_md: p.body_md, attachments: p.attachments },
       fields: [
         { name: "title", label: "Title", required: true },
         { name: "post_date", label: "Post date (UK time)", type: "datetime", required: true, half: true },
         { name: "slug", label: "Web address ending", required: true, half: true, help: "Made from the title. Letters, numbers and hyphens only." },
         { name: "body_md", label: "Post", type: "md", images: true, help: "To add a picture, use the picture button on an empty line, or drop or paste one in. Switch to Markdown at the bottom if you prefer." },
+        { name: "attachments", label: "Attachments", type: "files", help: "PDFs people can open or download, shown under the post. Up to 10, 10 MB each." },
         { name: "published", label: "Published", type: "checkbox", help: "Untick to save as a draft that only editors can see." }
       ],
       validate: function (v) {
@@ -2818,12 +2862,23 @@
         return null;
       },
       onSave: function (v) {
-        var row = { title: v.title, slug: v.slug, post_date: Y.fromLondonInput(v.post_date), body_md: v.body_md, published: v.published };
+        var row = { title: v.title, slug: v.slug, post_date: Y.fromLondonInput(v.post_date), body_md: v.body_md, published: v.published, attachments: v.attachments };
         if (isNew) { row.author_id = state.user.id; row.author_name = state.name; }
         var q = isNew ? sb.from("posts").insert(row) : sb.from("posts").update(row).eq("id", p.id);
-        return q.then(ok).then(function () { toast(isNew ? "Post saved." : "Post updated."); route(); });
+        return q.then(ok).then(function () {
+          saved = true;
+          // files taken off the post are deleted too, so a removed document is really gone
+          var keep = {}; v.attachments.forEach(function (x) { keep[x.url] = true; });
+          storagePaths((p.attachments || []).filter(function (x) { return !keep[x.url]; }).map(function (x) { return x.url; })).then(remove);
+          toast(isNew ? "Post saved." : "Post updated."); route();
+        });
       }
     });
+    // Files uploaded in this window but never saved with the post are deleted again if the window is closed.
+    var saved = false, fc = api.control("attachments");
+    function storagePaths(urls) { return Promise.resolve(urls.map(function (u) { var i = String(u).indexOf("/" + FILES_BUCKET + "/"); return i < 0 ? null : decodeURIComponent(String(u).slice(i + FILES_BUCKET.length + 2)); }).filter(Boolean)); }
+    function remove(paths) { if (paths.length) sb.storage.from(FILES_BUCKET).remove(paths).then(function () {}, function () {}); }
+    $("dlg").addEventListener("close", function onGone() { $("dlg").removeEventListener("close", onGone); if (!saved) storagePaths(fc.uploaded).then(remove); });
     if (isNew) {
       var slugTouched = false;
       api.input("slug").addEventListener("input", function () { slugTouched = true; });
