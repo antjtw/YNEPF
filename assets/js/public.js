@@ -399,6 +399,18 @@
     fetchPage();
   }
 
+  // Files attached to a post (PDFs): a list of links under the text. Only https addresses are linked.
+  function attachments(list) {
+    var items = (Array.isArray(list) ? list : []).filter(function (x) { return x && typeof x.url === "string" && /^https:\/\//i.test(x.url); });
+    if (!items.length) return null;
+    var size = function (n) { return n >= 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round((n || 0) / 1024)) + " KB"; };
+    return el("section", { class: "attachments", "aria-labelledby": "attachments-h" }, el("h2", { id: "attachments-h" }, items.length === 1 ? "Attachment" : "Attachments"),
+      el("ul", { class: "attach-links" }, items.map(function (x) {
+        return el("li", null, el("a", { href: x.url, target: "_blank", rel: "noopener", "aria-label": (x.name || "Attachment") + ", PDF, " + size(x.size) + " (opens in a new tab)" },
+          el("span", { class: "attach-name" }, x.name || "Attachment")), el("span", { class: "attach-meta" }, "PDF, " + size(x.size)));
+      })));
+  }
+
   function post(root) {
     var slug = new URLSearchParams(location.search).get("p");
     var missing = function () {
@@ -420,7 +432,7 @@
           el("h1", null, p.title),
           el("p", { class: "post-meta" }, el("time", { datetime: p.post_date }, fmtDate(p.post_date)),
             p.author_name ? " · By " + p.author_name : ""),
-          body);
+          body, attachments(p.attachments));
       }).catch(function (e) { fail(root, e); });
   }
 
