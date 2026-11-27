@@ -203,6 +203,12 @@
     if (opens || closes || c.entry_url) return "open";
     return "none";
   }
+  // Priority entry (personal links, sent a day before general entry) is running: general entry has not opened, but it is within the priority window.
+  function priorityOpen(c, now) {
+    now = now || new Date();
+    if (compState(c, now) !== "soon" || !c.entry_opens) return false;
+    return now >= new Date(new Date(c.entry_opens).getTime() - (c.priority_hours || 24) * 3600 * 1000);
+  }
   function entryWindow(c) {
     if (c.kind === "event") return "";
     var o = c.entry_opens ? new Date(c.entry_opens) : null;
@@ -226,11 +232,11 @@
     if (c.kind === "event") return "";
     var st = compState(c, now), o = c.entry_opens ? new Date(c.entry_opens) : null, cl = c.entry_closes ? new Date(c.entry_closes) : null;
     if (st === "soon" && o) {
-      var n = daysUntil(o), at = " at " + clock(o);
-      if (n <= 0) return "Entry opens today" + at;
-      if (n === 1) return "Entry opens tomorrow" + at;
-      if (n <= 60) return "Entry opens in " + n + " days (" + dayMonth(o, false) + ")";
-      return "Entry opens " + dayMonth(o, true) + at;
+      var n = daysUntil(o), at = " at " + clock(o), pri = priorityOpen(c, now), lead = (pri ? "General entry" : "Entry") + " opens";
+      if (n <= 0) return lead + " today" + at;
+      if (n === 1) return lead + " tomorrow" + at;
+      if (n <= 60) return lead + " in " + n + " days (" + dayMonth(o, false) + ")";
+      return lead + " " + dayMonth(o, true) + at;
     }
     if (st === "open") return "Entry open" + (cl ? ". Closes " + dayMonth(cl, false) + " at " + clock(cl) : "");
     if (st === "closed") return "Entry closed";
@@ -283,7 +289,10 @@
     var tags = [];
     if (c.kind === "event") tags.push(el("span", { class: "tag tag-event" }, "Event"));
     if (c.label) tags.push(el("span", { class: "tag tag-position" }, c.label));
-    if (STATE_TAG[state] && !opts.noStatus) tags.push(el("span", { class: STATE_TAG[state][0] }, STATE_TAG[state][1]));
+    if (!opts.noStatus) {
+      if (priorityOpen(c)) tags.push(el("span", { class: "tag tag-priority" }, "Priority entry open"));
+      else if (STATE_TAG[state]) tags.push(el("span", { class: STATE_TAG[state][0] }, STATE_TAG[state][1]));
+    }
 
     var meta = el("div", { class: "event-meta" },
       el("span", null, svg(ICONS.calendar), dateRange(c.start_date, c.end_date) +
@@ -314,7 +323,7 @@
           c.waitlist_url ? "All places have been taken. You can join the waiting list in case one comes up." : "All places have been taken."));
       }
       // One row of actions. The main (primary) action follows the stage of the competition and the others sit
-      // beside it as quieter ghost buttons:
+      // beside it as secondary (outlined) buttons:
       //   entry open    Enter now           | View entries, View lifting order
       //   entry full    Join waiting list   | View entries, View lifting order
       //   entry closed  View lifting order  | View entries            (or View entries, if there is no order yet)
@@ -337,11 +346,12 @@
         : state === "closed" ? ["order", "entries", "volunteer", "rota", "results"]
         : state === "full" ? ["waitlist", "entries", "order", "volunteer", "rota", "results"]
         : ["enter", "entries", "order", "volunteer", "rota", "results"];
-      var actions = [], first = true;
+      // Only the call to action (Enter now, or Join the waiting list) is solid. Everything else is a secondary (outlined) button.
+      var actions = [];
       order.forEach(function (k) {
         if (!A[k]) return;
-        A[k].className = "btn " + (first ? "btn-primary" : "btn-ghost");
-        first = false; actions.push(A[k]);
+        A[k].className = "btn " + (k === "enter" || k === "waitlist" ? "btn-primary" : "btn-secondary");
+        actions.push(A[k]);
       });
       if (actions.length) card.appendChild(el("div", { class: "event-actions" }, actions));
     }
@@ -500,7 +510,7 @@
     markdown: markdown, excerpt: excerpt, anchorSlug: anchorSlug,
     toLondonInput: toLondonInput, fromLondonInput: fromLondonInput,
     todayLondon: todayLondon, yearOf: function (c) { return c.start_date.slice(0, 4); }, addDays: addDays, dateRange: dateRange, longDate: longDate,
-    compState: compState, timeRange: timeRange, entryLine: entryLine, entryWindow: entryWindow, mapsUrl: mapsUrl, competitionCard: competitionCard,
+    compState: compState, priorityOpen: priorityOpen, timeRange: timeRange, entryLine: entryLine, entryWindow: entryWindow, mapsUrl: mapsUrl, competitionCard: competitionCard,
     parseRecords: parseRecords, RECORDS_FORM_DEFAULT: RECORDS_FORM_DEFAULT, AGE_NAMES: AGE_NAMES, liftingHref: liftingHref, longDay: longDay, igHandle: igHandle,
     extIcon: Y_EXT, sheetCsvUrl: sheetCsvUrl, parseCsv: parseCsv, loadSheet: loadSheet,
     notice: notice, guard: guard

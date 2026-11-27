@@ -29,10 +29,14 @@
       // Which competitions have entries to look at (names only, from the public entries list). Quietly skipped if
       // that list is not there.
       var db = Y.db();
-      return db.from("entries_public").select("competition_id").then(function (r) {
-        var have = {};
-        (r.data || []).forEach(function (e) { have[e.competition_id] = true; });
-        rows.forEach(function (c) { c.has_entries = !!have[c.id]; });
+      // And how long the priority window is for each (public settings), so a card can say "Priority entry open".
+      var entries = db.from("entries_public").select("competition_id").then(function (r) { return r.data || []; }, function () { return []; });
+      var settings = db.from("entry_settings").select("competition_id,priority_hours").then(function (r) { return r.data || []; }, function () { return []; });
+      return Promise.all([entries, settings]).then(function (res) {
+        var have = {}, hours = {};
+        res[0].forEach(function (e) { have[e.competition_id] = true; });
+        res[1].forEach(function (e) { hours[e.competition_id] = e.priority_hours; });
+        rows.forEach(function (c) { c.has_entries = !!have[c.id]; c.priority_hours = hours[c.id]; });
         return rows;
       }, function () { return rows; });
     }).then(function (rows) {
