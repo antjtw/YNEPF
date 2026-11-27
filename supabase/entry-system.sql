@@ -3242,3 +3242,167 @@ revoke all on public.entry_login, public.entry_requests from anon;
 revoke truncate, references, trigger on public.entry_login, public.entry_requests from authenticated;
 revoke all on public.entry_login from authenticated;
 grant select, insert, update, delete on public.entry_requests to authenticated;                  -- row security limits it to the entries team
+
+-- ---------------------------------------------------------------------------
+-- 28. Gym day passes: spend 2 volunteer points for a day pass at a partner gym
+-- ---------------------------------------------------------------------------
+-- The volunteer gets an email with a QR code; the gym gets an email naming them. At the gym, scanning the code opens a page showing whether
+-- the pass is valid, with a button to mark it used. Only a hash of each pass's secret is kept, so the pass can be checked but never read back.
+-- The points are taken when the pass is claimed (a pass is a promise to the gym). An unused pass can be given back for its points, by the
+-- volunteer or by the entries team. A pass lasts 90 days.
+create table if not exists public.gyms (
+  id uuid primary key default gen_random_uuid(),
+  name text not null check (length(btrim(name)) between 2 and 120),
+  address text not null default '' check (length(address) <= 300),
+  contact_email text not null check (contact_email ~ '^[^@\s]+@[^@\s]+\.[^@\s]+$'),                 -- always: this is where the gym is told a volunteer is coming
+  details text not null default '' check (length(details) <= 600),            -- what the pass covers, opening times, anything to bring
+  active boolean not null default true,
+  sort_order integer not null default 100,
+  created_at timestamptz not null default now()
+);
+create table if not exists public.day_passes (
+  id uuid primary key default gen_random_uuid(),
+  gym_id uuid not null references public.gyms (id),
+  email text not null check (email = lower(email)),
+  full_name text not null default '',
+  points integer not null default 2 check (points > 0),
+  token_hash text not null unique,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  used_at timestamptz,
+  cancelled_at timestamptz
+);
+create index if not exists day_passes_email on public.day_passes (email);
+create index if not exists day_passes_gym on public.day_passes (gym_id);
+alter table public.gyms enable row level security;
+alter table public.day_passes enable row level security;
+drop policy if exists "entries manage" on public.gyms;
+create policy "entries manage" on public.gyms for all to authenticated using (public.is_entries()) with check (public.is_entries());
+drop policy if exists "entries read" on public.day_passes;
+create policy "entries read" on public.day_passes for select to authenticated using (public.is_entries());
+revoke all on public.gyms, public.day_passes from anon;
+revoke all on public.day_passes from authenticated;
+revoke truncate, references, trigger on public.gyms from authenticated;
+grant select, insert, update, delete on public.gyms to authenticated;                 -- row security limits it to the entries team
+grant select on public.day_passes to authenticated;                                    -- changes only through the functions below
+drop trigger if exists gyms_audit on public.gyms;
+create trigger gyms_audit after insert or update or delete on public.gyms for each row execute function public.audit_row();
+drop trigger if exists day_passes_audit on public.day_passes;
+create trigger day_passes_audit after insert or update or delete on public.day_passes for each row execute function public.audit_row();
+
+-- What the volunteer sees: the gyms they can choose and their own passes. (Called with the emailed code, like the points options.)
+create or replace function public.pass_options(p_email text, th text) returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare v_email text := lower(btrim(coalesce(p_email, '')));
+begin
+  if public.points_login_ok(v_email, th) is null then return jsonb_build_object('ok', false, 'error', 'code'); end if;
+  return jsonb_build_object('ok', true, 'pass_points', 2,
+    'gyms', coalesce((select jsonb_agg(jsonb_build_object('id', g.id, 'name', g.name, 'address', g.address, 'details', g.details) order by g.sort_order, g.name)
+                        from public.gyms g where g.active), '[]'::jsonb),
+    'passes', coalesce((select jsonb_agg(jsonb_build_object('id', d.id, 'gym', g.name, 'created_at', d.created_at, 'expires_at', d.expires_at, 'used_at', d.used_at,
+                          'state', case when d.used_at is not null then 'used' when d.expires_at <= now() then 'expired' else 'valid' end) order by d.created_at desc)
+                        from public.day_passes d join public.gyms g on g.id = d.gym_id
+                       where d.email = v_email and d.cancelled_at is null and d.created_at > now() - interval '12 months'), '[]'::jsonb));
+end $$;
+
+-- Claim a pass: 2 points now, one pass per gym at a time. p_token_hash is the hash of the secret the server made for the QR code.
+create or replace function public.pass_claim(p_email text, th text, p_gym uuid, p_token_hash text) returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare v_email text := lower(btrim(coalesce(p_email, ''))); o jsonb; g public.gyms%rowtype; v_name text; v_row public.day_passes%rowtype; v_cost constant integer := 2;
+begin
+  if coalesce(p_token_hash, '') !~ '^[0-9a-f]{64}$' then return jsonb_build_object('ok', false, 'error', 'bad_request'); end if;
+  o := public.points_options(v_email, th);
+  if not (o->>'ok')::boolean then return o; end if;
+  select * into g from public.gyms where id = p_gym and active;
+  if not found then return jsonb_build_object('ok', false, 'error', 'gym'); end if;
+  if exists (select 1 from public.day_passes d where d.email = v_email and d.gym_id = g.id and d.used_at is null and d.cancelled_at is null and d.expires_at > now()) then
+    return jsonb_build_object('ok', false, 'error', 'have_one');
+  end if;
+  if (o->>'available')::int < v_cost then return jsonb_build_object('ok', false, 'error', 'points', 'available', (o->>'available')::int); end if;
+  v_name := coalesce(o->>'name', '');
+  insert into public.day_passes (gym_id, email, full_name, points, token_hash, expires_at)
+    values (g.id, v_email, v_name, v_cost, p_token_hash, now() + interval '90 days') returning * into v_row;
+  update public.points_login set used_at = now() where email = v_email and code_hash = th and used_at is null;
+  perform public.points_insert(v_email, -v_cost, 'Gym day pass: ' || g.name, 'spent', now(), null, null, 'pass:' || v_row.id);
+  return jsonb_build_object('ok', true, 'pass_id', v_row.id, 'name', v_name, 'expires_at', v_row.expires_at, 'points', v_cost, 'available_after', (o->>'available')::int - v_cost,
+    'gym', jsonb_build_object('name', g.name, 'address', g.address, 'details', g.details, 'contact_email', g.contact_email));
+end $$;
+
+-- Give an unused pass back: the points return. (By the volunteer, with the emailed code.)
+create or replace function public.pass_release(p_email text, th text, p_pass uuid) returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare v_email text := lower(btrim(coalesce(p_email, ''))); d public.day_passes%rowtype; g public.gyms%rowtype;
+begin
+  if public.points_login_ok(v_email, th) is null then return jsonb_build_object('ok', false, 'error', 'code'); end if;
+  select * into d from public.day_passes where id = p_pass and email = v_email for update;
+  if not found or d.cancelled_at is not null then return jsonb_build_object('ok', false, 'error', 'not_found'); end if;
+  if d.used_at is not null then return jsonb_build_object('ok', false, 'error', 'used'); end if;
+  if d.expires_at <= now() then return jsonb_build_object('ok', false, 'error', 'expired'); end if;
+  select * into g from public.gyms where id = d.gym_id;
+  update public.day_passes set cancelled_at = now() where id = d.id;
+  perform public.points_insert(v_email, d.points, 'Gym day pass given back: ' || g.name, 'restore', now(), null, null, 'pass-back:' || d.id);
+  return jsonb_build_object('ok', true, 'gym', g.name, 'contact_email', g.contact_email, 'name', d.full_name, 'points', d.points, 'balance', public.points_balance(v_email));
+end $$;
+
+-- The gym scans the code: is this pass good? (Called by the server for anyone holding the secret.)
+create or replace function public.pass_lookup(p_token_hash text) returns jsonb
+language sql stable security definer set search_path = public
+as $$
+  select coalesce((select jsonb_build_object('ok', true, 'name', d.full_name, 'gym', g.name, 'expires_at', d.expires_at, 'used_at', d.used_at,
+           'status', case when d.cancelled_at is not null then 'cancelled' when d.used_at is not null then 'used' when d.expires_at <= now() then 'expired' else 'valid' end)
+         from public.day_passes d join public.gyms g on g.id = d.gym_id where d.token_hash = p_token_hash),
+         jsonb_build_object('ok', false, 'status', 'unknown'))
+$$;
+
+-- The gym marks it used. One pass, one use: the update only happens while it is still good.
+create or replace function public.pass_use(p_token_hash text) returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare d public.day_passes%rowtype;
+begin
+  update public.day_passes set used_at = now()
+   where token_hash = p_token_hash and used_at is null and cancelled_at is null and expires_at > now() returning * into d;
+  if found then
+    return public.pass_lookup(p_token_hash) || jsonb_build_object('just_used', true, 'email', d.email);
+  end if;
+  return public.pass_lookup(p_token_hash) || jsonb_build_object('just_used', false);
+end $$;
+
+-- If the pass email could not be sent, the server undoes the claim: the pass is cancelled and the points come back.
+create or replace function public.pass_unclaim(p_pass uuid) returns void
+language plpgsql security definer set search_path = public
+as $$
+declare d public.day_passes%rowtype;
+begin
+  select * into d from public.day_passes where id = p_pass and used_at is null and cancelled_at is null for update;
+  if not found then return; end if;
+  update public.day_passes set cancelled_at = now() where id = d.id;
+  perform public.points_insert(d.email, d.points, 'Gym day pass undone: the email could not be sent', 'restore', now(), null, null, 'pass-back:' || d.id);
+end $$;
+
+-- The entries team can cancel an unused pass and give the points back.
+create or replace function public.pass_cancel(p_pass uuid) returns jsonb
+language plpgsql security definer set search_path = public
+as $$
+declare d public.day_passes%rowtype; g public.gyms%rowtype;
+begin
+  if not public.is_entries() then raise exception 'forbidden'; end if;
+  select * into d from public.day_passes where id = p_pass for update;
+  if not found or d.cancelled_at is not null then return jsonb_build_object('ok', false, 'error', 'not_found'); end if;
+  if d.used_at is not null then return jsonb_build_object('ok', false, 'error', 'used'); end if;
+  select * into g from public.gyms where id = d.gym_id;
+  update public.day_passes set cancelled_at = now() where id = d.id;
+  perform public.points_insert(d.email, d.points, 'Gym day pass cancelled: ' || g.name, 'restore', now(), null, null, 'pass-back:' || d.id);
+  return jsonb_build_object('ok', true, 'points', d.points);
+end $$;
+
+revoke all on function public.pass_options(text, text), public.pass_claim(text, text, uuid, text), public.pass_release(text, text, uuid), public.pass_lookup(text), public.pass_use(text), public.pass_unclaim(uuid), public.pass_cancel(uuid) from public, anon, authenticated;
+grant execute on function public.pass_cancel(uuid) to authenticated;
+do $$ begin
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    grant execute on function public.pass_options(text, text), public.pass_claim(text, text, uuid, text), public.pass_release(text, text, uuid), public.pass_lookup(text), public.pass_use(text), public.pass_unclaim(uuid) to service_role;
+  end if;
+end $$;

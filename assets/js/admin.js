@@ -1574,7 +1574,7 @@
   function renderPoints(panel) {
     var state = { rows: [], q: "", open: null };
     panel.replaceChildren(panelHead("Volunteer points"), el("p", null, "Loading…"));
-    var tbody = el("tbody"), summary = el("p", { class: "panel-intro" }), history = el("div"), refBox = el("details", { class: "ol-settings" }), importBox = el("details", { class: "ol-settings" }), helpersBox = el("details", { class: "ol-settings" });
+    var tbody = el("tbody"), summary = el("p", { class: "panel-intro" }), history = el("div"), refBox = el("details", { class: "ol-settings" }), importBox = el("details", { class: "ol-settings" }), helpersBox = el("details", { class: "ol-settings" }), gymBox = el("details", { class: "ol-settings" });
     function msg(e) {
       var m = String((e && e.message) || e || "").replace(/^.*?ERROR:\s*/s, "").split("\n")[0].trim();
       return ({ "invalid:name": "That is a new person: add their name too.", "invalid:email": "Check the email address.", "invalid:delta": "Enter a number of points from 1 to 100.", "invalid:reason": "Say what the points are for.", insufficient: "They do not have that many points.", forbidden: "You do not have permission to do that." })[m] || friendly(e);
@@ -1737,6 +1737,42 @@
       }, "btn-secondary")));
     }
 
+    // Gym day passes: the partner gyms, and the passes volunteers have claimed. A pass costs 2 points (set in the database).
+    function drawGyms() {
+      gymBox.replaceChildren(el("summary", null, "Gym day passes"), el("p", null, "Loading…"));
+      Promise.all([sb.from("gyms").select("*").order("sort_order").order("name").then(ok), sb.from("day_passes").select("id,full_name,email,created_at,expires_at,used_at,cancelled_at,points,gyms(name)").order("created_at", { ascending: false }).limit(40).then(ok)]).then(function (res) {
+        var gyms = res[0], passes = res[1];
+        function editGym(g) {
+          openForm({ title: g ? "Edit " + g.name : "Add a gym", saveLabel: g ? "Save" : "Add the gym", values: g || { active: true },
+            intro: "Volunteers can spend 2 points on a day pass here. We email the gym each time a pass is claimed, so use an address someone reads.",
+            fields: [{ name: "name", label: "Gym name", required: true, max: 120 }, { name: "address", label: "Address", max: 300 }, { name: "contact_email", label: "Contact email", type: "email", required: true, help: "Where we tell the gym a volunteer is coming." },
+              { name: "details", label: "Good to know", type: "textarea", rows: 3, max: 600, help: "Shown to the volunteer: opening hours, what to bring." }, { name: "active", label: "Offer this gym", type: "checkbox", help: "Untick to stop new passes. Passes already claimed still work." }],
+            onSave: function (v) {
+              var row = { name: String(v.name).trim(), address: String(v.address || "").trim(), contact_email: String(v.contact_email || "").trim(), details: String(v.details || "").trim(), active: !!v.active };
+              return (g ? sb.from("gyms").update(row).eq("id", g.id) : sb.from("gyms").insert(row)).then(ok).then(function () { toast(g ? "Saved." : "Added."); drawGyms(); });
+            } });
+        }
+        function state_(d) { return d.cancelled_at ? "Given back" : d.used_at ? "Used " + when(d.used_at) : new Date(d.expires_at) <= new Date() ? "Ran out " + when(d.expires_at) : "Ready, until " + when(d.expires_at); }
+        gymBox.replaceChildren(el("summary", null, "Gym day passes"),
+          el("p", { class: "help" }, "Partner gyms for the 2 point day pass. The volunteer gets a QR code by email and the gym is emailed too. The gym scans the code and marks the pass used."),
+          gyms.length ? el("div", { class: "table-scroll" }, el("table", { class: "admin-table" }, el("caption", { class: "visually-hidden" }, "Partner gyms"),
+            el("thead", null, el("tr", null, ["Gym", "Contact email", "Offered", ""].map(function (h, i) { return el("th", { scope: "col", class: i === 3 ? "col-actions" : null }, h || el("span", { class: "visually-hidden" }, "Actions")); }))),
+            el("tbody", null, gyms.map(function (g) { return el("tr", null, el("th", { scope: "row" }, g.name, g.address ? el("small", null, g.address) : null), el("td", null, g.contact_email), el("td", null, g.active ? "Yes" : "No"), el("td", { class: "col-actions" }, btn("Edit", function () { editGym(g); }, "btn-sm"))); }))))
+            : el("p", { class: "empty" }, "No gyms yet."),
+          el("div", { class: "actions" }, btn("Add a gym", function () { editGym(null); }, "btn-secondary")),
+          el("h3", { class: "form-sub" }, "Recent passes"),
+          passes.length ? el("div", { class: "table-scroll" }, el("table", { class: "admin-table" }, el("caption", { class: "visually-hidden" }, "Recent day passes"),
+            el("thead", null, el("tr", null, ["Who", "Gym", "Claimed", "Status", ""].map(function (h, i) { return el("th", { scope: "col", class: i === 4 ? "col-actions" : null }, h || el("span", { class: "visually-hidden" }, "Actions")); }))),
+            el("tbody", null, passes.map(function (d) {
+              var live = !d.cancelled_at && !d.used_at;
+              return el("tr", null, el("th", { scope: "row" }, d.full_name || d.email, el("small", null, d.email)), el("td", { class: "wide" }, d.gyms && d.gyms.name), el("td", { class: "wide" }, when(d.created_at)), el("td", { class: "wide" }, state_(d)),
+                el("td", { class: "col-actions" }, live ? btn("Cancel and give points back", function () {
+                  if (!window.confirm("Cancel this pass and give " + d.points + " points back to " + (d.full_name || d.email) + "? The pass stops working. No email is sent, so tell them.")) return;
+                  sb.rpc("pass_cancel", { p_pass: d.id }).then(function (r) { if (r.error) throw r.error; toast(r.data && r.data.ok ? "Cancelled. The points are back." : "That pass cannot be cancelled any more."); drawGyms(); load().then(function () { drawRows(); }); }).catch(function (e) { toast(friendly(e), "error"); });
+                }, "btn-sm btn-danger") : null));
+            })))) : el("p", { class: "empty" }, "No passes claimed yet."));
+      }).catch(function (e) { gymBox.replaceChildren(el("summary", null, "Gym day passes"), el("p", { class: "form-error" }, friendly(e) + " If this says a table is missing, run the latest SQL file in Supabase.")); });
+    }
     load().then(function () {
       var search = el("input", { class: "control", type: "search", id: "pts-q", placeholder: "Search by name or email", "aria-label": "Search by name or email", style: "max-width:22rem" });
       search.addEventListener("input", function () { state.q = search.value; drawRows(); });
@@ -1744,8 +1780,8 @@
         summary, el("div", { class: "control-row" }, search),
         el("div", { class: "table-scroll" }, el("table", { class: "admin-table" }, el("caption", { class: "visually-hidden" }, "Volunteer points"),
           el("thead", null, el("tr", null, ["Name", "Points", "Expiring soon", "Earned", "Spent", ""].map(function (h, i) { return el("th", { scope: "col", class: i === 1 || i === 3 || i === 4 ? "num" : i === 5 ? "col-actions" : null }, h || el("span", { class: "visually-hidden" }, "Actions")); }))), tbody)),
-        history, refBox, importBox, helpersBox);
-      drawRows(); drawReferees(); drawImport(); drawHelpers();
+        history, refBox, importBox, helpersBox, gymBox);
+      drawRows(); drawReferees(); drawImport(); drawHelpers(); drawGyms();
     }).catch(function (e) { panel.replaceChildren(panelHead("Volunteer points"), el("p", { class: "form-error" }, friendly(e))); });
   }
 

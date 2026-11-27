@@ -36,7 +36,8 @@ export type Block =
   | ["p", string] | ["small", string]                       // html allowed: escape anything typed by a person
   | ["details", Array<[string, string] | null | false | undefined>] | ["details", Array<[string, string] | null | false | undefined>, "boldLast"]
   | ["button", string, string] | ["button", string, string, "fallback"] | ["button2", string, string]
-  | ["code", string] | ["note", string, Note] | ["bullets", string[]] | ["quote", string];
+  | ["code", string] | ["note", string, Note] | ["bullets", string[]] | ["quote", string]
+  | ["qr", string, string];                                 // a QR code picture: its address (or cid: for one sent with the email) and a description
 export interface EmailSpec {
   preheader?: string; blocks: Block[]; entriesEmail?: string; siteUrl?: string; why?: string; title?: string;
   noQuestions?: boolean;                                   // leave out the generic "Any questions?" line
@@ -55,6 +56,10 @@ const button = (label: string, href: string) => `<table role="presentation" cell
 const buttonSecondary = (label: string, href: string) => `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px;"><tr>
     <td align="center" style="border:2px solid ${BRAND.iron};border-radius:10px;">
       <a class="btn2" href="${esc(href)}" target="_blank" style="display:inline-block;padding:12px 26px;font-family:${FONT};font-size:16px;line-height:1.2;font-weight:700;color:${BRAND.ironDark};text-decoration:none;border-radius:10px;">${esc(label)}</a>
+    </td></tr></table>`;
+const qrBox = (src: string, alt: string) => `<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:8px auto 24px;"><tr>
+    <td align="center" bgcolor="#FFFFFF" style="background-color:#FFFFFF;border:2px solid ${BRAND.line};border-radius:12px;padding:14px;">
+      <img src="${esc(src)}" width="220" height="220" alt="${esc(alt)}" style="display:block;width:220px;height:220px;border:0;">
     </td></tr></table>`;
 const linkFallback = (href: string) => small(`If the button does not work, copy this link into your browser:<br><a class="lnk" href="${esc(href)}" style="color:${BRAND.navy};word-break:break-all;">${esc(href)}</a>`);
 const codeBox = (code: string) => `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:8px 0 24px;"><tr>
@@ -164,6 +169,7 @@ export function renderEmail(e: EmailSpec): { html: string; text: string } {
     else if (t === "quote") { html.push(quoteBox(k[1])); text.push(`> ${String(k[1]).replace(/\n/g, "\n> ")}`, ""); }
     else if (t === "note") { html.push(noteBox(k[1], k[2])); text.push(plain(k[1]), ""); }
     else if (t === "bullets") { html.push(bulletList(k[1])); text.push(...k[1].map((x) => `- ${x}`), ""); }
+    else if (t === "qr") { html.push(qrBox(k[1], k[2])); }
   }
   const siteUrl = (e.siteUrl || SITE_DEFAULT).replace(/\/$/, "");
   const body = html.join("\n");
@@ -184,6 +190,202 @@ export const RULES_AND_KIT: Block[] = [
   ["p", `Not sure about something? Email us at ${a("mailto:info@ynepf.co.uk", "info@ynepf.co.uk")} and we will help.`],
 ];
 // ==== end of email template ====
+
+// ==== qr code maker: copied from supabase/qr/qr.ts by scripts/sync-email-template.mjs. Do not edit between these markers. ====
+const QR_ECC_PER_BLOCK: number[] = [0, 10, 16, 26, 18, 24, 16, 18, 22, 22, 26];   // level M, versions 1 to 10
+const QR_BLOCKS: number[] = [0, 1, 1, 1, 2, 2, 4, 4, 4, 5, 5];
+
+function qrRawModules(ver: number): number {
+  let r = (16 * ver + 128) * ver + 64;
+  if (ver >= 2) {
+    const a = Math.floor(ver / 7) + 2;
+    r -= (25 * a - 10) * a - 55;
+    if (ver >= 7) r -= 36;
+  }
+  return r;
+}
+const qrDataWords = (ver: number): number => Math.floor(qrRawModules(ver) / 8) - QR_ECC_PER_BLOCK[ver] * QR_BLOCKS[ver];
+
+function qrAlign(ver: number): number[] {
+  if (ver === 1) return [];
+  const a = Math.floor(ver / 7) + 2, size = ver * 4 + 17;
+  const step = Math.floor((ver * 8 + a * 3 + 5) / (a * 4 - 4)) * 2;
+  const out = [6];
+  for (let pos = size - 7; out.length < a; pos -= step) out.splice(1, 0, pos);
+  return out;
+}
+
+function qrMul(x: number, y: number): number {
+  let z = 0;
+  for (let i = 7; i >= 0; i--) { z = (z << 1) ^ ((z >>> 7) * 0x11d); z ^= ((y >>> i) & 1) * x; }
+  return z;
+}
+function qrDivisor(n: number): number[] {
+  const out: number[] = new Array(n).fill(0); out[n - 1] = 1;
+  let root = 1;
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) { out[j] = qrMul(out[j], root); if (j + 1 < n) out[j] ^= out[j + 1]; }
+    root = qrMul(root, 2);
+  }
+  return out;
+}
+function qrRemainder(data: number[], div: number[]): number[] {
+  const out: number[] = new Array(div.length).fill(0);
+  for (const b of data) {
+    const f = b ^ (out.shift() as number); out.push(0);
+    for (let i = 0; i < div.length; i++) out[i] ^= qrMul(div[i], f);
+  }
+  return out;
+}
+
+function qrMatrix(text: string): boolean[][] {
+  const bytes = Array.from(new TextEncoder().encode(text));
+  let ver = 1;
+  for (; ver <= 10; ver++) { if (4 + (ver < 10 ? 8 : 16) + 8 * bytes.length <= qrDataWords(ver) * 8) break; }
+  if (ver > 10) throw new Error("qr: text too long");
+  const size = ver * 4 + 17;
+
+  // the data bits: mode (byte), length, the bytes, a terminator, padding
+  const bits: number[] = [];
+  const put = (v: number, n: number) => { for (let i = n - 1; i >= 0; i--) bits.push((v >>> i) & 1); };
+  put(4, 4); put(bytes.length, ver < 10 ? 8 : 16); for (const b of bytes) put(b, 8);
+  const cap = qrDataWords(ver) * 8;
+  put(0, Math.min(4, cap - bits.length)); put(0, (8 - bits.length % 8) % 8);
+  for (let pad = 0xec; bits.length < cap; pad ^= 0xec ^ 0x11) put(pad, 8);
+  const data: number[] = [];
+  for (let i = 0; i < bits.length; i += 8) { let b = 0; for (let j = 0; j < 8; j++) b = (b << 1) | bits[i + j]; data.push(b); }
+
+  // error correction, split into blocks and interleaved
+  const nb = QR_BLOCKS[ver], eccLen = QR_ECC_PER_BLOCK[ver], raw = Math.floor(qrRawModules(ver) / 8);
+  const shortBlocks = nb - (raw % nb), shortLen = Math.floor(raw / nb), div = qrDivisor(eccLen);
+  const blocks: number[][] = [];
+  for (let i = 0, k = 0; i < nb; i++) {
+    const dat = data.slice(k, k + shortLen - eccLen + (i < shortBlocks ? 0 : 1)); k += dat.length;
+    const ecc = qrRemainder(dat, div);
+    if (i < shortBlocks) dat.push(0);
+    blocks.push(dat.concat(ecc));
+  }
+  const words: number[] = [];
+  for (let i = 0; i < blocks[0].length; i++) for (let j = 0; j < nb; j++) { if (i !== shortLen - eccLen || j >= shortBlocks) words.push(blocks[j][i]); }
+
+  // the grid
+  const mod: boolean[][] = Array.from({ length: size }, () => new Array(size).fill(false));
+  const fn: boolean[][] = Array.from({ length: size }, () => new Array(size).fill(false));
+  const set = (x: number, y: number, dark: boolean) => { mod[y][x] = dark; fn[y][x] = true; };
+  for (let i = 0; i < size; i++) { set(6, i, i % 2 === 0); set(i, 6, i % 2 === 0); }
+  const finder = (cx: number, cy: number) => {
+    for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) {
+      const d = Math.max(Math.abs(dx), Math.abs(dy)), x = cx + dx, y = cy + dy;
+      if (x >= 0 && x < size && y >= 0 && y < size) set(x, y, d !== 2 && d !== 4);
+    }
+  };
+  finder(3, 3); finder(size - 4, 3); finder(3, size - 4);
+  const al = qrAlign(ver);
+  for (let i = 0; i < al.length; i++) for (let j = 0; j < al.length; j++) {
+    if ((i === 0 && j === 0) || (i === 0 && j === al.length - 1) || (i === al.length - 1 && j === 0)) continue;
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) set(al[i] + dx, al[j] + dy, Math.max(Math.abs(dx), Math.abs(dy)) !== 1);
+  }
+  const formatBits = (mask: number) => {           // level M is 0b00
+    const d = mask; let rem = d;
+    for (let i = 0; i < 10; i++) rem = (rem << 1) ^ ((rem >>> 9) * 0x537);
+    const b = ((d << 10) | rem) ^ 0x5412, bit = (i: number) => ((b >>> i) & 1) !== 0;
+    for (let i = 0; i <= 5; i++) set(8, i, bit(i));
+    set(8, 7, bit(6)); set(8, 8, bit(7)); set(7, 8, bit(8));
+    for (let i = 9; i < 15; i++) set(14 - i, 8, bit(i));
+    for (let i = 0; i < 8; i++) set(size - 1 - i, 8, bit(i));
+    for (let i = 8; i < 15; i++) set(8, size - 15 + i, bit(i));
+    set(8, size - 8, true);
+  };
+  formatBits(0);
+  if (ver >= 7) {
+    let rem = ver;
+    for (let i = 0; i < 12; i++) rem = (rem << 1) ^ ((rem >>> 11) * 0x1f25);
+    const b = (ver << 12) | rem;
+    for (let i = 0; i < 18; i++) { const d = ((b >>> i) & 1) !== 0, a = size - 11 + (i % 3), c = Math.floor(i / 3); set(a, c, d); set(c, a, d); }
+  }
+  // the codewords, in the zigzag the standard describes
+  for (let i = 0, right = size - 1; right >= 1; right -= 2) {
+    if (right === 6) right = 5;
+    for (let vert = 0; vert < size; vert++) for (let j = 0; j < 2; j++) {
+      const x = right - j, up = ((right + 1) & 2) === 0, y = up ? size - 1 - vert : vert;
+      if (!fn[y][x] && i < words.length * 8) { mod[y][x] = ((words[i >>> 3] >>> (7 - (i & 7))) & 1) !== 0; i++; }
+    }
+  }
+
+  // try all eight masks, keep the one with the lowest penalty
+  const masked = (m: number): boolean[][] => mod.map((row, y) => row.map((v, x) => {
+    if (fn[y][x]) return v;
+    const inv = m === 0 ? (x + y) % 2 === 0 : m === 1 ? y % 2 === 0 : m === 2 ? x % 3 === 0 : m === 3 ? (x + y) % 3 === 0 : m === 4 ? (Math.floor(x / 3) + Math.floor(y / 2)) % 2 === 0
+      : m === 5 ? ((x * y) % 2) + ((x * y) % 3) === 0 : m === 6 ? (((x * y) % 2) + ((x * y) % 3)) % 2 === 0 : (((x + y) % 2) + ((x * y) % 3)) % 2 === 0;
+    return inv ? !v : v;
+  }));
+  const penalty = (g: boolean[][]): number => {
+    let p = 0;
+    const lines = (get: (a: number, b: number) => boolean) => {
+      for (let a = 0; a < size; a++) {
+        let run = 1;
+        for (let b = 1; b < size; b++) {
+          if (get(a, b) === get(a, b - 1)) { run++; if (run === 5) p += 3; else if (run > 5) p++; } else run = 1;
+        }
+        for (let b = 0; b + 10 < size; b++) {          // 1011101 with four light squares before or after it
+          const pat = (at: number) => [1, 0, 1, 1, 1, 0, 1].every((v, k) => get(a, at + k) === (v === 1));
+          const light = (at: number) => [0, 1, 2, 3].every((k) => !get(a, at + k));
+          if (pat(b) && light(b + 7)) p += 40;
+          if (pat(b + 4) && light(b)) p += 40;
+        }
+      }
+    };
+    lines((a, b) => g[a][b]); lines((a, b) => g[b][a]);
+    for (let y = 0; y < size - 1; y++) for (let x = 0; x < size - 1; x++) if (g[y][x] === g[y][x + 1] && g[y][x] === g[y + 1][x] && g[y][x] === g[y + 1][x + 1]) p += 3;
+    let dark = 0; for (const row of g) for (const v of row) if (v) dark++;
+    p += Math.floor(Math.abs(dark * 20 - size * size * 10) / (size * size)) * 10;
+    return p;
+  };
+  let best = 0, bestScore = Infinity, bestGrid: boolean[][] = [];
+  for (let m = 0; m < 8; m++) {
+    const g = masked(m); const s = penalty(g);
+    if (s < bestScore) { bestScore = s; best = m; bestGrid = g; }
+  }
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) mod[y][x] = bestGrid[y][x];
+  formatBits(best);
+  return mod;
+}
+
+// The grid as an SVG picture (for the pass page), with the blank margin the standard asks for.
+function qrSvg(m: boolean[][], border = 4): string {
+  const n = m.length + border * 2;
+  let d = "";
+  for (let y = 0; y < m.length; y++) for (let x = 0; x < m.length; x++) if (m[y][x]) d += `M${x + border},${y + border}h1v1h-1z`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${n} ${n}" shape-rendering="crispEdges" role="img"><rect width="100%" height="100%" fill="#fff"/><path d="${d}" fill="#000"/></svg>`;
+}
+
+// The grid as a PNG file (for the email), black and white, one bit per pixel.
+async function qrPng(text: string, scale = 8, border = 4): Promise<Uint8Array> {
+  const m = qrMatrix(text), n = m.length, w = (n + border * 2) * scale, rowBytes = Math.ceil(w / 8);
+  const raw = new Uint8Array((rowBytes + 1) * w);
+  for (let py = 0; py < w; py++) {
+    const my = Math.floor(py / scale) - border;
+    for (let px = 0; px < w; px++) {
+      const mx = Math.floor(px / scale) - border;
+      const dark = my >= 0 && my < n && mx >= 0 && mx < n && m[my][mx];
+      if (!dark) raw[py * (rowBytes + 1) + 1 + (px >>> 3)] |= 0x80 >>> (px & 7);          // 1 is white, 0 is black
+    }
+  }
+  const cs = new CompressionStream("deflate"), wr = cs.writable.getWriter();
+  wr.write(raw); wr.close();
+  const idat = new Uint8Array(await new Response(cs.readable).arrayBuffer());
+  const table: number[] = []; for (let i = 0; i < 256; i++) { let c = i; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; table.push(c >>> 0); }
+  const crc = (b: Uint8Array) => { let c = 0xffffffff; for (const v of b) c = table[(c ^ v) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+  const u32 = (v: number) => [(v >>> 24) & 255, (v >>> 16) & 255, (v >>> 8) & 255, v & 255];
+  const chunk = (type: string, body: Uint8Array) => {
+    const tb = new Uint8Array([...type].map((c) => c.charCodeAt(0)).concat(Array.from(body)));
+    return [...u32(body.length), ...tb, ...u32(crc(tb))];
+  };
+  const ihdr = new Uint8Array([...u32(w), ...u32(w), 1, 0, 0, 0, 0]);          // 1 bit, greyscale
+  return new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, ...chunk("IHDR", ihdr), ...chunk("IDAT", idat), ...chunk("IEND", new Uint8Array(0))]);
+}
+// ==== end of qr code maker ====
+export { qrMatrix, qrPng };
 
 export const MESSAGES: Record<string, string> = {
   closed: "Entries for this competition are closed, so the waiting list is closed too.",
@@ -393,6 +595,58 @@ export function pointsReleasedNotification(o: { name: string; email: string; com
     ["p", `${esc(o.name)} (${esc(o.email)}) gave back an unused discount code for ${b(o.competition)}, so its ${o.points} points are free to spend again.`],
     ["details", [["Code switched off", o.code]]],
     ["small", "No points were spent or added: an unused code only holds its points."], ...note(o, "Discount codes")] };
+}
+// ---- gym day passes ---------------------------------------------------------------------------------------------------------------------
+// To the volunteer: the pass, with its QR code (sent with the email so it shows without loading anything), and a page to open it from.
+export function dayPassEmail(o: { name: string; gym: string; address: string; details: string; expires: string; passUrl: string; cid: string; points: number; entriesEmail?: string }): EmailSpec {
+  return {
+    entriesEmail: o.entriesEmail, preheader: `Show the QR code at ${o.gym}. It works once.`,
+    why: "You are getting this email because you spent volunteer points on a gym day pass.",
+    blocks: [
+      ["h1", `Your day pass at ${o.gym}`],
+      ["p", `${hi(o.name)}, thank you for volunteering. Show this QR code at ${b(o.gym)}, and the team there will scan it and let you in.`],
+      ["qr", `cid:${o.cid}`, `QR code for your day pass at ${o.gym}`],
+      ["details", [["Gym", o.gym], o.address ? ["Address", o.address] : null, o.details ? ["Good to know", o.details] : null, ["Use it by", o.expires]]],
+      ["button", "Open your pass", `${o.passUrl}&show=1`, "fallback"],
+      ["note", "Your pass works once, and only the gym marks it used. Please do not share this email: anyone with the QR code could use it.", "warn"],
+      ["small", `It cost ${o.points} volunteer points. If you will not use it, you can give it back for your points on the volunteer points page before you use it.`],
+    ],
+  };
+}
+// To the gym: who is coming, and how to check the pass.
+export function dayPassGymEmail(o: { name: string; gym: string; expires: string; entriesEmail?: string }): EmailSpec {
+  return {
+    entriesEmail: o.entriesEmail, preheader: `${o.name} has a YNEPF day pass for ${o.gym}.`,
+    why: "You are getting this email because a YNEPF volunteer claimed a day pass at your gym.",
+    blocks: [
+      ["h1", "A YNEPF volunteer has claimed a day pass"],
+      ["p", `${b(o.name)} has claimed a day pass at ${b(o.gym)}, as a thank you from the Yorkshire & North East Powerlifting Federation for volunteering at our competitions. Thank you for taking part.`],
+      ["details", [["Pass for", o.name], ["Valid until", o.expires], ["Uses", "One visit"]]],
+      ["h2", "When they arrive"],
+      ["bullets", ["Ask them to show the QR code on their phone.", "Scan it with any phone camera. It opens a page that says whether the pass is valid, and who it is for.", "Press Mark as used once they are in. The page asks you to confirm, because it uses the pass up for good: only the gym should do this. If someone tries the same code again, the page will say it has been used."]],
+      ["small", "Nothing is sent to us when you scan. It only changes when you press the button."],
+    ],
+  };
+}
+// To the gym when an unused pass is given back.
+export function dayPassGymCancelledEmail(o: { name: string; gym: string; entriesEmail?: string }): EmailSpec {
+  return {
+    entriesEmail: o.entriesEmail, preheader: `${o.name} will not be using their day pass.`,
+    why: "You are getting this email because a YNEPF day pass for your gym was given back.",
+    blocks: [["h1", "A day pass has been given back"], ["p", `${b(o.name)} will not be using their YNEPF day pass at ${b(o.gym)}. The pass no longer works, so there is nothing for you to do.`]],
+  };
+}
+export function dayPassNotification(o: { name: string; email: string; gym: string; expires: string; points: number; gymTold: boolean; deskUrl?: string }): EmailSpec {
+  return { internal: true, preheader: `${o.name} claimed a day pass at ${o.gym}.`, blocks: [
+    ["h1", "Gym day pass claimed"],
+    ["p", `${b(o.name)} (${esc(o.email)}) spent ${o.points} points on a day pass at ${b(o.gym)}.`],
+    ["details", [["Gym", o.gym], ["Valid until", o.expires], ["Gym told by email", o.gymTold ? "Yes" : "No: the email did not send"]]],
+    ...(o.gymTold ? [] : [["note", "The gym's email did not send. Please tell them yourself that this person is coming.", "warn"] as Block]), ...note(o, "Open the points page")] };
+}
+export function dayPassGivenBackNotification(o: { name: string; email: string; gym: string; points: number; deskUrl?: string }): EmailSpec {
+  return { internal: true, preheader: `${o.name} gave back an unused day pass.`, blocks: [
+    ["h1", "A gym day pass was given back"],
+    ["p", `${b(o.name)} (${esc(o.email)}) gave back an unused day pass at ${b(o.gym)}. Their ${o.points} points are back.`], ...note(o, "Open the points page")] };
 }
 export function volunteerNotification(o: { name: string; email: string; competition: string; lines: string[]; edited: boolean; deskUrl?: string }): EmailSpec {
   return { internal: true, preheader: `${o.name} ${o.edited ? "changed their volunteer answers" : "has signed up to volunteer"}.`, blocks: [
@@ -624,13 +878,13 @@ if (typeof Deno !== "undefined") {
     // Email services limit how fast you can send (usually a few a second), and a bulk send (entries closed, the lifting order, the rota) goes to
     // everyone in turn. So sends are paced, and one the service turns away for going too fast is tried again after a pause instead of being lost.
     let lastSent = 0;
-    const send = async (to: string, subject: string, spec: EmailSpec): Promise<boolean> => {
+    const send = async (to: string, subject: string, spec: EmailSpec, attachments?: { filename: string; content: string; content_type: string; content_id?: string }[]): Promise<boolean> => {
       const { html, text } = renderEmail({ ...spec, title: subject, siteUrl });
       for (let attempt = 0; attempt < 4; attempt++) {
         const wait = lastSent + 550 - Date.now();
         if (wait > 0) await new Promise((r) => setTimeout(r, wait));
         lastSent = Date.now();
-        const r = await fetch("https://api.resend.com/emails", { method: "POST", headers: { authorization: `Bearer ${Deno.env.get("RESEND_API_KEY")}`, "content-type": "application/json" }, body: JSON.stringify({ from, to: [to], reply_to: copy, subject, html, text }) });
+        const r = await fetch("https://api.resend.com/emails", { method: "POST", headers: { authorization: `Bearer ${Deno.env.get("RESEND_API_KEY")}`, "content-type": "application/json" }, body: JSON.stringify({ from, to: [to], reply_to: copy, subject, html, text, ...(attachments ? { attachments } : {}) }) });
         if (r.status !== 429) { if (!r.ok) console.error("Resend failed", r.status); return r.ok; }
         await new Promise((res) => setTimeout(res, 1500 * (attempt + 1)));
       }
@@ -848,8 +1102,19 @@ if (typeof Deno !== "undefined") {
       return reply(200, { ok: true, found: true, sent });
     }
 
+    // ---- gym day passes: the gym scans the QR code (no login: the secret in the address is the pass) -------------------------------------
+    if (action === "pass_check" || action === "pass_use") {
+      if (!allowTry(ip + "|pass", Date.now(), 60)) return reply(429, { ok: false, status: "busy", message: "Too many tries. Please wait a few minutes and try again." });
+      const t = String(body.token ?? "");
+      if (!/^[a-f0-9]{48}$/.test(t)) return reply(200, { ok: false, status: "unknown" });
+      const r = await rpc(action === "pass_check" ? "pass_lookup" : "pass_use", { p_token_hash: await sha256Hex(t) });
+      const out = await r.json().catch(() => null);
+      if (!r.ok || !out) return reply(500, { ok: false, status: "error", message: "We could not check that just now. Please try again in a moment." });
+      const { email: _hidden, ...safe } = out;          // the email address never goes back to whoever scanned
+      return reply(200, safe);
+    }
     // ---- spend your volunteer points: ask for a one-time code, look at the options, turn points into a discount code ----------------
-    if (action === "points_start" || action === "points_options" || action === "points_redeem" || action === "points_release") {
+    if (action === "points_start" || action === "points_options" || action === "points_redeem" || action === "points_release" || action === "pass_claim" || action === "pass_release") {
       if (!allowTry(ip + "|points", Date.now(), 20)) return reply(429, { ok: false, message: "Too many tries. Please wait a few minutes and try again." });
       const email = String(body.email ?? "").trim().toLowerCase();
       if (action === "points_start") {
@@ -867,7 +1132,38 @@ if (typeof Deno !== "undefined") {
         const r = await rpc("points_options", { p_email: email, th });
         const out = await r.json().catch(() => null);
         if (!r.ok || !out) return reply(500, { ok: false, message: "We could not do that just now. Please try again in a moment." });
-        return reply(200, out.ok ? out : { ok: false, message: "That code did not work. It may have run out, or been used. You can ask for a new one." });
+        if (!out.ok) return reply(200, { ok: false, message: "That code did not work. It may have run out, or been used. You can ask for a new one." });
+        const pr = await rpc("pass_options", { p_email: email, th });
+        const po = await pr.json().catch(() => null);
+        return reply(200, pr.ok && po?.ok ? { ...out, pass_points: po.pass_points, gyms: po.gyms, passes: po.passes } : { ...out, gyms: [], passes: [] });
+      }
+      if (action === "pass_claim") {
+        const tok = newToken();
+        const r = await rpc("pass_claim", { p_email: email, th, p_gym: String(body.gym_id ?? ""), p_token_hash: await sha256Hex(tok) });
+        const out = await r.json().catch(() => null);
+        if (!r.ok || !out) return reply(500, { ok: false, message: "We could not do that just now. Please try again in a moment." });
+        if (!out.ok) return reply(200, { ok: false, message: ({ code: "That code did not work. It may have run out, or been used. You can ask for a new one.", gym: "That gym is not available any more.", points: "You do not have enough free points for a day pass.", have_one: "You already have an unused pass at that gym. Use it, or give it back first.", bad_request: "We could not do that." } as Record<string, string>)[out.error] ?? "We could not do that." });
+        const passUrl = `${siteUrl}/pass?t=${tok}`, expires = dateText(out.expires_at) ?? "", g = out.gym as { name: string; address: string; details: string; contact_email: string };
+        const png = await qrPng(passUrl, 8, 4);
+        let bin = ""; for (const x of png) bin += String.fromCharCode(x);
+        const mailed = await send(email, `Your day pass: ${g.name}`, dayPassEmail({ name: out.name, gym: g.name, address: g.address, details: g.details, expires, passUrl, cid: "day-pass-qr", points: out.points, entriesEmail: copy }),
+          [{ filename: "day-pass-qr.png", content: btoa(bin), content_type: "image/png", content_id: "day-pass-qr" }]);
+        if (!mailed) {            // nothing reached them: undo, so no points are taken for a pass they cannot find
+          await rpc("pass_unclaim", { p_pass: out.pass_id });
+          return reply(200, { ok: false, message: "We could not email your pass, so no points have been taken. Please try again in a moment." });
+        }
+        const gymTold = g.contact_email ? await send(g.contact_email, `YNEPF day pass: ${out.name || email}`, dayPassGymEmail({ name: out.name || email, gym: g.name, expires, entriesEmail: copy })) : false;
+        await send(copy, `Gym day pass claimed: ${g.name}`, dayPassNotification({ name: out.name || email, email, gym: g.name, expires, points: out.points, gymTold, deskUrl: `${siteUrl}/admin/#points` }));
+        return reply(200, { ok: true, gym: g.name, expires, available_after: out.available_after, pass_url: passUrl });
+      }
+      if (action === "pass_release") {
+        const r = await rpc("pass_release", { p_email: email, th, p_pass: String(body.pass_id ?? "") });
+        const out = await r.json().catch(() => null);
+        if (!r.ok || !out) return reply(500, { ok: false, message: "We could not do that just now. Please try again in a moment." });
+        if (!out.ok) return reply(200, { ok: false, message: ({ code: "That code did not work. It may have run out, or been used. You can ask for a new one.", not_found: "That pass is not there any more.", used: "That pass has already been used.", expired: "That pass has run out." } as Record<string, string>)[out.error] ?? "We could not do that." });
+        if (out.contact_email) await send(out.contact_email, `YNEPF day pass given back: ${out.name || email}`, dayPassGymCancelledEmail({ name: out.name || email, gym: out.gym, entriesEmail: copy }));
+        await send(copy, `Gym day pass given back: ${out.gym}`, dayPassGivenBackNotification({ name: out.name || email, email, gym: out.gym, points: out.points, deskUrl: `${siteUrl}/admin/#points` }));
+        return reply(200, { ok: true, gym: out.gym, points: out.points, balance: out.balance });
       }
       if (action === "points_release") {
         const rr = await rpc("points_release", { p_email: email, th, p_code: String(body.code_id ?? "") });

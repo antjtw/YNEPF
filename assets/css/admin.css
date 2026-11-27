@@ -332,3 +332,4 @@ details.ol-settings ~ .callout { margin-top: var(--space-4); max-width: none; }
 
 /* Text straight after a row of buttons gets room to breathe. */
 .actions + .help, .actions + p.help { margin-top: var(--space-3); }
+.table-scroll + .actions { margin-top: var(--space-4); }

@@ -53,6 +53,7 @@ const pages = [
   "rota.html",
   "points.html",
   "my-entry.html",
+  "pass.html",
   "chairperson.html",
   "rules.html",
   "contact.html",
