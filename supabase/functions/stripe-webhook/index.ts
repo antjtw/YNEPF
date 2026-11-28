@@ -236,7 +236,7 @@ export function confirmationEmail(e: { name: string; competition: string; date: 
       ...(e.under18 ? [["note", "<b>Under 18 on the day?</b> A parent or guardian needs to be with you at the competition.", "info"] as Block] : []),
       ...(e.refundsUntil ? [["p", `Refunds are available until entries close on ${esc(e.refundsUntil)}. After that, we cannot refund entries.`] as Block] : []),
       ...(e.manageUrl ? [
-        ["p", "<b>Need to change something, or pull out?</b> You can do it online until entries close. Your name, club and Instagram update straight away. A different weight class, or cancelling, goes to the entries team to approve."] as Block,
+        ["p", "<b>Need to change something, or pull out?</b> You can do it online until entries close. Your name, club, Instagram and OpenIPF profile update straight away. A different weight class, or cancelling, goes to the entries team to approve."] as Block,
         ["button", "Manage your entry", e.manageUrl] as Block,
         ["small", `To change your event, date of birth or sex, or anything to do with money, email us at ${a(mailto(e.entriesEmail, `Changing my entry: ${e.competition}`), e.entriesEmail)} instead.`] as Block,
       ] : [

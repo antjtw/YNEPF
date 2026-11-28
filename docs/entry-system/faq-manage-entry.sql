@@ -8,7 +8,7 @@
 insert into public.faqs (category_id, question, answer_md, sort_order)
 select c.id, 'How do I change or cancel my entry?', $a$You can change or cancel your entry until entries close, in two ways:
 
-- **Online:** use the **Manage your entry** button in your order confirmation email. We will email you a code to check it is you. Then you can update your name, club or university, Instagram and membership number straight away, or ask the entries team for a different weight class or different equipment, or to cancel. The team approves those requests and emails you what they decide.
+- **Online:** use the **Manage your entry** button in your order confirmation email. We will email you a code to check it is you. Then you can update your name, club or university, Instagram, OpenIPF link and membership number straight away, or ask the entries team for a different weight class or different equipment, or to cancel. The team approves those requests and emails you what they decide.
 - **By email:** write to [competitions@ynepf.co.uk](mailto:competitions@ynepf.co.uk). Use this to change your event, date of birth or sex, or for anything to do with money.
 
 Refunds are available until entries close. After that, entries cannot be changed, and if you cancel there is no refund.$a$,
