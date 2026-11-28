@@ -1207,7 +1207,7 @@ if (typeof Deno !== "undefined") {
         closed: "Entries have closed, so entries cannot be changed now. You can still ask to cancel.", not_found: "We could not find that entry.", pending: "You already have a request waiting. Withdraw it first if you want to ask for something else.",
         nothing: "Choose what you would like to change.", "invalid:weight_class": "That weight class is not available for you.", "invalid:equipment": "That choice of equipment is not available.",
         "invalid:full_name": "Please enter your first and last name.", "invalid:instagram": "That does not look like an Instagram handle.", "invalid:club": "Please choose your club from the list.",
-        "invalid:university": "Please enter your university.", "invalid:openipf": "Enter your OpenIPF profile link, starting https://www.openipf.org/", "invalid:bp_number": "Please enter your membership number.", "invalid:kind": "We could not do that.",
+        "invalid:university": "Please enter your university.", "invalid:openipf": "Enter your OpenIPF profile link, or just your profile name, for example anthonywhite1.", "invalid:bp_number": "Please enter your membership number.", "invalid:kind": "We could not do that.",
       };
       const rpcOut = async (fn: string, args: Record<string, unknown>) => { const r = await rpc(fn, args); const out = await r.json().catch(() => null); return { r, out }; };
       if (action === "entry_portal") {

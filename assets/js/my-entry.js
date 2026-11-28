@@ -108,13 +108,25 @@
       var url = el("input", { type: "text", id: "u-" + id, value: e.openipf_url, maxlength: "300", autocomplete: "off" });
       var bp = el("input", { type: "text", id: "b-" + id, value: e.bp_number, maxlength: "30", autocomplete: "off" });
       var list = uni ? state.data.universities : state.data.clubs, inList = list.indexOf(e.club) >= 0, other = el("input", { type: "text", id: "o-" + id, maxlength: "120", value: inList ? "" : e.club, autocomplete: "off" });
-      var club = el("select", { id: "c-" + id, class: "control" }, [el("option", { value: "" }, uni ? "Select your university" : "Unattached")].concat(list.map(function (c) { return el("option", { value: c, selected: c === e.club }, c); }), uni ? [el("option", { value: "__other__", selected: !inList && !!e.club }, "Other (not on this list)")] : []));
+      var club = el("select", { id: "c-" + id, class: "control" }, [el("option", { value: "" }, uni ? "Select your university" : "Unattached")].concat(
+        !uni && e.club && !inList ? [el("option", { value: e.club, selected: true }, e.club + " (not on the current list)")] : [],     // never silently clear a club that has left the list
+        list.map(function (c) { return el("option", { value: c, selected: c === e.club }, c); }), uni ? [el("option", { value: "__other__", selected: !inList && !!e.club }, "Other (not on this list)")] : []));
       var otherField = el("div", { class: "field", hidden: uni && !inList && e.club ? false : "" }, el("label", { for: "o-" + id }, "Name of your university"), other);
       club.addEventListener("change", function () { otherField.hidden = club.value !== "__other__"; });
       var save = el("button", { type: "button", class: "btn btn-secondary" }, "Save my details");
       save.addEventListener("click", function () {
-        var changes = { full_name: name.value, instagram: ig.value, openipf_url: url.value.trim() ? ipfLink(url.value) : "", bp_number: bp.value, club: uni && club.value === "__other__" ? other.value : club.value };
-        if (url.value.trim() && !changes.openipf_url) return say("That does not look like an OpenIPF profile. Enter the link or just your profile name.", true);
+        // Send only what the lifter actually changed. (A value we already hold is never re-checked, so an old club or Instagram handle that would not pass
+        // today's rules cannot stop someone adding, say, their OpenIPF link.)
+        var clubVal = uni && club.value === "__other__" ? other.value : club.value, changes = {}, urlRaw = url.value.trim();
+        if (name.value.trim() !== (e.name || "")) changes.full_name = name.value;
+        if (ig.value.trim().replace(/^@/, "") !== (e.instagram || "")) changes.instagram = ig.value;
+        if (urlRaw !== (e.openipf_url || "")) {
+          changes.openipf_url = urlRaw ? ipfLink(urlRaw) : "";
+          if (urlRaw && !changes.openipf_url) return say("That does not look like an OpenIPF profile. Enter the link or just your profile name, for example anthonywhite1.", true);
+        }
+        if (bp.value.trim() !== (e.bp_number || "")) changes.bp_number = bp.value;
+        if (clubVal.trim() !== (e.club || "")) changes.club = clubVal;
+        if (!Object.keys(changes).length) return say("Nothing has changed.");
         save.disabled = true; say("Saving…");
         post("entry_update", { entry_id: id, changes: changes }).then(function (b) {
           save.disabled = false;

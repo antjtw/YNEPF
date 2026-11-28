@@ -32,7 +32,7 @@ export const MESSAGES: Record<string, string> = {
   discount_used: "That discount code has already been used.",
   discount_not_yours: "That discount code was made for a different email address.",
   duplicate_bp: "A lifter with that membership number has already entered. If this is a mistake, please contact the entries team.",
-  "invalid:openipf": "Please enter your OpenIPF profile link, starting https://www.openipf.org/",
+  "invalid:openipf": "Please enter your OpenIPF profile link, or just your profile name, for example anthonywhite1.",
   sold_out: "Sorry, one of the extras you chose has just sold out. Please go back, untick it and try again.",
   "invalid:extras": "Something is wrong with the extras you chose. Please go back and check them.",
   no_price: "We could not work out a price for that combination. Please email the entries team.",
