@@ -89,6 +89,10 @@
   function entryPanel(e) {
     var id = e.entry_id, pending = (e.requests || []).some(function (r) { return r.status === "pending"; }), msg = el("p", { role: "status", "aria-live": "polite", class: "help form-status", id: "msg-" + id });
     function say(t, bad) { msg.textContent = t || ""; msg.className = (bad ? "form-error" : "help") + " form-status"; }
+    // Each form shows its message straight under its own button (one message at the bottom of the page could be out of sight on a phone).
+    var rmsg = el("p", { role: "status", "aria-live": "polite", class: "help form-status" }), cmsg = el("p", { role: "status", "aria-live": "polite", class: "help form-status" });
+    function mk(m) { return function (t, bad) { m.textContent = t || ""; m.className = (bad ? "form-error" : "help") + " form-status"; }; }
+    var rsay = mk(rmsg), csay = mk(cmsg);
     var uni = e.competition.is_university, clubWord = uni ? "University" : "Club";
     var rows = [["Name", e.name], ["Event", EVENT[e.event] || e.event], ["Equipment", EQUIP[e.equipment] || e.equipment], ["Weight class", e.weight_class], [clubWord, e.club || "(none)"], ["Instagram", e.instagram ? "@" + e.instagram : "(none)"],
       ["OpenIPF profile", e.openipf_url || "(none)"], ["Membership number", e.bp_number], ["Paid", e.price_pence ? "£" + (e.price_pence / 100).toFixed(2) : "Free"]];
@@ -124,7 +128,7 @@
         el("div", { class: "field" }, el("label", { for: "c-" + id }, clubWord), club), otherField,
         el("div", { class: "field" }, el("label", { for: "i-" + id }, "Instagram handle (optional)"), ig),
         el("div", { class: "field" }, el("label", { for: "u-" + id }, "OpenIPF profile link"), url),
-        el("div", { class: "field" }, el("label", { for: "b-" + id }, "Membership number"), bp), el("div", { class: "actions" }, save));
+        el("div", { class: "field" }, el("label", { for: "b-" + id }, "Membership number"), bp), el("div", { class: "actions" }, save), msg);
 
       // a request: different weight class or equipment
       var wc = el("select", { id: "w-" + id, class: "control" }, [el("option", { value: "" }, "Keep " + (e.weight_class || "my weight class"))].concat((e.classes || []).filter(function (c) { return c.id !== e.weight_class_id; }).map(function (c) { return el("option", { value: c.id }, c.text); })));
@@ -133,30 +137,37 @@
       var ask = el("button", { type: "button", class: "btn btn-primary" }, "Send request to the entries team");
       ask.disabled = pending;
       ask.addEventListener("click", function () {
-        if (!wc.value && !eq.value) return say("Choose a different weight class or equipment first.", true);
-        ask.disabled = true; say("Sending…");
+        if (!wc.value && !eq.value) return rsay("Choose a different weight class or equipment above first. To change anything else, email " + TEAM + ".", true);
+        ask.disabled = true; rsay("Sending…");
         post("entry_request", { entry_id: id, kind: "change", weight_class_id: wc.value, equipment: eq.value, note: note.value }).then(function (b) {
-          if (!b.ok) { ask.disabled = pending; return say(b.message || "We could not send that.", true); }
+          if (!b.ok) { ask.disabled = pending; return rsay(b.message || "We could not send that.", true); }
           load("banner-" + id);
         });
       });
-      kids.push(el("h3", { class: "flow-sub" }, "Ask for a different weight class or equipment"),
-        el("p", { class: "help" }, pending ? "You already have a request waiting. Withdraw it above if you want to ask for something else." : "The entries team will look at it. Nothing changes until they approve it, and we will email you."),
-        el("div", { class: "field" }, el("label", { for: "w-" + id }, "Weight class"), wc), el("div", { class: "field" }, el("label", { for: "q-" + id }, "Equipment"), eq),
-        el("div", { class: "field" }, el("label", { for: "t-" + id }, "Anything the team should know (optional)"), note), el("div", { class: "actions" }, ask));
+      // Only offer the form if there is something to switch to. (A lifter who pressed Send with nothing chosen was not sure what it was for.)
+      var canClass = (e.classes || []).some(function (c) { return c.id !== e.weight_class_id; }), canEquip = (e.equipment_options || []).some(function (x) { return x !== e.equipment; });
+      if (canClass || canEquip) {
+        kids.push(el("h3", { class: "flow-sub" }, "Ask for a different weight class or equipment"),
+          el("p", { class: "help" }, pending ? "You already have a request waiting. Withdraw it above if you want to ask for something else." : "Choose what you would like instead. The entries team will look at it. Nothing changes until they approve it, and we will email you."),
+          el("div", { class: "field" }, el("label", { for: "w-" + id }, "Weight class"), wc), el("div", { class: "field" }, el("label", { for: "q-" + id }, "Equipment"), eq),
+          el("div", { class: "field" }, el("label", { for: "t-" + id }, "Anything the team should know (optional)"), note), el("div", { class: "actions" }, ask), rmsg);
+      }
+      // Everything else goes by email, and says so where a lifter will see it.
+      kids.push(el("h3", { class: "flow-sub" }, "Need to change something else?"),
+        el("p", { class: "help" }, "Your event, date of birth or sex, or anything to do with money, is changed by the entries team. Email them before entries close and they will sort it."),
+        el("div", { class: "actions" }, el("a", { class: "btn btn-secondary", href: "mailto:" + TEAM + "?subject=" + encodeURIComponent("Changing my entry: " + e.competition.name) }, "Email the entries team")));
     }
 
     // cancelling: open until entries close for a change, always possible as a request
     var cnote = el("textarea", { id: "cn-" + id, rows: "3", maxlength: "500" });
     var go = el("button", { type: "button", class: "btn btn-danger" }, "Send cancellation request"); go.disabled = pending;
     go.addEventListener("click", function () {
-      go.disabled = true; say("Sending…");
-      post("entry_request", { entry_id: id, kind: "cancel", note: cnote.value }).then(function (b) { if (!b.ok) { go.disabled = pending; return say(b.message || "We could not send that.", true); } load("banner-" + id); });
+      go.disabled = true; csay("Sending…");
+      post("entry_request", { entry_id: id, kind: "cancel", note: cnote.value }).then(function (b) { if (!b.ok) { go.disabled = pending; return csay(b.message || "We could not send that.", true); } load("banner-" + id); });
     });
     kids.push(el("details", { class: "ol-settings" }, el("summary", null, "Ask to cancel my entry"),
       el("div", { class: "stack" }, el("p", null, e.open ? "Refunds are available until entries close on " + when(e.competition.entry_closes || e.competition.start_date) + ". The entries team will confirm what is refunded." : "Entries have closed, so there is no refund."),
-        el("div", { class: "field" }, el("label", { for: "cn-" + id }, "Reason (optional)"), cnote), el("div", { class: "actions" }, go))));
-    kids.push(msg);
+        el("div", { class: "field" }, el("label", { for: "cn-" + id }, "Reason (optional)"), cnote), el("div", { class: "actions" }, go), cmsg)));
     return el("section", { class: "panel flow", "aria-labelledby": "h-" + id }, [].concat(kids.map(function (k, i) { return i === 0 ? (k.id = "h-" + id, k) : k; })));
   }
 
